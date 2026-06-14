@@ -307,40 +307,38 @@
   <div class="section-title">TODAY</div>
   <div id="todayStats" class="dash-grid"></div>
 
-  <div class="section-title">📋 入力済み顧客リスト</div>
-  
-  <!-- ① 見る期間 -->
-  <div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:12px;margin-bottom:10px">
-    <div style="font-size:13px;color:#1A4F47;font-weight:800;margin-bottom:8px">🔍 いつの分を見ますか？</div>
-    <div style="display:flex;gap:6px;margin-bottom:10px">
-      <button id="clBtn_today" onclick="setCustListMonth('today')" style="flex:1;padding:11px;border:1.5px solid #2C7A6E;background:#2C7A6E;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">今日</button>
-      <button id="clBtn_thisMonth" onclick="setCustListMonth('thisMonth')" style="flex:1;padding:11px;border:1.5px solid #C8E0DC;background:#fff;color:#64748B;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">今月</button>
-      <button id="clBtn_all" onclick="setCustListMonth('all')" style="flex:1;padding:11px;border:1.5px solid #C8E0DC;background:#fff;color:#64748B;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">すべて</button>
+  <div class="section-title">📋 入力した日報を見る</div>
+
+  <!-- 見る -->
+  <div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:14px;margin-bottom:10px">
+    <div style="font-size:15px;color:#1A4F47;font-weight:800;margin-bottom:10px">① いつの分を見る？</div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button id="clBtn_today" onclick="setCustListMonth('today')" style="flex:1;padding:14px 4px;border:2px solid #2C7A6E;background:#2C7A6E;color:#fff;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer">今日</button>
+      <button id="clBtn_thisMonth" onclick="setCustListMonth('thisMonth')" style="flex:1;padding:14px 4px;border:2px solid #C8E0DC;background:#fff;color:#64748B;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer">今月</button>
+      <button id="clBtn_all" onclick="setCustListMonth('all')" style="flex:1;padding:14px 4px;border:2px solid #C8E0DC;background:#fff;color:#64748B;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer">ぜんぶ</button>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-      <span style="font-size:12px;color:#64748B;font-weight:700;white-space:nowrap">📅 日にちで見る</span>
-      <input type="date" id="custListDatePicker" onchange="viewByDate()" style="flex:1;min-width:150px;padding:9px 10px;border:1.5px solid #C8E0DC;border-radius:8px;background:#fff;font-size:14px;font-weight:600;color:#1A4F47">
+    <div style="background:#EAF5F3;border-radius:10px;padding:12px;margin-bottom:12px">
+      <div style="font-size:14px;color:#1A4F47;font-weight:800;margin-bottom:6px">📅 ほかの日を見る</div>
+      <input type="date" id="custListDatePicker" onchange="viewByDate()" style="width:100%;padding:13px;border:2px solid #2C7A6E;border-radius:10px;background:#fff;font-size:17px;font-weight:700;color:#1A4F47">
+      <div style="font-size:12px;color:#3a6b62;margin-top:6px">👆 日にちをえらぶと、その日の分が出ます</div>
     </div>
-    <select id="custListMonthPicker" onchange="setCustListMonth(this.value)" style="width:100%;padding:9px 10px;border:1.5px solid #C8E0DC;border-radius:8px;background:#fff;font-size:13px;font-weight:600;color:#1A4F47;margin-bottom:10px">
+    <select id="custListMonthPicker" onchange="setCustListMonth(this.value)" style="width:100%;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;background:#fff;font-size:13px;font-weight:600;color:#64748B;margin-bottom:12px">
       <option value="">▼ 過去の月でまとめて見る</option>
     </select>
-    <div style="font-size:12px;color:#64748B;font-weight:700;margin-bottom:5px">👤 担当で絞る</div>
+    <div style="font-size:13px;color:#64748B;font-weight:700;margin-bottom:6px">👤 担当でしぼる</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap" id="todayStaffFilter"></div>
-    <div id="custListFilterDisplay" style="margin-top:10px;padding:8px 10px;background:#F0F7F6;border-left:3px solid #2C7A6E;border-radius:6px;font-size:13px;color:#1A4F47;font-weight:700">
-      表示中：<span id="custListPeriodDisp">📅 今日</span> ／ <span id="custListStaffDisp">👤 全員</span>
+    <div id="custListFilterDisplay" style="margin-top:12px;padding:11px;background:#FFF9E6;border:2px solid #F0D000;border-radius:10px;font-size:14px;color:#1A4F47;font-weight:800;text-align:center">
+      いま見ているのは → <span id="custListPeriodDisp">📅 今日</span><br><span id="custListStaffDisp" style="font-size:13px;color:#64748B">👤 全員</span>
     </div>
   </div>
 
   <div id="todayCustomerList" class="customer-list"></div>
 
-  <!-- ② 入れ忘れた日報を追加 -->
-  <div style="background:#FFF8F0;border:2px solid #FFB74D;border-radius:12px;padding:14px;margin:16px 0">
-    <div style="font-size:15px;font-weight:800;color:#E65100;margin-bottom:5px">✏️ 入れ忘れた日報を追加する</div>
-    <div style="font-size:12px;color:#8a6d4a;margin-bottom:12px;line-height:1.6">過去の日にちの日報を、あとから入力できます。<br>① 日にちを選ぶ → ② 下のボタンを押す → ③ いつも通り入力するだけ。</div>
-    <div style="font-size:12px;color:#E65100;font-weight:700;margin-bottom:4px">① 日にちを選ぶ</div>
-    <input type="date" id="backdateInput" style="width:100%;padding:12px;border:1.5px solid #FFB74D;border-radius:8px;font-size:16px;font-weight:700;color:#E65100;background:#fff;margin-bottom:12px">
-    <div style="font-size:12px;color:#E65100;font-weight:700;margin-bottom:4px">② ボタンを押す</div>
-    <button onclick="addForDate()" style="width:100%;padding:15px;border:none;background:linear-gradient(135deg,#FF9800,#F57C00);color:#fff;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 3px 8px rgba(245,124,0,0.3)">この日にちで入力をはじめる →</button>
+  <!-- 追加（上で選んだ日付をそのまま使う） -->
+  <div style="background:#FFF8F0;border:2px solid #FFB74D;border-radius:12px;padding:16px;margin:18px 0">
+    <div style="font-size:16px;font-weight:800;color:#E65100;margin-bottom:8px">✏️ あとから日報を入れる</div>
+    <div style="font-size:13px;color:#8a6d4a;margin-bottom:14px;line-height:1.8">入れわすれた日も、ここから入れられます。<br>上の <b>「📅 ほかの日を見る」</b> で<b>入れたい日</b>をえらんでから、<br>下のボタンをおしてね。あとはいつも通り！</div>
+    <button onclick="addForDate()" style="width:100%;padding:17px;border:none;background:linear-gradient(135deg,#FF9800,#F57C00);color:#fff;border-radius:12px;font-size:17px;font-weight:800;cursor:pointer;box-shadow:0 3px 8px rgba(245,124,0,0.3)">えらんだ日で入力する →</button>
   </div>
 
   <!-- 早朝料金売上セクション -->
@@ -1085,6 +1083,16 @@ function menuExc(m){ var p=m.inputPrice||0; return (m.taxMode==='inc') ? Math.ro
 function masterToMode(masterIncPrice, mode){ return (mode==='inc') ? Math.round(masterIncPrice) : Math.round(masterIncPrice/1.1); }
 // 'YYYY-MM-DD' を端末ローカルの正午Dateに変換（iOS Safari等の日付パース不具合を回避）
 function parseYMD(s){ var p=String(s||'').split('-'); return new Date(parseInt(p[0],10), parseInt(p[1],10)-1, parseInt(p[2],10), 12, 0, 0); }
+// レコードの年月日を 'YYYY-MM-DD'(ローカル) で返す。time形式の揺れ(ISO/スラッシュ/クラウド由来)に強い
+function recYMD(r){
+  var t=(r&&(r.time||r.date||r.datetime))||'';
+  var d=new Date(t);
+  if(isNaN(d.getTime())){
+    var m=String(t).replace(/\//g,'-').match(/(\d{4})-(\d{2})-(\d{2})/);
+    return m ? (m[1]+'-'+m[2]+'-'+m[3]) : '';
+  }
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
 
 function renderAll(){
   renderStaffButtons(); renderMediaButtons(); renderPaymentButtons();
@@ -3650,7 +3658,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "7.2";
+var APP_VERSION = "7.3";
 
 function checkForUpdate(){
   try {
@@ -3761,11 +3769,11 @@ function viewByDate(){
   try{ saveLocal(); }catch(e){}
   if(typeof renderCustomerList === 'function') renderCustomerList();
 }
-// 指定した日付で日報を追加入力するモードに入る
+// 上で選んだ日付で日報を追加入力するモードに入る
 function addForDate(){
-  var picker=document.getElementById('backdateInput');
+  var picker=document.getElementById('custListDatePicker');
   var v=picker?picker.value:'';
-  if(!v){ if(typeof showToast==='function') showToast('⚠️ 日付を選んでください'); return; }
+  if(!v){ if(typeof showToast==='function') showToast('⚠️ まず上の「📅 ほかの日を見る」で日にちをえらんでください'); return; }
   state.entryDate=v;
   try{ saveLocal(); }catch(e){}
   updateEntryDateBanner();
@@ -3820,29 +3828,26 @@ function renderCustomerList(){
   if(!state.custListMonth) state.custListMonth = 'today';
   var period = state.custListMonth;
   
-  // 期間でフィルタ
+  // 期間でフィルタ（recYMDでローカル年月日を統一比較）
   var filteredByPeriod = [];
-  var today = new Date().toDateString();
   var now = new Date();
   var curYM = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  
+  var todayYMD = curYM+'-'+String(now.getDate()).padStart(2,'0');
+
   for(var i=0;i<state.records.length;i++){
     var r = state.records[i];
-    var rd = new Date(r.time);
-    
+    var ymd = recYMD(r);
+
     if(period === 'today'){
-      if(rd.toDateString() !== today) continue;
+      if(ymd !== todayYMD) continue;
     } else if(period && period.indexOf('date:')===0){
-      var ds=period.slice(5);
-      if(rd.toDateString() !== parseYMD(ds).toDateString()) continue;
+      if(ymd !== period.slice(5)) continue;
     } else if(period === 'thisMonth'){
-      var rYM = rd.getFullYear()+'-'+String(rd.getMonth()+1).padStart(2,'0');
-      if(rYM !== curYM) continue;
+      if(ymd.slice(0,7) !== curYM) continue;
     } else if(period === 'all'){
       // フィルタなし
     } else if(period && period.indexOf('-') > 0){
-      var rYM2 = rd.getFullYear()+'-'+String(rd.getMonth()+1).padStart(2,'0');
-      if(rYM2 !== period) continue;
+      if(ymd.slice(0,7) !== period) continue;
     }
     filteredByPeriod.push(r);
   }
