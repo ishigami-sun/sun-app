@@ -230,6 +230,8 @@
 <!-- ===== 日報入力 ===== -->
 <div class="page active" id="page-input">
 
+  <div id="entryDateBanner" style="display:none;background:#FFF3E0;border:1.5px solid #FFB74D;border-radius:10px;padding:10px 12px;margin-bottom:10px;display:none;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"></div>
+
   <div class="section-title">STEP 1　担当者（施術）</div>
   <div class="card"><div class="toggle-group" id="staffGroup"></div></div>
 
@@ -318,6 +320,12 @@
         <option value="today">今日</option>
       </select>
     </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+      <span style="font-size:11px;color:#64748B;font-weight:700">📅 日付</span>
+      <input type="date" id="custListDatePicker" style="flex:1;min-width:130px;padding:6px 10px;border:1.5px solid #C8E0DC;border-radius:8px;background:#fff;font-size:13px;font-weight:600;color:#1A4F47">
+      <button onclick="viewByDate()" style="padding:6px 12px;border:1.5px solid #2C7A6E;background:#fff;color:#2C7A6E;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">確認</button>
+      <button onclick="addForDate()" style="padding:6px 12px;border:none;background:#2C7A6E;color:#fff;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">➕ この日付で追加入力</button>
+    </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap" id="todayStaffFilter"></div>
     <div id="custListFilterDisplay" style="margin-top:8px;padding:6px 10px;background:#F0F7F6;border-left:3px solid #2C7A6E;border-radius:6px;font-size:12px;color:#1A4F47;font-weight:600">
       <span id="custListPeriodDisp">📅 今日</span> ／ <span id="custListStaffDisp">👤 全員</span>
@@ -340,6 +348,7 @@
   <div class="card" style="padding:12px;margin-bottom:10px">
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
       <span style="font-size:11px;font-weight:700;color:var(--teal);align-self:center;letter-spacing:1px">期間：</span>
+      <button class="filter-btn" id="fbPeriod_today" onclick="setPeriod('today')">本日</button>
       <button class="filter-btn active" id="fbPeriod_thisMonth" onclick="setPeriod('thisMonth')">今月</button>
       <button class="filter-btn" id="fbPeriod_lastMonth" onclick="setPeriod('lastMonth')">先月</button>
       <button class="filter-btn" id="fbPeriod_thisYear" onclick="setPeriod('thisYear')">今年</button>
@@ -418,6 +427,7 @@
       <button class="add-btn" onclick="addPayment()">追加</button>
     </div>
     <div style="font-size:11px;color:var(--text-light);margin-bottom:8px">※現在設定済みの支払い方法は手数料込みで登録されています</div>
+    <button class="add-btn" style="width:100%;background:#64748B;margin-bottom:8px" onclick="resetPaymentsToSimple()">🔄 代表的な支払い方法（5種）にする</button>
     <div class="item-list" id="paymentAdminList"></div>
   </div>
   <div class="section-title">メニュー管理</div>
@@ -702,6 +712,7 @@ var state = {
   selectedMenus:[], selectedProducts:[],
   // フィルター
   dashPeriod:'thisMonth', dashCustomMonth:'', dashStaffFilter:'',
+  entryDate:'', // 過去日付で入力する時のみセット（空=本日）
   pnlPeriod:'thisMonth', pnlCustomMonth:'',
   pnlPassword:'sun2026', pnlAuthenticated:false,
   // 固定費（P&L用）
@@ -1003,13 +1014,11 @@ function init(){
   if(!state.staff||!state.staff.length) state.staff=['石上（代表）','花岡（店長）','東（副店長）','堀井','林','梅田','カノン'];
   if(!state.mediaList||!state.mediaList.length) state.mediaList=['ホットペッパー','楽天ビューティー','Instagram','LINE','Google','ホームページ','口コミ','紹介','ビューティーメリット','友達紹介','DM','TikTok','その他'];
   if(!state.paymentMaster||!state.paymentMaster.length) state.paymentMaster=[
-    {name:'現金',fee:0},{name:'QUOカード',fee:0},{name:'ギフト券',fee:0},{name:'ポイント払い',fee:0},
-    {name:'Visa / Mastercard',fee:2.48},{name:'JCB',fee:2.48},{name:'American Express',fee:2.48},
-    {name:'Diners Club',fee:2.48},{name:'Discover',fee:2.48},
-    {name:'交通系IC',fee:2.95},{name:'iD',fee:2.95},{name:'QUICPay',fee:2.95},
-    {name:'銀聯（UnionPay）',fee:2.95},{name:'PayPay',fee:2.95},{name:'楽天Pay',fee:2.95},
-    {name:'au PAY',fee:2.95},{name:'d払い',fee:2.95},{name:'J-Coin Pay',fee:2.95},
-    {name:'Smart Code',fee:2.95},{name:'Alipay+ / WeChat Pay',fee:2.95},{name:'オンライン決済',fee:2.95},
+    {name:'現金',fee:0},
+    {name:'クレジットカード',fee:2.48},
+    {name:'交通系IC',fee:2.95},
+    {name:'QRコード決済',fee:2.95},
+    {name:'その他',fee:0},
   ];
   if(!state.payments||!state.payments.length){
     state.payments=[];
@@ -1071,6 +1080,7 @@ function renderAll(){
   renderTaxMode(); renderMenuList(); renderProductList();
   renderSelectedMenuEdit(); renderSelectedProductEdit();
   renderSummary(); renderRecords(); renderDashboard(); renderAdminLists();
+  try{ updateEntryDateBanner(); }catch(e){}
 }
 
 /* STAFF COLOR */
@@ -1706,14 +1716,14 @@ function submitRecord(){
   for(var i=0;i<state.selectedProducts.length;i++) prodSell+=state.selectedProducts[i].customSell*state.selectedProducts[i].qty;
   var prodProfit=0;
   for(var i=0;i<state.selectedProducts.length;i++) prodProfit+=(state.selectedProducts[i].customSell-state.selectedProducts[i].cost)*state.selectedProducts[i].qty;
-  var clientCount=0;
-  for(var i=0;i<state.selectedMenus.length;i++) clientCount+=state.selectedMenus[i].qty;
+  var clientCount=1; // 1記録＝1人（来店1回＝1客）。メニュー点数ではなく顧客数で数える
   var total=menuIncTotal+prodSell;
   var master=getPaymentMaster(state.selectedPayment);
   var feeRate=master?master.fee:0;
   var feeAmt=feeRate>0?Math.round(total*feeRate/100):0;
+  var entryTime = state.entryDate ? new Date(state.entryDate+'T12:00:00') : new Date();
   var record={
-    id:Date.now(), time:new Date().toISOString(),
+    id:Date.now(), time:entryTime.toISOString(),
     staff:state.selectedStaff,
     customerName:document.getElementById('customerName').value.trim(),
     clientType:state.clientType, media:state.mediaType,
@@ -1728,6 +1738,8 @@ function submitRecord(){
   state.records.push(record);
   state.selectedMenus=[]; state.selectedProducts=[];
   document.getElementById('customerName').value='';
+  state.entryDate=''; // 登録後は通常（本日）入力に戻す
+  try{ updateEntryDateBanner(); }catch(e){}
   saveLocal();
   // クラウドにも送信
   callCloud('addRecord', {record:record}, function(res){
@@ -1745,7 +1757,7 @@ function renderRecords(){
   var todayRecs=[];
   for(var i=0;i<state.records.length;i++) if(new Date(state.records[i].time).toDateString()===today) todayRecs.push(state.records[i]);
   var todayTotal=0; for(var i=0;i<todayRecs.length;i++) todayTotal+=todayRecs[i].total;
-  var todayClients=0; for(var i=0;i<todayRecs.length;i++) todayClients+=todayRecs[i].clientCount;
+  var todayClients=todayRecs.length; // 1記録＝1人
   document.getElementById('todayStats').innerHTML=
     '<div class="dash-stat"><div class="dash-stat-label">本日売上（税込）</div><div class="dash-stat-value">¥'+num(todayTotal)+'</div><div class="dash-stat-sub">'+todayRecs.length+'件</div></div>'+
     '<div class="dash-stat"><div class="dash-stat-label">本日の客数</div><div class="dash-stat-value">'+todayClients+'人</div><div class="dash-stat-sub">平均¥'+(todayClients>0?num(Math.round(todayTotal/todayClients)):0)+'</div></div>';
@@ -1924,7 +1936,8 @@ function getFilteredRecords(period, customMonth, staffFilter){
     var r=state.records[i];
     var d=new Date(r.time);
     var match=false;
-    if(period==='thisMonth') match=(d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear());
+    if(period==='today') match=(d.toDateString()===now.toDateString());
+    else if(period==='thisMonth') match=(d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear());
     else if(period==='lastMonth'){
       var lm=now.getMonth()-1; var ly=now.getFullYear();
       if(lm<0){lm=11;ly--;}
@@ -1944,6 +1957,7 @@ function getFilteredRecords(period, customMonth, staffFilter){
 
 function getPeriodLabel(period, customMonth){
   var now=new Date();
+  if(period==='today') return now.getFullYear()+'年'+(now.getMonth()+1)+'月'+now.getDate()+'日（本日）';
   if(period==='thisMonth') return now.getFullYear()+'年'+(now.getMonth()+1)+'月';
   if(period==='lastMonth'){
     var lm=now.getMonth()-1; var ly=now.getFullYear();
@@ -2020,7 +2034,7 @@ function updateFilterDisplay(){
 
 function setPeriod(p){
   state.dashPeriod=p; state.dashCustomMonth='';
-  var btns=['thisMonth','lastMonth','thisYear','lastYear','all'];
+  var btns=['today','thisMonth','lastMonth','thisYear','lastYear','all'];
   for(var i=0;i<btns.length;i++){
     var el=document.getElementById('fbPeriod_'+btns[i]);
     if(el) el.classList.toggle('active', btns[i]===p);
@@ -2032,7 +2046,7 @@ function setCustomMonth(val){
   if(!val) return;
   state.dashPeriod = 'custom'; 
   state.dashCustomMonth = val;
-  var btns=['thisMonth','lastMonth','thisYear','lastYear','all'];
+  var btns=['today','thisMonth','lastMonth','thisYear','lastYear','all'];
   for(var i=0;i<btns.length;i++){
     var el = document.getElementById('fbPeriod_'+btns[i]);
     if(el) el.classList.remove('active');
@@ -2353,6 +2367,22 @@ function removePayment(i){
   for(var j=0;j<state.paymentMaster.length;j++) if(state.paymentMaster[j].name===name){ state.paymentMaster.splice(j,1); break; }
   save(); renderAll();
 }
+// 支払い方法を代表的な5種に置き換える（記録済み日報には影響しない）
+function resetPaymentsToSimple(){
+  if(!confirm('支払い方法を「現金 / クレジットカード / 交通系IC / QRコード決済 / その他」の代表5種に置き換えます。\n（今の支払い方法リストは消えます。登録済みの日報は影響しません）\n\n実行しますか？')) return;
+  state.paymentMaster=[
+    {name:'現金',fee:0},
+    {name:'クレジットカード',fee:2.48},
+    {name:'交通系IC',fee:2.95},
+    {name:'QRコード決済',fee:2.95},
+    {name:'その他',fee:0}
+  ];
+  state.payments=[];
+  for(var i=0;i<state.paymentMaster.length;i++) state.payments.push(state.paymentMaster[i].name);
+  state.selectedPayment=state.payments[0];
+  save(); renderAll();
+  showToast('✅ 支払い方法を代表5種にしました');
+}
 function addMenu(){
   var name=document.getElementById('newMenuName').value.trim();
   var price=parseInt(document.getElementById('newMenuPrice').value);
@@ -2442,7 +2472,7 @@ function changePnlPassword(){
 
 function setPnlPeriod(p){
   state.pnlPeriod=p; state.pnlCustomMonth='';
-  var btns=['thisMonth','lastMonth','thisYear','lastYear','all'];
+  var btns=['today','thisMonth','lastMonth','thisYear','lastYear','all'];
   for(var i=0;i<btns.length;i++){
     var el=document.getElementById('pnlPeriod_'+btns[i]);
     if(el) el.classList.toggle('active', btns[i]===p);
@@ -2454,7 +2484,7 @@ function setPnlPeriod(p){
 function setPnlCustomMonth(val){
   if(!val) return;
   state.pnlPeriod='custom'; state.pnlCustomMonth=val;
-  var btns=['thisMonth','lastMonth','thisYear','lastYear','all'];
+  var btns=['today','thisMonth','lastMonth','thisYear','lastYear','all'];
   for(var i=0;i<btns.length;i++){
     var el=document.getElementById('pnlPeriod_'+btns[i]);
     if(el) el.classList.remove('active');
@@ -2486,9 +2516,9 @@ function renderPnlReport(){
     prodSell+=r.productSell||0;
     prodSellExc+=Math.round((r.productSell||0)/1.1);
     feeAmount+=r.paymentFeeAmount||0;
-    clientCount+=r.clientCount||0;
-    if(r.clientType==='新規') newClients+=r.clientCount||0;
-    else repeaterClients+=r.clientCount||0;
+    clientCount+=1; // 1記録＝1人
+    if(r.clientType==='新規') newClients+=1;
+    else repeaterClients+=1;
     for(var j=0;j<r.products.length;j++){
       var pp=r.products[j];
       prodCost+=pp.cost*pp.qty;
@@ -2561,7 +2591,7 @@ function renderPnlReport(){
     var r=filtered[i];
     if(!staffSell[r.staff]) staffSell[r.staff]={menu:0,prod:0,clients:0};
     staffSell[r.staff].menu+=r.menuAmount||0;
-    staffSell[r.staff].clients+=r.clientCount||0;
+    staffSell[r.staff].clients+=1; // 1記録＝1人
     for(var j=0;j<r.products.length;j++){
       var pp=r.products[j];
       var s=pp.productStaff||r.staff;
@@ -2589,7 +2619,7 @@ function renderPnlReport(){
   for(var i=0;i<filtered.length;i++){
     var r=filtered[i];
     if(!mediaCount[r.media]) mediaCount[r.media]={c:0,s:0};
-    mediaCount[r.media].c+=r.clientCount||0;
+    mediaCount[r.media].c+=1; // 1記録＝1人
     mediaCount[r.media].s+=r.total||0;
   }
   var mediaEntries=[];
@@ -3698,7 +3728,8 @@ function populateCustListMonths(){
   var picker = document.getElementById('custListMonthPicker');
   if(picker){
     picker.innerHTML = opts;
-    picker.value = currentVal;
+    // 「特定日付」表示中は月セレクトを無理に合わせない
+    if(currentVal.indexOf('date:')!==0) picker.value = currentVal;
   }
 }
 
@@ -3706,6 +3737,48 @@ function setCustListMonth(val){
   state.custListMonth = val || 'today';
   try{ saveLocal(); }catch(e){}
   if(typeof renderCustomerList === 'function') renderCustomerList();
+}
+
+// 指定した日付の記録だけ表示
+function viewByDate(){
+  var picker=document.getElementById('custListDatePicker');
+  var v=picker?picker.value:'';
+  if(!v){ if(typeof showToast==='function') showToast('⚠️ 日付を選んでください'); return; }
+  state.custListMonth='date:'+v;
+  try{ saveLocal(); }catch(e){}
+  if(typeof renderCustomerList === 'function') renderCustomerList();
+}
+// 指定した日付で日報を追加入力するモードに入る
+function addForDate(){
+  var picker=document.getElementById('custListDatePicker');
+  var v=picker?picker.value:'';
+  if(!v){ if(typeof showToast==='function') showToast('⚠️ 日付を選んでください'); return; }
+  state.entryDate=v;
+  try{ saveLocal(); }catch(e){}
+  updateEntryDateBanner();
+  if(typeof switchTab==='function') switchTab('input');
+  var p=v.split('-');
+  if(typeof showToast==='function') showToast('📅 '+parseInt(p[1])+'月'+parseInt(p[2])+'日 の記録を入力します');
+}
+// 通常（本日）入力に戻す
+function clearEntryDate(){
+  state.entryDate='';
+  try{ saveLocal(); }catch(e){}
+  updateEntryDateBanner();
+  if(typeof showToast==='function') showToast('✅ 本日の入力に戻しました');
+}
+// 入力ページの「過去日付で入力中」バナー表示更新
+function updateEntryDateBanner(){
+  var b=document.getElementById('entryDateBanner');
+  if(!b) return;
+  if(state.entryDate){
+    var p=state.entryDate.split('-');
+    b.innerHTML='<span style="font-size:13px;font-weight:700;color:#E65100">⚠️ '+parseInt(p[1])+'月'+parseInt(p[2])+'日 の記録を入力中</span>'+
+      '<button onclick="clearEntryDate()" style="padding:5px 12px;border:1.5px solid #E65100;background:#fff;color:#E65100;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">本日に戻す</button>';
+    b.style.display='flex';
+  } else {
+    b.style.display='none';
+  }
 }
 
 function getCustListPeriodLabel(){
@@ -3716,6 +3789,10 @@ function getCustListPeriodLabel(){
     return '📅 今月 ('+n.getFullYear()+'年'+(n.getMonth()+1)+'月)';
   }
   if(v === 'all') return '📅 全期間';
+  if(v.indexOf('date:')===0){
+    var dp = v.slice(5).split('-');
+    return '📅 '+dp[0]+'年'+parseInt(dp[1])+'月'+parseInt(dp[2])+'日';
+  }
   if(v && v.indexOf('-') > 0){
     var p = v.split('-');
     return '📅 '+p[0]+'年'+parseInt(p[1])+'月';
@@ -3742,6 +3819,9 @@ function renderCustomerList(){
     
     if(period === 'today'){
       if(rd.toDateString() !== today) continue;
+    } else if(period && period.indexOf('date:')===0){
+      var ds=period.slice(5);
+      if(rd.toDateString() !== new Date(ds+'T12:00:00').toDateString()) continue;
     } else if(period === 'thisMonth'){
       var rYM = rd.getFullYear()+'-'+String(rd.getMonth()+1).padStart(2,'0');
       if(rYM !== curYM) continue;
