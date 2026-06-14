@@ -1083,6 +1083,8 @@ function menuInc(m){ var p=m.inputPrice||0; return (m.taxMode==='inc') ? Math.ro
 function menuExc(m){ var p=m.inputPrice||0; return (m.taxMode==='inc') ? Math.round(p/1.1) : Math.round(p); }
 // 定価(税込)を入力モードの単位へ変換
 function masterToMode(masterIncPrice, mode){ return (mode==='inc') ? Math.round(masterIncPrice) : Math.round(masterIncPrice/1.1); }
+// 'YYYY-MM-DD' を端末ローカルの正午Dateに変換（iOS Safari等の日付パース不具合を回避）
+function parseYMD(s){ var p=String(s||'').split('-'); return new Date(parseInt(p[0],10), parseInt(p[1],10)-1, parseInt(p[2],10), 12, 0, 0); }
 
 function renderAll(){
   renderStaffButtons(); renderMediaButtons(); renderPaymentButtons();
@@ -1730,7 +1732,7 @@ function submitRecord(){
   var master=getPaymentMaster(state.selectedPayment);
   var feeRate=master?master.fee:0;
   var feeAmt=feeRate>0?Math.round(total*feeRate/100):0;
-  var entryTime = state.entryDate ? new Date(state.entryDate+'T12:00:00') : new Date();
+  var entryTime = state.entryDate ? parseYMD(state.entryDate) : new Date();
   var record={
     id:Date.now(), time:entryTime.toISOString(),
     staff:state.selectedStaff,
@@ -1744,16 +1746,20 @@ function submitRecord(){
     total:total, totalExc:menuExcTotal+Math.round(prodSell/1.1),
     taxAmount:total-(menuExcTotal+Math.round(prodSell/1.1)), clientCount:clientCount,
   };
+  var backDated = state.entryDate; // 過去日付で登録したか('YYYY-MM-DD' or '')
   state.records.push(record);
   state.selectedMenus=[]; state.selectedProducts=[];
   document.getElementById('customerName').value='';
   state.entryDate=''; // 登録後は通常（本日）入力に戻す
   try{ updateEntryDateBanner(); }catch(e){}
+  // 過去日付で登録した場合は、記録タブでその日付を表示して確認できるようにする
+  if(backDated){ state.custListMonth='date:'+backDated; }
   saveLocal();
   // クラウドにも送信
   callCloud('addRecord', {record:record}, function(res){
-    if(res.ok){ showToast('✅ 日報を登録＆クラウド保存しました！'); }
-    else if(res.queued){ showToast('📵 オフライン保存（復旧時に自動送信）'); }
+    var bd = backDated ? (function(){var p=backDated.split('-');return parseInt(p[1],10)+'月'+parseInt(p[2],10)+'日の';})() : '';
+    if(res.ok){ showToast('✅ '+bd+'日報を登録＆クラウド保存しました！'); }
+    else if(res.queued){ showToast('📵 '+bd+'日報をオフライン保存（復旧時に自動送信）'); }
     else { showToast('⚠️ クラウド送信失敗: '+(res.error||'')); }
   });
   renderAll();
@@ -3644,7 +3650,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "7.1";
+var APP_VERSION = "7.2";
 
 function checkForUpdate(){
   try {
@@ -3828,7 +3834,7 @@ function renderCustomerList(){
       if(rd.toDateString() !== today) continue;
     } else if(period && period.indexOf('date:')===0){
       var ds=period.slice(5);
-      if(rd.toDateString() !== new Date(ds+'T12:00:00').toDateString()) continue;
+      if(rd.toDateString() !== parseYMD(ds).toDateString()) continue;
     } else if(period === 'thisMonth'){
       var rYM = rd.getFullYear()+'-'+String(rd.getMonth()+1).padStart(2,'0');
       if(rYM !== curYM) continue;
