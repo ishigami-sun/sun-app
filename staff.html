@@ -3302,12 +3302,14 @@ if(typeof window !== 'undefined'){
 
 function setTodayStaffFilter(name){
   state.todayStaffFilter = String(name||'全員').trim();
-  try{ save(); }catch(e){}
-  // 即座にフィルター適用
-  applyTodayStaffFilter();
+  try{ saveLocal(); }catch(e){}
+  // 選択中の日付/期間を保ったまま再描画（「いま見ているのは」の担当表示も更新される）
+  if(typeof renderCustomerList==='function') renderCustomerList();
 }
 
 function applyTodayStaffFilter(){
+  // 選択中の日付/期間を尊重して再描画（旧:本日のみ→renderCustomerListに統一）
+  if(typeof renderCustomerList==='function'){ renderCustomerList(); return; }
   // 直接、本日顧客リストだけを再描画（renderRecords全体は呼ばない）
   var custEl = document.getElementById('todayCustomerList');
   if(!custEl) return;
@@ -3658,7 +3660,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "7.3";
+var APP_VERSION = "7.4";
 
 function checkForUpdate(){
   try {
@@ -3916,34 +3918,34 @@ function renderCustomerList(){
   for(var i=0;i<filteredRecs.length;i++){
     var r = filteredRecs[i];
     var d = new Date(r.time);
-    var ts;
-    if(period === 'today'){
-      ts = d.getHours()+':'+(d.getMinutes()<10?'0':'')+d.getMinutes();
-    } else {
-      ts = (d.getMonth()+1)+'/'+d.getDate()+' '+d.getHours()+':'+(d.getMinutes()<10?'0':'')+d.getMinutes();
-    }
-    
+    // 日付＋時間を常に表示（曜日つき）
+    var wd=['日','月','火','水','木','金','土'][d.getDay()];
+    var ts=(d.getMonth()+1)+'/'+d.getDate()+'('+wd+') '+d.getHours()+':'+(d.getMinutes()<10?'0':'')+d.getMinutes();
+    // 担当バッジ（色つきで、誰が担当したか一目でわかる）
+    var sbg=STAFF_BG_ACTIVE[staffIdx(r.staff)]||'#2C7A6E';
+    var staffPill='<span style="display:inline-block;background:'+sbg+';color:#fff;font-size:12px;font-weight:800;padding:3px 11px;border-radius:14px">'+h(r.staff||'—')+'</span>';
+
     // メニュー名
     var menuNames = '';
     for(var j=0;j<(r.menus||[]).length;j++){
       menuNames += h(r.menus[j].name);
       if(j < r.menus.length - 1) menuNames += '・';
     }
-    
+
     // 物販
     var pnames = '';
     for(var j=0;j<(r.products||[]).length;j++){
       var pp = r.products[j];
       pnames += h(pp.name)+'×'+pp.qty+' ';
     }
-    
+
     chtml += '<div class="customer-chip" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">';
     chtml += '<div style="flex:1;min-width:0">';
-    chtml += '<div style="font-size:11px;color:#64748B">'+ts+'</div>';
-    if(r.customerName) chtml += '<div style="font-size:13px;font-weight:600;color:#1A4F47">'+h(r.customerName)+'</div>';
-    chtml += '<div style="font-size:11px;color:#475569;margin-top:2px">施術：'+h(r.staff)+(menuNames?' / '+menuNames:'')+'</div>';
-    if(pnames) chtml += '<div style="font-size:11px;color:#475569">📦 '+pnames+'</div>';
-    chtml += '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px"><span class="tag '+(r.clientType==='新規'?'tag-new':'tag-repeater')+'">'+h(r.clientType||'')+'</span>';
+    chtml += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">'+staffPill+'<span style="font-size:12px;color:#64748B;font-weight:700">🕐 '+ts+'</span></div>';
+    if(r.customerName) chtml += '<div style="font-size:15px;font-weight:700;color:#1A4F47">'+h(r.customerName)+' 様</div>';
+    if(menuNames) chtml += '<div style="font-size:12px;color:#475569;margin-top:2px">💇 '+menuNames+'</div>';
+    if(pnames) chtml += '<div style="font-size:12px;color:#475569">📦 '+pnames+'</div>';
+    chtml += '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px"><span class="tag '+(r.clientType==='新規'?'tag-new':'tag-repeater')+'">'+h(r.clientType||'')+'</span>';
     if(r.media) chtml += '<span class="tag tag-media">'+h(r.media)+'</span>';
     if(r.payment) chtml += '<span class="tag tag-payment">'+h(r.payment)+'</span>';
     chtml += '</div>';
