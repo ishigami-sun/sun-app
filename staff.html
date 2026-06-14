@@ -309,30 +309,39 @@
 
   <div class="section-title">📋 入力済み顧客リスト</div>
   
-  <!-- 月選択 + 担当者選択 -->
-  <div style="background:#fff;border:1px solid #C8E0DC;border-radius:10px;padding:10px;margin-bottom:10px">
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
-      <span style="font-size:11px;color:#64748B;font-weight:700">📅 月</span>
-      <select id="custListMonthPicker" 
-              onchange="setCustListMonth(this.value)" 
-              oninput="setCustListMonth(this.value)" 
-              style="flex:1;min-width:120px;padding:6px 10px;border:1.5px solid #C8E0DC;border-radius:8px;background:#fff;font-size:13px;font-weight:600;color:#1A4F47">
-        <option value="today">今日</option>
-      </select>
+  <!-- ① 見る期間 -->
+  <div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:12px;margin-bottom:10px">
+    <div style="font-size:13px;color:#1A4F47;font-weight:800;margin-bottom:8px">🔍 いつの分を見ますか？</div>
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <button id="clBtn_today" onclick="setCustListMonth('today')" style="flex:1;padding:11px;border:1.5px solid #2C7A6E;background:#2C7A6E;color:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">今日</button>
+      <button id="clBtn_thisMonth" onclick="setCustListMonth('thisMonth')" style="flex:1;padding:11px;border:1.5px solid #C8E0DC;background:#fff;color:#64748B;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">今月</button>
+      <button id="clBtn_all" onclick="setCustListMonth('all')" style="flex:1;padding:11px;border:1.5px solid #C8E0DC;background:#fff;color:#64748B;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">すべて</button>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
-      <span style="font-size:11px;color:#64748B;font-weight:700">📅 日付</span>
-      <input type="date" id="custListDatePicker" style="flex:1;min-width:130px;padding:6px 10px;border:1.5px solid #C8E0DC;border-radius:8px;background:#fff;font-size:13px;font-weight:600;color:#1A4F47">
-      <button onclick="viewByDate()" style="padding:6px 12px;border:1.5px solid #2C7A6E;background:#fff;color:#2C7A6E;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">確認</button>
-      <button onclick="addForDate()" style="padding:6px 12px;border:none;background:#2C7A6E;color:#fff;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">➕ この日付で追加入力</button>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <span style="font-size:12px;color:#64748B;font-weight:700;white-space:nowrap">📅 日にちで見る</span>
+      <input type="date" id="custListDatePicker" onchange="viewByDate()" style="flex:1;min-width:150px;padding:9px 10px;border:1.5px solid #C8E0DC;border-radius:8px;background:#fff;font-size:14px;font-weight:600;color:#1A4F47">
     </div>
+    <select id="custListMonthPicker" onchange="setCustListMonth(this.value)" style="width:100%;padding:9px 10px;border:1.5px solid #C8E0DC;border-radius:8px;background:#fff;font-size:13px;font-weight:600;color:#1A4F47;margin-bottom:10px">
+      <option value="">▼ 過去の月でまとめて見る</option>
+    </select>
+    <div style="font-size:12px;color:#64748B;font-weight:700;margin-bottom:5px">👤 担当で絞る</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap" id="todayStaffFilter"></div>
-    <div id="custListFilterDisplay" style="margin-top:8px;padding:6px 10px;background:#F0F7F6;border-left:3px solid #2C7A6E;border-radius:6px;font-size:12px;color:#1A4F47;font-weight:600">
-      <span id="custListPeriodDisp">📅 今日</span> ／ <span id="custListStaffDisp">👤 全員</span>
+    <div id="custListFilterDisplay" style="margin-top:10px;padding:8px 10px;background:#F0F7F6;border-left:3px solid #2C7A6E;border-radius:6px;font-size:13px;color:#1A4F47;font-weight:700">
+      表示中：<span id="custListPeriodDisp">📅 今日</span> ／ <span id="custListStaffDisp">👤 全員</span>
     </div>
   </div>
-  
+
   <div id="todayCustomerList" class="customer-list"></div>
+
+  <!-- ② 入れ忘れた日報を追加 -->
+  <div style="background:#FFF8F0;border:2px solid #FFB74D;border-radius:12px;padding:14px;margin:16px 0">
+    <div style="font-size:15px;font-weight:800;color:#E65100;margin-bottom:5px">✏️ 入れ忘れた日報を追加する</div>
+    <div style="font-size:12px;color:#8a6d4a;margin-bottom:12px;line-height:1.6">過去の日にちの日報を、あとから入力できます。<br>① 日にちを選ぶ → ② 下のボタンを押す → ③ いつも通り入力するだけ。</div>
+    <div style="font-size:12px;color:#E65100;font-weight:700;margin-bottom:4px">① 日にちを選ぶ</div>
+    <input type="date" id="backdateInput" style="width:100%;padding:12px;border:1.5px solid #FFB74D;border-radius:8px;font-size:16px;font-weight:700;color:#E65100;background:#fff;margin-bottom:12px">
+    <div style="font-size:12px;color:#E65100;font-weight:700;margin-bottom:4px">② ボタンを押す</div>
+    <button onclick="addForDate()" style="width:100%;padding:15px;border:none;background:linear-gradient(135deg,#FF9800,#F57C00);color:#fff;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 3px 8px rgba(245,124,0,0.3)">この日にちで入力をはじめる →</button>
+  </div>
 
   <!-- 早朝料金売上セクション -->
   <div class="section-title" style="color:#E65100">🌅 早朝料金売上</div>
@@ -3717,9 +3726,7 @@ function populateCustListMonths(){
   var months = Object.keys(monthSet).sort().reverse();
   
   var currentVal = state.custListMonth || 'today';
-  var opts = '<option value="today"' + (currentVal==='today'?' selected':'') + '>今日</option>';
-  opts += '<option value="thisMonth"' + (currentVal==='thisMonth'?' selected':'') + '>今月</option>';
-  opts += '<option value="all"' + (currentVal==='all'?' selected':'') + '>全期間</option>';
+  var opts = '<option value="">▼ 過去の月でまとめて見る</option>';
   for(var i=0;i<months.length;i++){
     var parts = months[i].split('-');
     var sel = (months[i] === currentVal) ? ' selected' : '';
@@ -3750,7 +3757,7 @@ function viewByDate(){
 }
 // 指定した日付で日報を追加入力するモードに入る
 function addForDate(){
-  var picker=document.getElementById('custListDatePicker');
+  var picker=document.getElementById('backdateInput');
   var v=picker?picker.value:'';
   if(!v){ if(typeof showToast==='function') showToast('⚠️ 日付を選んでください'); return; }
   state.entryDate=v;
@@ -3864,6 +3871,13 @@ function renderCustomerList(){
   var sdisp = document.getElementById('custListStaffDisp');
   if(pdisp) pdisp.textContent = getCustListPeriodLabel();
   if(sdisp) sdisp.textContent = '👤 ' + (state.todayStaffFilter || '全員');
+  // 期間クイックボタンの選択ハイライト
+  (function(){
+    function setCl(id,on){ var b=document.getElementById(id); if(!b) return; b.style.background=on?'#2C7A6E':'#fff'; b.style.color=on?'#fff':'#64748B'; b.style.borderColor=on?'#2C7A6E':'#C8E0DC'; }
+    setCl('clBtn_today', period==='today');
+    setCl('clBtn_thisMonth', period==='thisMonth');
+    setCl('clBtn_all', period==='all');
+  })();
   
   // 担当者でさらにフィルタ
   var filteredRecs = filteredByPeriod;
