@@ -428,14 +428,15 @@
 <div class="page" id="page-admin">
 
     <button class="add-btn" style="background:rgba(255,255,255,0.2);color:#fff;padding:8px 14px;font-size:12px" onclick="logoutSession()">🔒 ログアウト</button>
-  </div>
-</div>
-
 
   <div class="section-title">スタッフ管理</div>
   <div class="card">
     <div class="add-form-row"><div class="form-group"><label class="form-label">スタッフ名</label><input class="form-input" id="newStaff" placeholder="例：田中"></div><button class="add-btn" onclick="addStaff()">追加</button></div>
     <div class="item-list" id="staffList"></div>
+  </div>
+  <div class="section-title">スタッフPIN・ログイン管理</div>
+  <div class="card">
+    <div class="item-list" id="staffPinList"></div>
   </div>
   <div class="section-title">集客媒体管理</div>
   <div class="card">
@@ -514,7 +515,6 @@
     <p style="font-size:12px;color:var(--text-light);margin-bottom:10px">localStorageの既存データをGoogleシートに送信します。</p>
     <button class="add-btn" style="width:100%;background:#D4A843" onclick="migrateToCloud()">📤 既存データをクラウドへ移行</button>
     <div id="migrateStatus" style="font-size:11px;color:var(--text-light);margin-top:8px"></div>
-  </div>
   </div>
   <div class="section-title">データ管理</div>
   <div class="card">
@@ -1330,7 +1330,7 @@ function renderSelectedMenuEdit(){
     // 割引額は税込ベース
     var discAmt = (m.discountPct > 0) ? Math.round(incPrice * m.discountPct / 100) * m.qty : 0;
     var pointAmt = (m.pointDiscount || 0);
-    var finalAmt = baseIncAmt + extraIncAmt - discAmt - pointAmt;
+    var finalAmt = baseIncAmt - discAmt - pointAmt; // extraは既にinputPrice→baseIncAmtに含まれる
     if(finalAmt < 0) finalAmt = 0;
     var finalAmtInfo = '<div id="finalAmt_'+i+'" style="font-size:14px;color:#1A4F47;font-weight:700;margin-top:6px;padding-top:6px;border-top:1px dashed #C8E0DC">最終金額：¥' + num(finalAmt) + '（税込）</div>';
     html+=discInfo+extraInfo+pointInfo+finalAmtInfo;
@@ -1367,8 +1367,8 @@ function resetExtra(i){
     var base=m2?m2.price:state.selectedMenus[i].inputPrice;
     state.selectedMenus[i].basePrice=base;
     state.selectedMenus[i].extraAmount=0;
-    var pct=state.selectedMenus[i].discountPct||0;
-    state.selectedMenus[i].inputPrice=pct>0?Math.round(base*(1-pct/100)):base;
+    // 割引はdiscountPctで別途適用されるため、ここでは基本価格に戻すだけ（二重適用を防ぐ）
+    state.selectedMenus[i].inputPrice=base;
   }
   renderSelectedMenuEdit(); renderSummary();
 }
@@ -1723,8 +1723,9 @@ function renderSummary(){
   var totalDiscount = 0;
   for(var i=0;i<state.selectedMenus.length;i++){
     var m = state.selectedMenus[i];
-    if(m.discountPct && m.discountPct > 0 && m.basePrice){
-      var disc = Math.round(m.basePrice * m.discountPct / 100) * m.qty;
+    if(m.discountPct && m.discountPct > 0){
+      // 実際の控除（menuIncTotal）と同じ税込ベースで算出して表示を一致させる
+      var disc = Math.round(toTaxInc(m.inputPrice) * m.discountPct / 100) * m.qty;
       totalDiscount += disc;
     }
     if(m.pointDiscount && m.pointDiscount > 0){
@@ -3049,6 +3050,12 @@ function setCustListMonth(val){
   if(typeof renderCustomerList === 'function') renderCustomerList();
 }
 
+function setTodayStaffFilter(name){
+  state.todayStaffFilter = name || '全員';
+  try{ saveLocal(); }catch(e){}
+  if(typeof renderCustomerList === 'function') renderCustomerList();
+}
+
 function getCustListPeriodLabel(){
   var v = state.custListMonth || 'today';
   if(v === 'today') return '📅 今日';
@@ -3195,6 +3202,7 @@ function renderCustomerList(){
 
 if(typeof window !== 'undefined'){
   window.setCustListMonth = setCustListMonth;
+  window.setTodayStaffFilter = setTodayStaffFilter;
   window.renderCustomerList = renderCustomerList;
   window.populateCustListMonths = populateCustListMonths;
 }
