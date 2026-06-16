@@ -218,6 +218,7 @@
     <button class="tab-btn" onclick="switchTab('dashboard')">📊 物販</button>
     <button class="tab-btn" onclick="switchTab('pnl')">📈 P&L</button>
     <button class="tab-btn" onclick="switchTab('admin')">⚙️ 管理</button>
+    <button class="tab-btn" onclick="switchTab('manual')">📖 マニュアル</button>
   </nav>
   <div id="cloudStatus" style="margin-top:8px;padding:6px 10px;border-radius:8px;font-size:11px;text-align:center;background:rgba(255,255,255,0.15);color:#fff;display:none">
     <span id="cloudStatusText">🔄 接続中...</span>
@@ -524,6 +525,275 @@
     <p style="font-size:11px;color:var(--text-light);text-align:center">※マスタデータは消えません</p>
   </div>
 </div>
+
+<div class="page" id="page-manual">
+  <div class="section-title">📖 マニュアル</div>
+  <div style="font-size:12px;color:#64748B;margin-bottom:12px;line-height:1.7">見たい項目をタップすると開きます。SUNの「Simple is best」を、いつでもここで確認できます。</div>
+
+  <!-- 1 -->
+  <div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;margin-bottom:10px;overflow:hidden">
+    <button onclick="toggleManual(1)" style="width:100%;text-align:left;background:#2C7A6E;color:#fff;border:none;padding:14px 16px;font-size:15px;font-weight:800;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px"><span>🌟 社訓・理念・コンセプト</span><span id="manualArrow_1" style="font-size:12px">▼</span></button>
+    <div id="manualBody_1" style="display:none;padding:14px 16px">
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:4px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">社訓</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">1. 挨拶</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">明るく、元気に、気持ちの良い挨拶を心がけることで、SUNに関わるすべての人に安心感と信頼感を与える。挨拶はコミュニケーションの基本であり、心を込めた一声が良い関係を築く第一歩である。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">2. 感謝</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">SUNに関わるすべての人や環境への感謝を忘れず、謙虚な姿勢で日々の仕事に取り組む。感謝の気持ちは、より良いサービスや関係づくりの原動力になる。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">3. 謙虚さ</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">どんなにスキルが上がっても、お客様や仲間から学ぶ姿勢を忘れず、常に成長し続けるための謙虚さを大切にする。自分にできることだけでなく、できないことに気づき、素直に学ぶことが次の成長につながる。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">4. チームワーク</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">SUNは一人では成り立たない。お互いに協力し合い、支え合うことで、より良いサロン環境とサービスを提供できる。仲間の意見に耳を傾け、困っている人がいれば積極的に助ける姿勢を大切にする。自分が活躍するだけでなく、仲間の活躍も喜び、支え合うことでSUN全体が成長する。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">5. 粘り強さ</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">「粘り強さが全て、試行回数が全て、熱心にやれば実現する」という信念のもと、諦めずに挑戦し続ける。結果がすぐに出なくても、続けることで必ず成果は現れる。成功の裏には、失敗を乗り越えた数えきれない努力があることを忘れず、何度でも挑戦する粘り強さを大切にする。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">6. 嘘をつかない</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">信頼関係は誠実さの上に成り立つ。お客様、仲間、自分自身に対しても嘘をつかず、正直な行動を貫くことで、信頼される人間へと成長する。小さな嘘も積み重なることで大きな信用を失うことを忘れず、常に誠実さを大切にする。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">7. 失敗から学び、次にどう生かすかが大事</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">失敗は誰にでもある。大切なのは、失敗をどう受け止め、次にどう生かすかである。失敗を恐れずに挑戦し、その経験を次の成長につなげることで、SUNとしての価値や個々のスキルが高まる。失敗は終わりではなく、次の成功への第一歩と捉え、前向きに行動し続ける姿勢を大切にする。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">8. やるときゃやれ！</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">ON・OFFはとても大事な事。集中するときは全力で集中し、休むときはしっかりリフレッシュする。ダラダラと時間を使うのではなく、「やるべきときに最大限の力でやりきる」ことで、成果や成長は大きく変わります。メリハリのある仕事の仕方、行動が、最高のパフォーマンスと持続的な成長につながります。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">9. 利他の心 — 仲間を思いやる</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">「自分さえ良ければいい」ではなく、「仲間のため、お客様のため、SUNのため」に行動する。</p>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">稲盛和夫氏の言葉に「利他の心で経営する」というものがあります。人は誰かのために動いた時、最も大きな力を発揮できます。</p>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">同僚が困っている時には自然に声をかけ、忙しい仲間がいれば手を貸し、後輩には惜しみなく知識を伝える。仲間の成功を心から喜び、失敗には寄り添う。そうして「お互いを思いやる文化」をつくることで、SUNは一人では到達できない場所に行ける。</p>
+
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:18px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">理念</div>
+      <div style="background:#EAF5F3;border-radius:10px;padding:12px;margin-bottom:10px;font-size:14px;font-weight:700;color:#1A4F47;line-height:1.7">お客様や社員を大切にし、美を通して「素晴らしい価値と喜びを提供し続ける」</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">お客様を大切にするとは？</div>
+      <ul style="font-size:13px;line-height:1.8;color:#374151;margin:0 0 10px;padding-left:20px"><li>心地よい空間づくり</li><li>お客様に寄り添った提案</li><li>感動を与える接客</li><li>アフターケアの意識</li><li>適正な価格と見合った技術</li></ul>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">社員を大切にするとは？</div>
+      <ul style="font-size:13px;line-height:1.8;color:#374151;margin:0 0 10px;padding-left:20px"><li>感謝と尊重の気持ち</li><li>働きやすい環境づくり</li><li>成長機会の提供</li><li>個性の尊重</li></ul>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">美を通して「素晴らしい価値と喜びを提供し続ける」とは？</div>
+      <ul style="font-size:13px;line-height:1.8;color:#374151;margin:0 0 10px;padding-left:20px"><li>その人らしい美しさの追求</li><li>日常に寄り添う美しさ</li><li>ライフスタイルに溶け込む提案</li><li>継続的な進化</li></ul>
+
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:18px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">コンセプト</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">Simple is best</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">流行は進化をしながら巡ります。5年10年先に見返す写真や動画にも自信を持てるスタイルはSimple&Naturalが1番だと感じてます。だからこそSimple is best にフォーカスしsimple&naturalを突き詰めて行きます。</p>
+      <ul style="font-size:13px;line-height:1.8;color:#374151;margin:0 0 10px;padding-left:20px"><li>お客様らしさを最大限に生かす</li><li>NaturalでSimpleなものを提供する</li><li>「引き算の美学」を大切にする</li><li>流行を取り入れつつ、流されすぎない</li><li>未来の自分も好きでいられるデザイン</li></ul>
+    </div>
+  </div>
+
+  <!-- 2 -->
+  <div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;margin-bottom:10px;overflow:hidden">
+    <button onclick="toggleManual(2)" style="width:100%;text-align:left;background:#2C7A6E;color:#fff;border:none;padding:14px 16px;font-size:15px;font-weight:800;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px"><span>📋 サロン内統一ルール</span><span id="manualArrow_2" style="font-size:12px">▼</span></button>
+    <div id="manualBody_2" style="display:none;padding:14px 16px">
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:4px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">接客ルール</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">1. お出迎えとお見送り</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">お客様が来店した際は、笑顔で元気よく「いらっしゃいませ！」と挨拶し、帰る際には「本日はありがとうございました。またお待ちしております！」と心を込めてお見送りします。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">2. 丁寧な対応</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">お客様をお迎えする際は、必ず目を見て笑顔で対応し、案内時には椅子を引いたり荷物をお預かりするなど、細やかな気配りを大切にします。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">3. 個人情報の保護</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">お客様の個人情報は法令を遵守し、厳重に管理します。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">4. 予約管理</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">予約時間を守り、遅延やキャンセルが生じた場合は、速やかに連絡し、適切な対応を行います。</p>
+
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:18px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">服装・身だしなみ</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">1. 清潔感のある服装</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">明るく清潔感のある服装を心がけ、ユニフォームがある場合はきちんと整えて着用します。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">2. ナチュラルなスタイル</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">髪型やメイクはサロンのコンセプトに合ったナチュラルで洗練されたスタイルを意識します。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">3. アクセサリーと香水</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">過度なアクセサリーや強い香りの香水は避け、シンプルで上品なものを選びます。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">4. 爪の手入れ</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">清潔で整った爪を保ち、ネイルカラーは派手すぎない色合いにします。</p>
+
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:18px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">サロン環境</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">1. 植物の育成と配置</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">サロンの特徴である空間と植物を活かすため、定期的に植物の手入れを行い、適切な場所に配置します。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">2. インテリアの配置</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">植物の配置やインテリアを工夫し、サロン全体の統一感と居心地の良さを追求します。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">3. バイオフィリックデザインの導入</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">自然素材や植物を取り入れ、自然とのつながりを感じられる空間作りを目指します。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">4. グリーンウォールの設置</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">壁面に植物を配置することで、視覚的なアクセントと空間の質感を向上させます。</p>
+
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:18px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">ビジュアルガイド</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">1. 統一感のあるデザイン</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">ディスプレイやポスターは「Simple is best」のコンセプトに沿った、ナチュラルで洗練されたデザインを意識します。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">2. 薬剤棚・スタイリング剤の配置</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">カラーやパーマの薬剤棚、スタイリング剤の配置は、スタッフ全員が一目でわかるよう統一ルールを設け、整理整頓された空間を維持します。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">3. 季節に応じた装飾やPOP</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">過剰にならないシンプルなデザインを取り入れ、季節感を演出します。</p>
+    </div>
+  </div>
+
+  <!-- 3 -->
+  <div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;margin-bottom:10px;overflow:hidden">
+    <button onclick="toggleManual(3)" style="width:100%;text-align:left;background:#2C7A6E;color:#fff;border:none;padding:14px 16px;font-size:15px;font-weight:800;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px"><span>💁 お客様対応マニュアル</span><span id="manualArrow_3" style="font-size:12px">▼</span></button>
+    <div id="manualBody_3" style="display:none;padding:14px 16px">
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:4px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">来店時の対応</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">1. お出迎えとご案内</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">お客様が来店された際には、笑顔で元気よく「いらっしゃいませ！」と挨拶し、お名前を確認後、カルテや予約情報と照合してスムーズにご案内します。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">2. 荷物のお預かり</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">コートや荷物を丁寧にお預かりし、クロークへご案内します。</p>
+
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:18px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">カウンセリング時の対応</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">1. ヒアリング</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">お客様のご要望や「なりたい」イメージを丁寧に伺い、髪質やライフスタイルを確認しながら、最適なスタイルやケア方法を提案します。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">2. 提案内容の説明</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">ヘアスタイルの提案時には、メリット・デメリットを分かりやすく伝え、お客様に納得していただけるよう心がけます。</p>
+
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:18px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">施術中の対応</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">1. リラックスした環境作り</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">お客様にリラックスしていただけるよう、適度な会話や心地よい空間づくりを意識します。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">2. 施術進行の共有</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">施術の進行状況や次のステップを適宜説明し、お客様が安心できるよう努めます。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">3. お客様の声に耳を傾ける</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">お客様が不安や疑問を抱えている場合は、迅速かつ丁寧に対応し、信頼関係を築きます。</p>
+
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:18px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">お会計時の対応</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">1. 感謝の気持ちを伝える</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">お会計時には、心からの「ありがとうございました」を伝え、次回のご来店を促す丁寧な案内を行います。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">2. 次回予約の提案</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">次回のご予約をスムーズに取っていただけるよう、予約方法や特典などを分かりやすく案内します。</p>
+
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:18px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">クレーム対応</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">1. 迅速かつ誠実な対応</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">お客様からのご意見やクレームには、誠意を持って迅速に対応し、問題解決に努めます。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">2. 情報の共有と再発防止</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">クレーム内容は速やかに関係者と共有し、再発防止策を講じます。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">3. 具体的な対応策の提示</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">クレーム対応時には、具体的な事例を挙げ、状況別の最適な対応策を検討・実施します。</p>
+
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:18px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">アンケートの実施</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">1. フィードバックの収集</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">お客様の満足度や要望を把握するため、施術後や定期的にアンケートを実施し、サービス改善に活かします。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">2. 回答者への感謝と特典</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">アンケートにご協力いただいたお客様には、感謝の気持ちを込めて次回利用できる特典や割引を提供します。</p>
+    </div>
+  </div>
+
+  <!-- 4 -->
+  <div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;margin-bottom:10px;overflow:hidden">
+    <button onclick="toggleManual(4)" style="width:100%;text-align:left;background:#2C7A6E;color:#fff;border:none;padding:14px 16px;font-size:15px;font-weight:800;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px"><span>👤 スタイリスト心得</span><span id="manualArrow_4" style="font-size:12px">▼</span></button>
+    <div id="manualBody_4" style="display:none;padding:14px 16px">
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:4px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">基本姿勢</div>
+      <ul style="font-size:13px;line-height:1.8;color:#374151;margin:0 0 10px;padding-left:20px"><li>お客様の「なりたいイメージ」を引き出すカウンセリング</li><li>「似合わせ」を意識した提案力</li><li>「再現性」の高い技術を意識する</li><li>「心に残る接客」を心がける</li><li>お客様の「次回の来店」を意識したフォロー</li><li>後輩が背中を見ていることを意識し、良いお手本となる行動を心がける</li><li>常に「成長」を意識し、新しい知識や技術の習得に励む</li><li>「SUNのビジョン」を理解し、自分の接客や技術に落とし込む</li></ul>
+
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:18px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">指名獲得＆リピート率向上のための行動チェックリスト</div>
+      <ul style="font-size:13px;line-height:1.9;color:#374151;margin:0 0 10px;padding-left:20px;list-style:none"><li>✅ お客様の「なりたいイメージ」をしっかりと引き出せたか？</li><li>✅ お客様に「似合うスタイル」の提案ができたか？</li><li>✅ 自宅での再現方法を伝え、お客様が安心して帰れるようにできたか？</li><li>✅ お客様に心地よい接客を提供できたか？</li><li>✅ 次回来店の提案やアフターケアのアドバイスを行ったか？</li><li>✅ 後輩に対して「お手本」としての行動ができたか？</li><li>✅ 自らのスキル向上のために、積極的に学び、成長し続けているか？</li></ul>
+
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:18px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">目標設定と成長プラン</div>
+      <ul style="font-size:13px;line-height:1.8;color:#374151;margin:0 0 10px;padding-left:20px"><li>短期目標（1ヶ月～3ヶ月）</li><li>中期目標（3ヶ月～6ヶ月）</li><li>長期目標（6ヶ月～1年）</li></ul>
+
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:18px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">お客様との信頼関係を築くために</div>
+      <ul style="font-size:13px;line-height:1.8;color:#374151;margin:0 0 10px;padding-left:20px"><li>お客様の気持ちに寄り添い、誠実に対応する</li><li>言葉遣いや話し方に気を配り、信頼を得る行動を意識する</li><li>お客様の不安や疑問に対して、丁寧に説明し安心感を与える</li><li>お客様の名前をしっかり覚え、より親しみやすい関係を築く</li><li>「自分が通いたくなる美容室」を常に意識し、行動に落とし込む</li><li>後輩の成長を意識し、自らの行動や姿勢で「良い手本」となる意識を持つ</li><li>技術や接客のスキル向上に努め、日々の成長を意識する</li></ul>
+    </div>
+  </div>
+
+  <!-- 5 -->
+  <div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;margin-bottom:10px;overflow:hidden">
+    <button onclick="toggleManual(5)" style="width:100%;text-align:left;background:#2C7A6E;color:#fff;border:none;padding:14px 16px;font-size:15px;font-weight:800;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px"><span>🌱 アシスタント心得</span><span id="manualArrow_5" style="font-size:12px">▼</span></button>
+    <div id="manualBody_5" style="display:none;padding:14px 16px">
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:6px 0 4px">1. シャンプーの技術を極める</div>
+      <div style="background:#EAF5F3;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12.5px;line-height:1.8;color:#374151">▶️ お客様がリラックスし、「また来たい」と感じてもらうため<br>➡️ シャンプーの心地よさは、お客様に強く印象を残します。お客様の記憶に残る施術が、将来の指名につながります。</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:6px 0 4px">2. カラー施術のサポート</div>
+      <div style="background:#EAF5F3;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12.5px;line-height:1.8;color:#374151">▶️ 施術のスムーズな進行と、仕上がりの美しさを高めるため<br>➡️ カラー中の丁寧な対応や気配りは、「この人に任せたい」という安心感を生みます。</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:6px 0 4px">3. パーマやストレートの補助</div>
+      <div style="background:#EAF5F3;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12.5px;line-height:1.8;color:#374151">▶️ 仕上がりの質と持続力を高めるため<br>➡️ 薬剤の塗布やタイミング管理などの丁寧な対応が、信頼につながります。</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:6px 0 4px">4. お客様とのコミュニケーション</div>
+      <div style="background:#EAF5F3;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12.5px;line-height:1.8;color:#374151">▶️ お客様に安心感や信頼感を与え、心地よい時間を過ごしていただくため<br>➡️ ちょっとした声かけや気配りの積み重ねが、お客様からの「この人にお願いしたい」という気持ちを生みます。</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:6px 0 4px">5. 商材や物販の知識を深める</div>
+      <div style="background:#EAF5F3;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12.5px;line-height:1.8;color:#374151">▶️ お客様の「美」をより長く維持してもらうため<br>➡️ お客様にとって本当に役立つ提案ができることで、信頼感が生まれ、次回の来店につながります。</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:6px 0 4px">6. チームのサポート意識を持つ</div>
+      <div style="background:#EAF5F3;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12.5px;line-height:1.8;color:#374151">▶️ 仲間と協力し、サロン全体の雰囲気やお客様の満足度を高めるため<br>➡️ チームが円滑に動けることで、自然とお客様の満足度が上がり、アシスタント自身の評価も高まります。</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:6px 0 4px">7. お客様との信頼関係を築く</div>
+      <div style="background:#EAF5F3;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12.5px;line-height:1.8;color:#374151">▶️ 「また来たい」と思ってもらい、リピートにつなげるため<br>➡️ 些細な気配りや心を込めた対応が、長期的な関係づくりに繋がります。</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:6px 0 4px">8. 先輩の背中を見て学び、自らの成長に活かす</div>
+      <div style="background:#EAF5F3;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12.5px;line-height:1.8;color:#374151">▶️ 技術や接客の「コツ」を吸収し、より早く成長するため<br>➡️ 先輩の良い行動を観察し、自分の接客に取り入れることで、信頼を得る行動が身に付きます。</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:6px 0 4px">9. 「次のステップ」を常に意識し、積極的に技術や知識の向上に努める</div>
+      <div style="background:#EAF5F3;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12.5px;line-height:1.8;color:#374151">▶️ 目標を持って努力し、成長し続けるため<br>➡️ 「自分はまだアシスタントだから」ではなく、「自分のお客様だと思って接する」ことで、より丁寧で誠実な行動ができるようになります。</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:6px 0 4px">10. 掃除や整理整頓を徹底する</div>
+      <div style="background:#EAF5F3;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12.5px;line-height:1.8;color:#374151">▶️ お客様が心地よく過ごせる空間を維持し、SUNらしさを守るため<br>➡️ 掃除は「気遣い」と「仕事の質」の表れです。掃除に気を配る姿勢は、確実にお客様やスタッフの評価につながります。</div>
+      <div style="background:#FFF8E1;border:1.5px solid #F0D000;border-radius:10px;padding:12px;font-size:13px;line-height:1.8;color:#1A4F47"><b>まとめ：日頃の行動の積み重ねが、将来自分の力になる</b><br>お客様や仲間の前での日々の行動や努力は、必ず自分がスタイリストになったときに恩恵として返ってきます。「今のお客様が、未来の自分の指名につながる」という意識を持ち、アシスタント時代から「自分のお客様」として接することが、信頼獲得のカギです。</div>
+    </div>
+  </div>
+
+  <!-- 6 -->
+  <div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;margin-bottom:10px;overflow:hidden">
+    <button onclick="toggleManual(6)" style="width:100%;text-align:left;background:#2C7A6E;color:#fff;border:none;padding:14px 16px;font-size:15px;font-weight:800;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px"><span>🏪 店長・副店長心得</span><span id="manualArrow_6" style="font-size:12px">▼</span></button>
+    <div id="manualBody_6" style="display:none;padding:14px 16px">
+      <p style="font-size:12px;color:#64748B;margin:0 0 12px;line-height:1.7">※ 心得は「どう在るべきか」のマインドセット。具体的な業務は「7. 役割・権限分担」を参照。</p>
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:4px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">店長心得（7項目）</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">1. ビジョンを持ち、チームに伝える</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">サロンの目指すべき方向性や価値観を、スタッフに明確に伝える。スタッフ一人ひとりが同じ目標に向かって進めるよう、日々の言葉や行動でビジョンを共有する。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">2. スタッフの強みを見つけ、活かす</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">各スタッフが持つ個性や得意分野を理解し、それを活かせる場面をつくる。強みを引き出すことで、スタッフの自信ややりがいが生まれる。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">3. 問題が起きた時こそ冷静に対応する</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">クレーム対応やトラブルが発生した時は、感情的にならず冷静な判断を意識する。まずはお客様の声をしっかり聞き、適切な対応に努める。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">4. 常に「お手本」である意識を持つ</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">店長はスタッフから常に見られている存在。挨拶や掃除、言葉遣い、身だしなみなど、基本的な行動にこそ気を配り、スタッフが「この人のようになりたい」と思える存在を目指す。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">5. スタッフの成長をサポートする</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">スタッフが自信を持って成長できるよう、アドバイスやサポートを積極的に行う。努力を見逃さず、成長を感じた時はしっかり評価し、声をかける。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">6. お客様に選ばれる店であり続ける</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">SUNが他のサロンと違う価値を提供できるよう、お客様の視点で常に考える。「また来たい」と感じてもらえる体験づくりに責任を持つ。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">7. 数字に向き合い、店舗を前進させる</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">売上・客数・リピート率など、店舗の数字に目を向ける。良い数字も悪い数字も、次の改善のための材料として向き合う。</p>
+
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:18px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">副店長心得（5項目）</div>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">1. 店長の戦略を実現する</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">店長が策定した方針や目標を、店舗で効果的に実現するための具体策を考え、実行する。店長と連携し、店舗全体の運営を円滑に進める。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">2. 仲間を支え、チームを動かす</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">スタッフ一人ひとりを観察し、困っている人にはすぐ手を差し伸べる。チームの空気をつくる存在として、明るく前向きに振る舞う。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">3. 店舗運営の効率化と問題解決</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">日々の業務を分析し、もっと良いやり方がないかを考える。小さな問題も放置せず、改善に向けて動く。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">4. 数字に敏感に、目標達成を意識する</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">日次・月次の売上を把握し、目標との差を意識する。チーム全体の達成のために、自分にできることを考え動く。</p>
+      <div style="font-size:14px;font-weight:700;color:#1A4F47;margin:12px 0 4px">5. お客様への気配りを全員に広げる</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 10px">自分自身が「お客様への気配り」のお手本となり、その姿勢をスタッフ全員に伝える。サロン全体のサービス品質を底上げする。</p>
+    </div>
+  </div>
+
+  <!-- 7 -->
+  <div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;margin-bottom:10px;overflow:hidden">
+    <button onclick="toggleManual(7)" style="width:100%;text-align:left;background:#2C7A6E;color:#fff;border:none;padding:14px 16px;font-size:15px;font-weight:800;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px"><span>⚖️ 役割・権限分担</span><span id="manualArrow_7" style="font-size:12px">▼</span></button>
+    <div id="manualBody_7" style="display:none;padding:14px 16px">
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:4px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">店長の仕事</div>
+      <div style="background:#EAF5F3;border-radius:8px;padding:10px;margin-bottom:12px;font-size:13px;font-weight:700;color:#1A4F47">スタッフを育て、現場の雰囲気をつくり、集客の最前線に立つ</div>
+      <div style="font-size:13.5px;font-weight:700;color:#2C7A6E;margin:10px 0 4px">【スタッフ育成】</div>
+      <ul style="font-size:13px;line-height:1.8;color:#374151;margin:0 0 10px;padding-left:20px"><li>日々の声かけ・指導・フィードバック</li><li>月次個人面談（目標確認・悩み相談）</li><li>技術チェックの実施（カット・カラー・パーマ）</li><li>勉強会・練習会の企画・実施</li><li>新人スタッフのデビュー判断</li></ul>
+      <div style="font-size:13.5px;font-weight:700;color:#2C7A6E;margin:10px 0 4px">【シフト・労務管理】</div>
+      <ul style="font-size:13px;line-height:1.8;color:#374151;margin:0 0 10px;padding-left:20px"><li>月次シフトの作成・調整</li><li>スタッフの体調・メンタルの把握</li><li>遅刻・欠勤時の一次対応</li><li>有給休暇申請の承認（代表に報告）</li></ul>
+      <div style="font-size:13.5px;font-weight:700;color:#2C7A6E;margin:10px 0 4px">【現場マネジメント】</div>
+      <ul style="font-size:13px;line-height:1.8;color:#374151;margin:0 0 10px;padding-left:20px"><li>サロンのビジョン・理念をスタッフに伝え続ける</li><li>チームワークと職場の雰囲気の維持</li><li>クレームの一次・二次対応</li><li>重大案件は代表に即報告</li><li>店内の清潔感・整理整頓の管理</li></ul>
+      <div style="font-size:13.5px;font-weight:700;color:#2C7A6E;margin:10px 0 4px">【集客・媒体管理】</div>
+      <ul style="font-size:13px;line-height:1.8;color:#374151;margin:0 0 10px;padding-left:20px"><li>ホットペッパー等の媒体管理（プラン選定・写真更新・口コミ返信）</li><li>キャンペーン・イベントの企画・承認</li><li>新規顧客の獲得施策の実行</li><li>既存顧客のリピート率向上施策</li></ul>
+      <div style="font-size:13.5px;font-weight:700;color:#2C7A6E;margin:10px 0 4px">【売上・数字の管理】</div>
+      <ul style="font-size:13px;line-height:1.8;color:#374151;margin:0 0 10px;padding-left:20px"><li>店舗全体の売上動向の把握</li><li>各スタッフの目標達成状況のモニタリング</li><li>達成率が低いスタッフへの個別フォロー</li><li>客単価向上のための提案（メニューアップ等）</li></ul>
+      <div style="font-size:13.5px;font-weight:700;color:#2C7A6E;margin:10px 0 4px">【代表への報告】</div>
+      <ul style="font-size:13px;line-height:1.8;color:#374151;margin:0 0 10px;padding-left:20px"><li>月1回の経営MTGでスタッフ状況・課題を報告</li><li>昇格推薦・評価コメントの提出</li><li>緊急事案は即時に電話やLINEで報告</li></ul>
+
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:18px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">副店長の仕事</div>
+      <div style="background:#EAF5F3;border-radius:8px;padding:10px;margin-bottom:12px;font-size:13px;font-weight:700;color:#1A4F47">店長を支え、現場を動かす実行者</div>
+      <div style="font-size:13.5px;font-weight:700;color:#2C7A6E;margin:10px 0 4px">【日次運営】</div>
+      <ul style="font-size:13px;line-height:1.8;color:#374151;margin:0 0 10px;padding-left:20px"><li>日次売上の集計と店長・代表への共有（日報アプリ運用）</li><li>予約状況の把握と空き枠の対策</li><li>開店・閉店作業の進行確認（各担当者の動きを把握）</li><li>消耗品・在庫チェックの取りまとめと発注</li></ul>
+      <div style="font-size:13.5px;font-weight:700;color:#2C7A6E;margin:10px 0 4px">【スタッフサポート】</div>
+      <ul style="font-size:13px;line-height:1.8;color:#374151;margin:0 0 10px;padding-left:20px"><li>店長不在時の現場統括</li><li>アシスタントの日常指導</li><li>新人スタッフの受け入れ・教育のサポート</li><li>シフト変更の一次対応</li></ul>
+      <div style="font-size:13.5px;font-weight:700;color:#2C7A6E;margin:10px 0 4px">【接客・クレーム】</div>
+      <ul style="font-size:13px;line-height:1.8;color:#374151;margin:0 0 10px;padding-left:20px"><li>軽微なクレームの一次対応</li><li>お客様フィードバックの収集と共有</li></ul>
+      <div style="font-size:13.5px;font-weight:700;color:#2C7A6E;margin:10px 0 4px">【店長への報告】</div>
+      <ul style="font-size:13px;line-height:1.8;color:#374151;margin:0 0 10px;padding-left:20px"><li>その日の売上・スタッフ・クレームを毎日報告</li><li>小さなトラブルや「危ないかも」と思った出来事の共有（大きな事故を防ぐため）</li></ul>
+
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:18px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">ミーティング体系</div>
+      <div style="overflow-x:auto;margin:0 0 10px"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:380px"><thead><tr style="background:#2C7A6E;color:#fff"><th style="padding:7px;text-align:left;border:1px solid #C8E0DC">ミーティング</th><th style="padding:7px;text-align:left;border:1px solid #C8E0DC">参加者</th><th style="padding:7px;text-align:left;border:1px solid #C8E0DC">頻度</th><th style="padding:7px;text-align:left;border:1px solid #C8E0DC">内容</th></tr></thead><tbody><tr><td style="padding:7px;border:1px solid #C8E0DC;font-weight:700">経営MTG</td><td style="padding:7px;border:1px solid #C8E0DC">代表+店長</td><td style="padding:7px;border:1px solid #C8E0DC">月1回</td><td style="padding:7px;border:1px solid #C8E0DC">売上・スタッフ・課題・翌月方針</td></tr><tr style="background:#F6FBFA"><td style="padding:7px;border:1px solid #C8E0DC;font-weight:700">全体MTG</td><td style="padding:7px;border:1px solid #C8E0DC">全員</td><td style="padding:7px;border:1px solid #C8E0DC">月1〜2回</td><td style="padding:7px;border:1px solid #C8E0DC">理念共有・売上報告・情報共有・勉強会</td></tr><tr><td style="padding:7px;border:1px solid #C8E0DC;font-weight:700">個人面談</td><td style="padding:7px;border:1px solid #C8E0DC">店長+各スタッフ</td><td style="padding:7px;border:1px solid #C8E0DC">月1回</td><td style="padding:7px;border:1px solid #C8E0DC">目標確認・悩み相談・成長プラン</td></tr><tr style="background:#F6FBFA"><td style="padding:7px;border:1px solid #C8E0DC;font-weight:700">日次報告</td><td style="padding:7px;border:1px solid #C8E0DC">副店長→店長→代表</td><td style="padding:7px;border:1px solid #C8E0DC">毎日</td><td style="padding:7px;border:1px solid #C8E0DC">売上・スタッフ・クレーム情報</td></tr><tr><td style="padding:7px;border:1px solid #C8E0DC;font-weight:700">緊急連絡</td><td style="padding:7px;border:1px solid #C8E0DC">発生者→店長/代表</td><td style="padding:7px;border:1px solid #C8E0DC">随時</td><td style="padding:7px;border:1px solid #C8E0DC">クレーム・トラブル・体調不良等</td></tr></tbody></table></div>
+      <div style="background:#FFF8E1;border:1.5px solid #F0D000;border-radius:10px;padding:12px;margin-bottom:12px;font-size:13px;line-height:1.8;color:#1A4F47"><b>💡 報告のルール</b><ul style="margin:6px 0 0;padding-left:20px"><li>「報告は早く、相談は事前に」が基本</li><li>問題が起きてから報告するのではなく、不安に思った時点で相談</li><li>SUN日報アプリを活用して、数字は毎日共有</li><li>LINEグループでの連絡は迅速に。既読スルーNG</li></ul></div>
+
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:18px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">インセンティブと評価</div>
+      <div style="overflow-x:auto;margin:0 0 10px"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:#2C7A6E;color:#fff"><th style="padding:7px;text-align:left;border:1px solid #C8E0DC">役職</th><th style="padding:7px;text-align:left;border:1px solid #C8E0DC">月額インセンティブ</th></tr></thead><tbody><tr><td style="padding:7px;border:1px solid #C8E0DC;font-weight:700">店長</td><td style="padding:7px;border:1px solid #C8E0DC">100,000円</td></tr><tr style="background:#F6FBFA"><td style="padding:7px;border:1px solid #C8E0DC;font-weight:700">副店長</td><td style="padding:7px;border:1px solid #C8E0DC">50,000円</td></tr></tbody></table></div>
+      <div style="font-size:13.5px;font-weight:700;color:#2C7A6E;margin:10px 0 4px">評価サイクル</div>
+      <ul style="font-size:13px;line-height:1.8;color:#374151;margin:0 0 10px;padding-left:20px"><li>月次：個人面談で目標達成状況の確認</li><li>半期：店長・代表との総合評価面談</li><li>年次：昇格・昇給の最終判断</li></ul>
+      <div style="background:#FFF8E1;border:1.5px solid #F0D000;border-radius:10px;padding:12px;margin-bottom:12px;font-size:13px;line-height:1.8;color:#1A4F47"><b>💡 評価のポイント</b><br>単に「売上を上げる」だけでなく、「チームの売上を上げるための行動」を評価します。</div>
+
+      <div style="font-size:15px;font-weight:800;color:#2C7A6E;margin:18px 0 8px;padding-bottom:5px;border-bottom:2px solid #E0EFEC">緊急時の対応フロー</div>
+      <p style="font-size:13px;line-height:1.85;color:#374151;margin:0 0 8px">予期せぬトラブル時、誰がどう動くかを明確にします。<b>基本対応は店長、店長不在時は副店長が代行します。重大案件は必ず代表に即連絡。</b></p>
+      <div style="overflow-x:auto;margin:0 0 10px"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:380px"><thead><tr style="background:#2C7A6E;color:#fff"><th style="padding:7px;text-align:left;border:1px solid #C8E0DC">状況</th><th style="padding:7px;text-align:left;border:1px solid #C8E0DC">第一対応</th><th style="padding:7px;text-align:left;border:1px solid #C8E0DC">報告先</th></tr></thead><tbody><tr><td style="padding:7px;border:1px solid #C8E0DC">クレーム（軽度）</td><td style="padding:7px;border:1px solid #C8E0DC">店長が一次対応（不在時は副店長）</td><td style="padding:7px;border:1px solid #C8E0DC">当日中に代表へLINE報告</td></tr><tr style="background:#F6FBFA"><td style="padding:7px;border:1px solid #C8E0DC">クレーム（重度）</td><td style="padding:7px;border:1px solid #C8E0DC">店長が対応、対応中に代表に報告</td><td style="padding:7px;border:1px solid #C8E0DC">即時、代表に電話</td></tr><tr><td style="padding:7px;border:1px solid #C8E0DC">施術トラブル</td><td style="padding:7px;border:1px solid #C8E0DC">店長が応急対応（不在時は副店長）</td><td style="padding:7px;border:1px solid #C8E0DC">店長→代表へ即連絡</td></tr><tr style="background:#F6FBFA"><td style="padding:7px;border:1px solid #C8E0DC">スタッフ急な体調不良</td><td style="padding:7px;border:1px solid #C8E0DC">店長がシフト調整（不在時は副店長）</td><td style="padding:7px;border:1px solid #C8E0DC">当日中に代表へ報告</td></tr><tr><td style="padding:7px;border:1px solid #C8E0DC">設備故障</td><td style="padding:7px;border:1px solid #C8E0DC">店長が業者に連絡（不在時は副店長）</td><td style="padding:7px;border:1px solid #C8E0DC">代表に状況共有</td></tr><tr style="background:#F6FBFA"><td style="padding:7px;border:1px solid #C8E0DC">SNSでの炎上・拡散</td><td style="padding:7px;border:1px solid #C8E0DC">即時、店長と代表に連絡（公式発信は代表のみ）</td><td style="padding:7px;border:1px solid #C8E0DC">即時、代表に電話</td></tr><tr><td style="padding:7px;border:1px solid #C8E0DC">法的トラブルの示唆</td><td style="padding:7px;border:1px solid #C8E0DC">一切の発言を控え、代表の指示を待つ</td><td style="padding:7px;border:1px solid #C8E0DC">即時、代表に電話</td></tr></tbody></table></div>
+      <div style="background:#FFEBEE;border:1.5px solid #EF9A9A;border-radius:10px;padding:12px;font-size:13px;line-height:1.8;color:#1A4F47"><b>連絡優先順位</b><ul style="margin:6px 0 0;padding-left:20px"><li>第一連絡先：店長</li><li>第二連絡先：代表</li><li>両者に同時連絡：火災・盗難・人身事故・法的トラブル</li></ul></div>
+    </div>
+  </div>
+
+</div>
+<script>
+function toggleManual(n){var b=document.getElementById('manualBody_'+n);var a=document.getElementById('manualArrow_'+n);if(!b)return;var open=b.style.display!=='none';b.style.display=open?'none':'block';if(a)a.textContent=open?'▼':'▲';}
+</script>
 
 <script>
 
@@ -2311,7 +2581,7 @@ function switchTab(tab){
   var tabs=document.querySelectorAll('.tab-btn');
   for(var i=0;i<tabs.length;i++) tabs[i].classList.remove('active');
   document.getElementById('page-'+tab).classList.add('active');
-  var idx=['input','records','dashboard','pnl','admin'].indexOf(tab);
+  var idx=['input','records','dashboard','pnl','admin','manual'].indexOf(tab);
   if(idx>=0) tabs[idx].classList.add('active');
   if(tab==='admin'){ updateSessionInfo(); loadStaffPinManagement(); }
   if(tab==='records') renderRecords();
@@ -2964,7 +3234,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "7.5";
+var APP_VERSION = "7.6";
 
 function checkForUpdate(){
   try {
