@@ -307,6 +307,9 @@
   <div class="section-title">TODAY</div>
   <div id="todayStats" class="dash-grid"></div>
 
+  <div class="section-title">🏆 本日のスタッフ別 売上速報</div>
+  <div id="speedReport"></div>
+
   <div class="section-title">📋 入力した日報を見る</div>
 
   <!-- 見る -->
@@ -1784,6 +1787,8 @@ function renderRecords(){
   document.getElementById('todayStats').innerHTML=
     '<div class="dash-stat"><div class="dash-stat-label">本日売上（税込）</div><div class="dash-stat-value">¥'+num(todayTotal)+'</div><div class="dash-stat-sub">'+todayRecs.length+'件</div></div>'+
     '<div class="dash-stat"><div class="dash-stat-label">本日の客数</div><div class="dash-stat-value">'+todayClients+'人</div><div class="dash-stat-sub">平均¥'+(todayClients>0?num(Math.round(todayTotal/todayClients)):0)+'</div></div>';
+  // 🏆 スタッフ別 売上速報
+  try{ renderSpeedReport(); }catch(e){}
   // 顧客リスト（月選択対応）
   if(typeof renderCustomerList === 'function'){
     renderCustomerList();
@@ -3069,6 +3074,61 @@ function calcStaffActual(staffName, ym){
   }
   return { tech: techTotal, product: productTotal };
 }
+
+// 🏆 本日のスタッフ別 売上速報（順位バー＋今月の目標達成バー）
+function renderSpeedReport(){
+  var el=document.getElementById('speedReport');
+  if(!el) return;
+  var now=new Date();
+  var todayYMD = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+  var ym = todayYMD.slice(0,7);
+  // 本日のスタッフ別集計（技術=担当者 / 物販=商品ごとの担当）
+  var byStaff={};
+  function ensure(n){ if(!byStaff[n]) byStaff[n]={tech:0,prod:0,clients:0}; return byStaff[n]; }
+  for(var i=0;i<state.records.length;i++){
+    var r=state.records[i];
+    if(recYMD(r)!==todayYMD) continue;
+    if(r.staff){ var a=ensure(r.staff); a.tech+=(r.menuAmount||0); a.clients+=1; }
+    if(r.products && r.products.length){
+      for(var j=0;j<r.products.length;j++){
+        var p=r.products[j]; var ps=p.productStaff||r.staff; if(!ps) continue;
+        var qty=p.qty||1; var sell=(p.customSell!==undefined?p.customSell:p.sell)||0;
+        ensure(ps).prod+=sell*qty;
+      }
+    }
+  }
+  var rows=[];
+  for(var k in byStaff){ var v=byStaff[k]; rows.push({name:k,total:v.tech+v.prod,tech:v.tech,prod:v.prod,clients:v.clients}); }
+  rows.sort(function(a,b){ return b.total-a.total; });
+  if(!rows.length){ el.innerHTML='<div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:16px;text-align:center;color:#94a3b8;font-size:13px">本日の売上はまだありません</div>'; return; }
+  var top=rows[0].total||1;
+  var medals=['🥇','🥈','🥉'];
+  var html='';
+  for(var i=0;i<rows.length;i++){
+    var row=rows[i];
+    var pct=Math.round(row.total/top*100);
+    var sbg=STAFF_BG_ACTIVE[staffIdx(row.name)]||'#2C7A6E';
+    var medal = i<3 ? '<span style="font-size:18px">'+medals[i]+'</span>' : '<span style="display:inline-block;width:22px;text-align:center;color:#94a3b8;font-weight:800">'+(i+1)+'</span>';
+    var goal=(state.goals&&state.goals[ym]&&state.goals[ym][row.name])?state.goals[ym][row.name]:{tech:0,product:0};
+    var act=calcStaffActual(row.name, ym);
+    var goalTotal=(goal.tech||0)+(goal.product||0);
+    var actTotal=(act.tech||0)+(act.product||0);
+    var gpct=goalTotal>0?Math.round(actTotal/goalTotal*100):0;
+    html+='<div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:12px;margin-bottom:8px">';
+    html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'+medal;
+    html+='<span style="display:inline-block;background:'+sbg+';color:#fff;font-size:13px;font-weight:800;padding:3px 11px;border-radius:14px">'+h(row.name)+'</span>';
+    html+='<span style="margin-left:auto;font-size:17px;font-weight:800;color:#1A4F47">¥'+num(row.total)+'</span></div>';
+    html+='<div style="background:#EEF2F1;border-radius:8px;height:10px;overflow:hidden;margin-bottom:5px"><div style="width:'+pct+'%;height:100%;background:'+sbg+'"></div></div>';
+    html+='<div style="font-size:11px;color:#64748B;margin-bottom:'+(goalTotal>0?'8px':'0')+'">技術¥'+num(row.tech)+' ／ 物販¥'+num(row.prod)+' ／ '+row.clients+'人</div>';
+    if(goalTotal>0){
+      var gcolor = gpct>=100?'#2E7D32':(gpct>=70?'#E69500':'#C2185B');
+      html+='<div style="font-size:11px;color:#64748B;margin-bottom:3px">🎯 今月の目標達成：<b style="color:'+gcolor+'">'+gpct+'%</b>（¥'+num(actTotal)+' / ¥'+num(goalTotal)+'）</div>';
+      html+='<div style="background:#EEF2F1;border-radius:8px;height:8px;overflow:hidden"><div style="width:'+Math.min(gpct,100)+'%;height:100%;background:'+gcolor+'"></div></div>';
+    }
+    html+='</div>';
+  }
+  el.innerHTML=html;
+}
 function setGoalValue(staff, type, val){
   ensureGoals();
   var ym = getCurrentGoalsMonth();
@@ -3660,7 +3720,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "7.4";
+var APP_VERSION = "7.5";
 
 function checkForUpdate(){
   try {
