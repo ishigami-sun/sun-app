@@ -410,7 +410,7 @@
   <div class="card">
     <div class="add-form-row">
       <div class="form-group"><label class="form-label">メニュー名</label><input class="form-input" id="newMenuName" placeholder="例：カット"></div>
-      <div class="form-group" style="max-width:100px"><label class="form-label">定価（税込）</label><input class="form-input" id="newMenuPrice" type="number" placeholder="6600"></div>
+      <div class="form-group" style="max-width:120px"><label class="form-label">メニュー価格（税抜）</label><input class="form-input" id="newMenuPrice" type="number" placeholder="10000"></div>
       <button class="add-btn" onclick="addMenu()">追加</button>
     </div>
     <div class="item-list" id="menuAdminList"></div>
@@ -1447,7 +1447,7 @@ function renderMenuList(){
     var dp=m.price;
     var sel=findById(state.selectedMenus,m.id);
     var hasPrice=m.price>0;
-    var priceSub=hasPrice?('定価(税込)¥'+num(m.price)+' ／ 税抜¥'+num(Math.round(m.price/1.1))):'<span style="color:#D4A843">⚠️ 入力時に金額を設定</span>';
+    var priceSub=hasPrice?('税抜¥'+num(m.price)+' ／ 税込¥'+num(Math.round(m.price*1.1))):'<span style="color:#D4A843">⚠️ 入力時に金額を設定</span>';
     var priceDisplay=hasPrice?'¥'+num(dp):'<span style="color:#D4A843;font-size:12px">未設定</span>';
     html+='<div class="menu-row"><div class="menu-row-top"><div class="menu-left"><div class="menu-name">'+h(m.name)+'</div><div class="menu-price-sub">'+priceSub+'</div></div><div class="menu-price-display">'+priceDisplay+'</div>';
     if(sel){
@@ -1465,7 +1465,7 @@ function findIdxById(arr,id){ for(var i=0;i<arr.length;i++) if(arr[i].id===id) r
 function addMenuItem(id){
   var m=findById(state.menus,id); if(!m) return;
   var mode='exc'; // 既定は税抜入力（メニューごとに切替可）
-  var base=masterToMode(m.price, mode); // 定価(税込)を入力モードの単位へ変換
+  var base=m.price; // メニュー価格は「税抜」で保存されている（そのまま使用）
   var ex=findById(state.selectedMenus,id);
   if(ex){ ex.qty++; }
   else { state.selectedMenus.push({id:m.id,name:m.name,price:m.price,qty:1,inputPrice:base,taxMode:mode,extraAmount:0,discountPct:0,basePrice:base}); }
@@ -1571,8 +1571,8 @@ function resetExtra(i){
   if(state.selectedMenus[i]){
     var it=state.selectedMenus[i];
     var m2=findById(state.menus,it.id);
-    var masterInc=m2?m2.price:menuInc(it); // 定価(税込)
-    var base=masterToMode(masterInc, it.taxMode||'exc'); // 入力モードの単位へ
+    var masterExc=m2?m2.price:menuExc(it); // メニュー価格(税抜)
+    var base=(it.taxMode==='inc')?Math.round(masterExc*1.1):masterExc; // 入力モードの単位へ
     it.basePrice=base;
     it.extraAmount=0;
     // 割引はdiscountPctで別途適用されるため、ここでは基本価格に戻すだけ（二重適用を防ぐ）
@@ -3941,7 +3941,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "7.9";
+var APP_VERSION = "8.0";
 
 function checkForUpdate(){
   try {
