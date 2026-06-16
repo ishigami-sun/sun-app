@@ -355,46 +355,13 @@
 
 <!-- ===== 物販利益 ===== -->
 <div class="page" id="page-dashboard">
-  <!-- フィルター -->
-  <div class="card" style="padding:12px;margin-bottom:10px">
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-      <span style="font-size:11px;font-weight:700;color:var(--teal);align-self:center;letter-spacing:1px">期間：</span>
-      <button class="filter-btn" id="fbPeriod_today" onclick="setPeriod('today')">本日</button>
-      <button class="filter-btn active" id="fbPeriod_thisMonth" onclick="setPeriod('thisMonth')">今月</button>
-      <button class="filter-btn" id="fbPeriod_lastMonth" onclick="setPeriod('lastMonth')">先月</button>
-      <button class="filter-btn" id="fbPeriod_thisYear" onclick="setPeriod('thisYear')">今年</button>
-      <button class="filter-btn" id="fbPeriod_lastYear" onclick="setPeriod('lastYear')">昨年</button>
-      <button class="filter-btn" id="fbPeriod_all" onclick="setPeriod('all')">全期間</button>
-    </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-      <span style="font-size:11px;font-weight:700;color:var(--teal);letter-spacing:1px">月：</span>
-      <select class="month-picker" id="monthPicker" onchange="setCustomMonth(this.value)" oninput="setCustomMonth(this.value)">
-        <option value="">選択...</option>
-      </select>
-      <span style="font-size:11px;font-weight:700;color:var(--teal);letter-spacing:1px;margin-left:8px">担当：</span>
-      <select class="month-picker" id="staffPicker" onchange="setStaffFilter(this.value)" oninput="setStaffFilter(this.value)">
-        <option value="">全員</option>
-      </select>
-    </div>
-    <div id="currentFilterDisplay" style="margin-top:10px;padding:8px 12px;background:#F0F7F6;border-left:3px solid #2C7A6E;border-radius:6px;font-size:13px;color:#1A4F47;font-weight:600">
-      <span id="currentPeriodDisp">📅 今月</span> ／ <span id="currentStaffDisp">👤 全員</span>
-    </div>
+  <div class="section-title">🛍️ 物販</div>
+  <!-- フィルター（月＋担当） -->
+  <div style="display:flex;gap:8px;margin-bottom:14px">
+    <select id="dashMonthSelect" onchange="setDashMonth(this.value)" style="flex:1;padding:11px 12px;border:2px solid #C8E0DC;border-radius:10px;background:#fff;font-size:13px;font-weight:700;color:#1A4F47"></select>
+    <select id="dashStaffSelect" onchange="setDashStaff(this.value)" style="flex:1;padding:11px 12px;border:2px solid #C8E0DC;border-radius:10px;background:#fff;font-size:13px;font-weight:700;color:#1A4F47"></select>
   </div>
-
-  <div class="summary-box" style="margin-bottom:12px">
-    <div class="summary-total-label" id="dashProfitLabel">今月の物販利益合計</div>
-    <div class="summary-total-value" id="monthlyProfitTotal">¥0</div>
-    <div style="font-size:12px;opacity:0.8;margin-top:4px" id="profitSubtitle"></div>
-  </div>
-
-  <div class="section-title">📋 物販購入顧客リスト</div>
-  <div id="dashCustomerList" class="customer-list"></div>
-
-  <div class="section-title">💰 スタッフ別　物販集計（詳細）</div>
-  <div id="staffDetailBreakdown"></div>
-
-  <div class="section-title">📊 商品別　販売数・利益</div>
-  <div class="card" id="productProfitList"></div>
+  <div id="dashContent"></div>
 </div>
 
 <!-- ===== 管理 ===== -->
@@ -2352,165 +2319,160 @@ function setStaffFilter(val){
 }
 
 /* DASHBOARD */
+// 物販タブ（butsuhan_prototype_1 デザイン）
+function setDashMonth(val){
+  if(/^\d{4}-\d{2}$/.test(val)){ state.dashPeriod='custom'; state.dashCustomMonth=val; }
+  else { state.dashPeriod=val||'thisMonth'; state.dashCustomMonth=''; }
+  try{ saveLocal(); }catch(e){}
+  renderDashboard();
+}
+function setDashStaff(val){
+  state.dashStaffFilter = val||'';
+  try{ saveLocal(); }catch(e){}
+  renderDashboard();
+}
+// 商品の卸値を解決：本人の値→マスタ→過去記録（同名）の順。無ければ null
+function resolveCost(p){
+  if(p && p.cost && p.cost>0) return p.cost;
+  var nm = p && p.name;
+  if(nm){
+    for(var i=0;i<state.products.length;i++){ if(state.products[i].name===nm && state.products[i].cost>0) return state.products[i].cost; }
+    for(var i=0;i<state.records.length;i++){ var pr=state.records[i].products||[]; for(var j=0;j<pr.length;j++){ if(pr[j].name===nm && pr[j].cost>0) return pr[j].cost; } }
+  }
+  return null;
+}
 function renderDashboard(){
-  populateMonthPickers();
-  // 期間ラベル
-  var periodLabel=getPeriodLabel(state.dashPeriod, state.dashCustomMonth);
-  var filtered=getFilteredRecords(state.dashPeriod, state.dashCustomMonth, state.dashStaffFilter);
+  var period = state.dashPeriod || 'thisMonth';
+  var custom = state.dashCustomMonth || '';
+  var staffFilter = state.dashStaffFilter || '';
 
-  // 担当者フィルター（物販担当者を基準）
-  var filteredForStaff=filtered;
-  if(state.dashStaffFilter){
-    filteredForStaff=[];
-    for(var i=0;i<filtered.length;i++){
-      var r=filtered[i];
-      var hasStaff=false;
-      for(var j=0;j<r.products.length;j++){
-        if((r.products[j].productStaff||r.staff)===state.dashStaffFilter){ hasStaff=true; break; }
-      }
-      if(hasStaff) filteredForStaff.push(r);
-    }
-  }
+  // 月セレクト生成
+  var monthSet={};
+  for(var i=0;i<state.records.length;i++){ var dd=new Date(state.records[i].time); if(!isNaN(dd.getTime())) monthSet[dd.getFullYear()+'-'+String(dd.getMonth()+1).padStart(2,'0')]=1; }
+  var months=Object.keys(monthSet).sort().reverse();
+  var mopts='';
+  mopts+='<option value="thisMonth">今月</option>';
+  mopts+='<option value="lastMonth">先月</option>';
+  mopts+='<option value="thisYear">今年</option>';
+  mopts+='<option value="all">全期間</option>';
+  for(var i=0;i<months.length;i++){ var mp=months[i].split('-'); mopts+='<option value="'+months[i]+'">'+mp[0]+'年'+parseInt(mp[1],10)+'月</option>'; }
+  var msel=document.getElementById('dashMonthSelect'); if(msel){ msel.innerHTML=mopts; msel.value = (period==='custom'?custom:period); }
+  // スタッフセレクト生成
+  var sopts='<option value="">全員</option>';
+  for(var i=0;i<state.staff.length;i++){ sopts+='<option value="'+h(state.staff[i])+'">'+h(state.staff[i])+'</option>'; }
+  var ssel=document.getElementById('dashStaffSelect'); if(ssel){ ssel.innerHTML=sopts; ssel.value=staffFilter; }
 
-  // 物販利益合計（担当絞り込み考慮）
-  var monthProfit=0;
-  for(var i=0;i<filteredForStaff.length;i++){
-    var r=filteredForStaff[i];
-    for(var j=0;j<r.products.length;j++){
-      var pp=r.products[j];
-      var s=pp.productStaff||r.staff;
-      if(state.dashStaffFilter&&s!==state.dashStaffFilter) continue;
-      monthProfit+=(pp.customSell-pp.cost)*pp.qty;
-    }
-  }
-  document.getElementById('monthlyProfitTotal').textContent='¥'+num(monthProfit);
-  document.getElementById('dashProfitLabel').textContent=periodLabel+(state.dashStaffFilter?' / '+state.dashStaffFilter:'')+'の物販利益';
-  document.getElementById('profitSubtitle').textContent=periodLabel;
-
-  // 顧客リスト
-  var prodRecs=[];
-  for(var i=0;i<filteredForStaff.length;i++) if(filteredForStaff[i].products.length) prodRecs.push(filteredForStaff[i]);
-  prodRecs.sort(function(a,b){ return new Date(b.time)-new Date(a.time); });
-  var custEl=document.getElementById('dashCustomerList');
-  if(!prodRecs.length){ custEl.innerHTML='<div class="empty"><div class="empty-text">該当期間の物販記録はありません</div></div>'; }
-  else {
-    var chtml='';
-    for(var i=0;i<prodRecs.length;i++){
-      var r=prodRecs[i];
-      var d=new Date(r.time);
-      var ds=(d.getMonth()+1)+'/'+d.getDate();
-      var pdetail='';
-      var pp2=0;
-      for(var j=0;j<r.products.length;j++){
-        var pp=r.products[j];
-        var s=pp.productStaff||r.staff;
-        if(state.dashStaffFilter&&s!==state.dashStaffFilter) continue;
-        pdetail+=h(pp.name)+'×'+pp.qty+' '+staffBadge(s)+' ';
-        if(pp.cost>0) pp2+=(pp.customSell-pp.cost)*pp.qty;
-      }
-      chtml+='<div class="customer-chip"><div style="flex:1"><div style="display:flex;align-items:center;gap:8px;margin-bottom:3px"><div class="customer-chip-name">'+h(r.customerName||'（名前なし）')+'</div><div class="customer-chip-time">'+ds+'</div></div>';
-      chtml+='<div style="font-size:11px;color:#27AE60;margin-top:2px">📦 '+pdetail+'</div>';
-      chtml+='<div style="font-size:11px;color:#64748B;margin-top:2px">施術：'+h(r.staff)+'</div></div>';
-      chtml+='<div style="text-align:right"><div class="profit-amount" style="font-size:13px">利益¥'+num(pp2)+'</div></div></div>';
-    }
-    custEl.innerHTML=chtml;
-  }
-
-  // スタッフ別詳細集計
-  var staffData={};
+  // データ集計
+  var filtered=getFilteredRecords(period, custom, staffFilter);
+  var lines=[]; var techTotal=0;
   for(var i=0;i<filtered.length;i++){
     var r=filtered[i];
-    for(var j=0;j<r.products.length;j++){
-      var pp=r.products[j];
-      var s=pp.productStaff||r.staff;
-      if(state.dashStaffFilter&&s!==state.dashStaffFilter) continue;
-      if(!staffData[s]) staffData[s]={totalSell:0,totalCost:0,totalProfit:0,totalQty:0,products:{}};
-      var sellAmt=pp.customSell*pp.qty;
-      var costAmt=pp.cost*pp.qty;
-      var profitAmt=sellAmt-costAmt;
-      staffData[s].totalSell+=sellAmt;
-      staffData[s].totalCost+=costAmt;
-      staffData[s].totalProfit+=profitAmt;
-      staffData[s].totalQty+=pp.qty;
-      if(!staffData[s].products[pp.name]) staffData[s].products[pp.name]={qty:0,sell:0,cost:0,profit:0};
-      staffData[s].products[pp.name].qty+=pp.qty;
-      staffData[s].products[pp.name].sell+=sellAmt;
-      staffData[s].products[pp.name].cost+=costAmt;
-      staffData[s].products[pp.name].profit+=profitAmt;
+    if(!staffFilter || r.staff===staffFilter) techTotal += (r.menuAmount||0);
+    var prods=r.products||[];
+    for(var j=0;j<prods.length;j++){
+      var p=prods[j]; var ps=p.productStaff||r.staff;
+      if(staffFilter && ps!==staffFilter) continue;
+      var qty=p.qty||1;
+      var sell=(p.customSell!==undefined?p.customSell:p.sell)||0;
+      var cost=resolveCost(p);
+      var profit=(cost!=null)?(sell-cost)*qty:null;
+      lines.push({time:r.time, staff:ps, name:p.name||'(商品名なし)', qty:qty, cost:cost, sell:sell, profit:profit});
     }
   }
-  var staffDetailEl=document.getElementById('staffDetailBreakdown');
-  var staffEntries=[];
-  for(var k in staffData) if(staffData[k].totalQty>0) staffEntries.push([k,staffData[k]]);
-  staffEntries.sort(function(a,b){ return b[1].totalProfit-a[1].totalProfit; });
-  if(!staffEntries.length){
-    staffDetailEl.innerHTML='<div class="card"><div class="empty"><div class="empty-text">該当期間の物販データがありません</div></div></div>';
-  } else {
-    var sdHtml='';
-    for(var i=0;i<staffEntries.length;i++){
-      var sname=staffEntries[i][0];
-      var sdata=staffEntries[i][1];
-      var sidx=staffIdx(sname);
-      var bgColor=STAFF_BG_ACTIVE[sidx];
-      var lightBg=STAFF_BG_INACTIVE[sidx];
-      sdHtml+='<div class="card" style="padding:0;overflow:hidden;margin-bottom:14px">';
-      sdHtml+='<div style="background:'+bgColor+';color:#fff;padding:14px 16px">';
-      sdHtml+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
-      sdHtml+='<div style="font-size:15px;font-weight:700">'+h(sname)+'</div>';
-      sdHtml+='<div style="font-size:11px;opacity:0.85">'+sdata.totalQty+'個販売</div>';
-      sdHtml+='</div>';
-      sdHtml+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
-      sdHtml+='<div><div style="font-size:10px;opacity:0.8">売上</div><div style="font-size:15px;font-weight:700">¥'+num(sdata.totalSell)+'</div></div>';
-      sdHtml+='<div><div style="font-size:10px;opacity:0.8">卸値合計</div><div style="font-size:15px;font-weight:700">¥'+num(sdata.totalCost)+'</div></div>';
-      sdHtml+='<div><div style="font-size:10px;opacity:0.8">利益</div><div style="font-size:15px;font-weight:700;color:#FFD580">¥'+num(sdata.totalProfit)+'</div></div>';
-      sdHtml+='</div></div>';
-      sdHtml+='<div style="padding:0">';
-      sdHtml+='<div style="display:grid;grid-template-columns:1.6fr 0.5fr 0.9fr 0.9fr 0.9fr;background:'+lightBg+';padding:8px 12px;font-size:10px;font-weight:700;color:'+bgColor+';">';
-      sdHtml+='<div>商品名</div><div style="text-align:center">個数</div><div style="text-align:right">卸値</div><div style="text-align:right">売値</div><div style="text-align:right">利益</div>';
-      sdHtml+='</div>';
-      var prodKeys=Object.keys(sdata.products);
-      prodKeys.sort(function(a,b){ return sdata.products[b].profit-sdata.products[a].profit; });
-      for(var pi=0;pi<prodKeys.length;pi++){
-        var pn=prodKeys[pi];
-        var pd=sdata.products[pn];
-        sdHtml+='<div style="display:grid;grid-template-columns:1.6fr 0.5fr 0.9fr 0.9fr 0.9fr;padding:10px 12px;font-size:11px;border-bottom:1px solid #F0F7F6;align-items:center;">';
-        sdHtml+='<div style="font-weight:600">'+h(pn)+'</div>';
-        sdHtml+='<div style="text-align:center;color:#64748B">×'+pd.qty+'</div>';
-        sdHtml+='<div style="text-align:right;color:#64748B">¥'+num(pd.cost)+'</div>';
-        sdHtml+='<div style="text-align:right;color:#1A2E2A;font-weight:600">¥'+num(pd.sell)+'</div>';
-        sdHtml+='<div style="text-align:right;color:#27AE60;font-weight:700">¥'+num(pd.profit)+'</div>';
-        sdHtml+='</div>';
-      }
-      sdHtml+='</div></div>';
-    }
-    staffDetailEl.innerHTML=sdHtml;
+  lines.sort(function(a,b){ return new Date(b.time)-new Date(a.time); });
+
+  var units=0, sales=0, profitSum=0, hasUnknownCost=false, count=lines.length;
+  for(var i=0;i<lines.length;i++){ units+=lines[i].qty; sales+=lines[i].sell*lines[i].qty; if(lines[i].profit!=null) profitSum+=lines[i].profit; else hasUnknownCost=true; }
+  var avgPerSale = count>0?Math.round(sales/count):0;
+  var profitRate = sales>0?Math.round(profitSum/sales*1000)/10:0;
+  var avgProfit = count>0?Math.round(profitSum/count):0;
+  var ratio = techTotal>0 ? Math.round(sales/techTotal*1000)/10 : 0;
+  var target=10;
+  var barW = techTotal>0 ? Math.min(ratio/target*100,100) : 0;
+  var remain = Math.max(0, Math.round(techTotal*target/100 - sales));
+  var periodLabel=getPeriodLabel(period, custom);
+
+  function card(label,value,sub,primary){
+    var base = primary ? 'background:linear-gradient(135deg,#2C7A6E,#1A4F47);color:#fff;border:none' : 'background:#fff;border:1px solid #C8E0DC';
+    var lc = primary?'rgba(255,255,255,0.85)':'#64748B', vc = primary?'#fff':'#1A4F47', sc = primary?'rgba(255,255,255,0.78)':'#64748B';
+    return '<div style="'+base+';border-radius:12px;padding:14px"><div style="font-size:11px;font-weight:700;color:'+lc+';margin-bottom:4px">'+label+'</div><div style="font-size:21px;font-weight:800;color:'+vc+'">'+value+'</div><div style="font-size:11px;color:'+sc+';margin-top:4px">'+sub+'</div></div>';
   }
-  // 商品別
-  var prodP={}, prodC={};
-  for(var i=0;i<state.records.length;i++){
-    var r=state.records[i];
-    for(var j=0;j<r.products.length;j++){
-      var pp=r.products[j];
-      if(!prodP[pp.name]){ prodP[pp.name]=0; prodC[pp.name]=0; }
-      prodP[pp.name]+=(pp.customSell-pp.cost)*pp.qty;
-      prodC[pp.name]+=pp.qty;
+  function th(t,r){ return '<th style="padding:10px 8px;text-align:'+(r?'right':'left')+';font-size:11px;font-weight:700;white-space:nowrap">'+t+'</th>'; }
+  function rankCard(title, items){
+    var medals=['#D4A843','#94A3B8','#A78A66'];
+    var s='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:14px;margin-top:14px">';
+    s+='<div style="font-size:13px;font-weight:800;color:#1A4F47;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #E8EFEE">'+title+'</div>';
+    if(!items.length){ s+='<div style="text-align:center;color:#94a3b8;font-size:12px;padding:6px">データがありません</div>'; }
+    for(var i=0;i<items.length;i++){
+      var it=items[i];
+      var badge = i<3 ? 'background:'+medals[i]+';color:#fff' : 'background:#E8F5F3;color:#2C7A6E';
+      s+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;'+(i<items.length-1?'border-bottom:1px solid #F4F7F6':'')+'">';
+      s+='<div style="display:flex;align-items:center;gap:8px;min-width:0"><div style="'+badge+';width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;flex:0 0 auto">'+(i+1)+'</div><div style="font-weight:700;color:#1A4F47;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+h(it.name)+'</div></div>';
+      s+='<div style="text-align:right;flex:0 0 auto;margin-left:8px"><div style="font-weight:800;color:#1A4F47;font-size:13px">'+it.value+'</div><div style="font-size:10px;color:#64748B">'+it.sub+'</div></div>';
+      s+='</div>';
     }
-  }
-  var ppEl=document.getElementById('productProfitList');
-  var pEntries=[];
-  for(var k in prodP) pEntries.push([k,prodP[k]]);
-  pEntries.sort(function(a,b){ return b[1]-a[1]; });
-  if(!pEntries.length){ ppEl.innerHTML='<div class="empty"><div class="empty-text">まだ物販データがありません</div></div>'; }
-  else {
-    var phtml='';
-    for(var i=0;i<pEntries.length;i++){
-      var name=pEntries[i][0], profit=pEntries[i][1];
-      phtml+='<div class="profit-row"><div><div class="profit-staff">'+h(name)+'</div><div class="profit-items">'+prodC[name]+'個販売</div></div><div class="profit-amount">¥'+num(profit)+'</div></div>';
-    }
-    ppEl.innerHTML=phtml;
+    s+='</div>';
+    return s;
   }
 
-  if(typeof updateFilterDisplay === "function") updateFilterDisplay();
+  var html='';
+  // サマリー 2x2
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">';
+  html+=card('💰 物販利益', '¥'+num(profitSum), '利益率 '+profitRate+'%'+(hasUnknownCost?'（一部卸値未登録）':''), true);
+  html+=card('📦 販売個数', units+'<span style="font-size:12px;font-weight:600;opacity:0.7">個</span>', count+'件の販売', false);
+  html+=card('💴 物販売上', '¥'+num(sales), periodLabel, false);
+  html+=card('📊 1販売平均', '¥'+num(avgPerSale), '利益 ¥'+num(avgProfit), false);
+  html+='</div>';
+  // 技術売上比
+  html+='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:13px 14px;margin-bottom:14px">';
+  html+='<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px"><span style="font-size:12px;color:#64748B;font-weight:700">技術売上比</span><span style="font-size:20px;font-weight:800;color:#2C7A6E">'+ratio+'<span style="font-size:13px">%</span></span><span style="font-size:11px;color:#64748B;font-weight:700;margin-left:auto">／ 目標 '+target+'%</span></div>';
+  html+='<div style="height:8px;background:#F0F4F3;border-radius:4px;overflow:hidden;margin-bottom:6px"><div style="height:100%;width:'+barW+'%;background:linear-gradient(90deg,#2C7A6E,#059669);border-radius:4px"></div></div>';
+  html+='<div style="font-size:11px;color:#64748B;text-align:right">物販¥'+num(sales)+' / 技術¥'+num(techTotal)+'　'+(remain>0?('あと <strong style="color:#2C7A6E">¥'+num(remain)+'</strong> で目標達成'):'<strong style="color:#059669">目標達成 🎉</strong>')+'</div>';
+  html+='</div>';
+  // 販売リスト
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin:6px 4px 8px"><span style="font-size:14px;font-weight:800;color:#1A4F47">📋 販売リスト</span><span style="font-size:12px;color:#64748B;font-weight:600">'+count+'件</span></div>';
+  if(!lines.length){
+    html+='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:18px;text-align:center;color:#94a3b8;font-size:13px">この期間の物販はありません</div>';
+  } else {
+    html+='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;overflow-x:auto;-webkit-overflow-scrolling:touch">';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:560px">';
+    html+='<thead><tr style="background:#2C7A6E;color:#fff">'+th('日時')+th('担当')+th('商品名')+th('個数',1)+th('卸値',1)+th('売値',1)+th('利益',1)+'</tr></thead><tbody>';
+    for(var i=0;i<lines.length;i++){
+      var L=lines[i]; var d=new Date(L.time);
+      var ds=(d.getMonth()+1)+'/'+d.getDate(); var tmn=d.getHours()+':'+(d.getMinutes()<10?'0':'')+d.getMinutes();
+      var bg=(i%2===1)?'background:#F8FAFA':'';
+      html+='<tr style="'+bg+'">';
+      html+='<td style="padding:9px 8px;border-bottom:1px solid #E8EFEE;color:#64748B;font-size:11px;white-space:nowrap">'+ds+'<br>'+tmn+'</td>';
+      html+='<td style="padding:9px 8px;border-bottom:1px solid #E8EFEE;font-weight:700;color:#1A4F47;white-space:nowrap">'+h(L.staff)+'</td>';
+      html+='<td style="padding:9px 8px;border-bottom:1px solid #E8EFEE">'+h(L.name)+'</td>';
+      html+='<td style="padding:9px 8px;border-bottom:1px solid #E8EFEE;text-align:right;font-weight:600">'+L.qty+'</td>';
+      html+='<td style="padding:9px 8px;border-bottom:1px solid #E8EFEE;text-align:right;color:#64748B">'+(L.cost!=null?'¥'+num(L.cost):'-')+'</td>';
+      html+='<td style="padding:9px 8px;border-bottom:1px solid #E8EFEE;text-align:right;font-weight:600">¥'+num(L.sell)+'</td>';
+      html+='<td style="padding:9px 8px;border-bottom:1px solid #E8EFEE;text-align:right;font-weight:700;color:'+(L.profit!=null?'#059669':'#94a3b8')+'">'+(L.profit!=null?'¥'+num(L.profit):'-')+'</td>';
+      html+='</tr>';
+    }
+    html+='</tbody><tfoot><tr style="background:#E8F5F3">';
+    html+='<td colspan="3" style="padding:11px 8px;font-weight:800;color:#1A4F47;border-top:2px solid #2C7A6E">月間合計</td>';
+    html+='<td style="padding:11px 8px;text-align:right;font-weight:800;border-top:2px solid #2C7A6E">'+units+'</td>';
+    html+='<td style="border-top:2px solid #2C7A6E"></td>';
+    html+='<td style="padding:11px 8px;text-align:right;font-weight:800;border-top:2px solid #2C7A6E">¥'+num(sales)+'</td>';
+    html+='<td style="padding:11px 8px;text-align:right;font-weight:800;color:#059669;border-top:2px solid #2C7A6E">¥'+num(profitSum)+'</td>';
+    html+='</tr></tfoot></table></div>';
+  }
+  // 売れ筋ランキング
+  var byProd={};
+  for(var i=0;i<lines.length;i++){ var L=lines[i]; if(!byProd[L.name]) byProd[L.name]={qty:0,profit:0,known:true}; byProd[L.name].qty+=L.qty; if(L.profit!=null) byProd[L.name].profit+=L.profit; else byProd[L.name].known=false; }
+  var prodRank=[]; for(var k in byProd) prodRank.push({name:k, qty:byProd[k].qty, profit:byProd[k].profit, known:byProd[k].known});
+  prodRank.sort(function(a,b){ return b.qty-a.qty; });
+  html+=rankCard('🏆 売れ筋ランキング（'+periodLabel+'）', prodRank.slice(0,5).map(function(x){ return {name:x.name, value:x.qty+'個', sub:(x.known?'利益 ¥'+num(x.profit):'利益 -')}; }));
+  // スタッフ別物販利益
+  var byStaff={};
+  for(var i=0;i<lines.length;i++){ var L=lines[i]; if(!byStaff[L.staff]) byStaff[L.staff]={profit:0,count:0,known:true}; byStaff[L.staff].count+=1; if(L.profit!=null) byStaff[L.staff].profit+=L.profit; else byStaff[L.staff].known=false; }
+  var staffRank=[]; for(var k in byStaff) staffRank.push({name:k, profit:byStaff[k].profit, count:byStaff[k].count, known:byStaff[k].known});
+  staffRank.sort(function(a,b){ return b.profit-a.profit; });
+  html+=rankCard('👥 スタッフ別 物販利益（'+periodLabel+'）', staffRank.slice(0,8).map(function(x){ return {name:x.name, value:'¥'+num(x.profit)+(x.known?'':' ※'), sub:x.count+'件'}; }));
+
+  var cont=document.getElementById('dashContent'); if(cont) cont.innerHTML=html;
 }
 
 /* ADMIN */
@@ -3979,7 +3941,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "7.8";
+var APP_VERSION = "7.9";
 
 function checkForUpdate(){
   try {
