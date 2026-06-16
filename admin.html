@@ -447,14 +447,12 @@
   </div>
   <div class="section-title">支払い方法管理</div>
   <div class="card">
-    <div class="add-form-row">
-      <div class="form-group"><label class="form-label">支払い方法名</label><input class="form-input" id="newPayment" placeholder="例：QRコード決済"></div>
-      <div class="form-group" style="max-width:90px"><label class="form-label">手数料%</label><input class="form-input" id="newPaymentFee" type="number" step="0.01" placeholder="0"></div>
-      <button class="add-btn" onclick="addPayment()">追加</button>
-    </div>
-    <div style="font-size:11px;color:var(--text-light);margin-bottom:8px">※現在設定済みの支払い方法は手数料込みで登録されています</div>
-    <button class="add-btn" style="width:100%;background:#64748B;margin-bottom:8px" onclick="resetPaymentsToSimple()">🔄 代表的な支払い方法（5種）にする</button>
-    <div class="item-list" id="paymentAdminList"></div>
+    <div style="font-size:12px;color:var(--text-light);margin-bottom:10px">支払い方法は下記の<b>5種類に固定</b>されています（編集不可）。</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 6px;border-bottom:1px solid #eee"><span style="font-weight:600;color:#1A4F47">💴 現金</span><span style="color:#64748B;font-size:12px">手数料 0%</span></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 6px;border-bottom:1px solid #eee"><span style="font-weight:600;color:#1A4F47">💳 クレジットカード</span><span style="color:#64748B;font-size:12px">手数料 2.48%</span></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 6px;border-bottom:1px solid #eee"><span style="font-weight:600;color:#1A4F47">🚃 交通系IC</span><span style="color:#64748B;font-size:12px">手数料 2.95%</span></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 6px;border-bottom:1px solid #eee"><span style="font-weight:600;color:#1A4F47">📱 QRコード決済</span><span style="color:#64748B;font-size:12px">手数料 2.95%</span></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 6px"><span style="font-weight:600;color:#1A4F47">🔖 その他</span><span style="color:#64748B;font-size:12px">手数料 0%</span></div>
   </div>
   <div class="section-title">メニュー管理</div>
   <div class="card">
@@ -1163,12 +1161,7 @@ function syncFromCloud(silent){
         if(res.masters.mediaList && res.masters.mediaList.length > (state.mediaList||[]).length){
           state.mediaList = res.masters.mediaList;
         }
-        if(res.masters.payments && res.masters.payments.length > (state.payments||[]).length){
-          state.payments = res.masters.payments;
-        }
-        if(res.masters.paymentMaster && res.masters.paymentMaster.length > (state.paymentMaster||[]).length){
-          state.paymentMaster = res.masters.paymentMaster;
-        }
+        // 支払い方法は5種固定のためクラウドからは同期しない
         if(res.masters.menus && res.masters.menus.length > (state.menus||[]).length){
           state.menus = res.masters.menus;
         }
@@ -1338,17 +1331,16 @@ function init(){
 
   if(!state.staff||!state.staff.length) state.staff=['石上（代表）','花岡（店長）','東（副店長）','堀井','林','梅田','カノン'];
   if(!state.mediaList||!state.mediaList.length) state.mediaList=['ホットペッパー','楽天ビューティー','Instagram','LINE','Google','ホームページ','口コミ','紹介','ビューティーメリット','友達紹介','DM','TikTok','その他'];
-  if(!state.paymentMaster||!state.paymentMaster.length) state.paymentMaster=[
+  // 支払い方法は代表5種に固定（毎回上書き・編集不可・同期でも変わらない）
+  state.paymentMaster=[
     {name:'現金',fee:0},
     {name:'クレジットカード',fee:2.48},
     {name:'交通系IC',fee:2.95},
     {name:'QRコード決済',fee:2.95},
-    {name:'その他',fee:0},
+    {name:'その他',fee:0}
   ];
-  if(!state.payments||!state.payments.length){
-    state.payments=[];
-    for(var pm=0;pm<state.paymentMaster.length;pm++) state.payments.push(state.paymentMaster[pm].name);
-  }
+  state.payments=['現金','クレジットカード','交通系IC','QRコード決済','その他'];
+  if(state.payments.indexOf(state.selectedPayment)<0) state.selectedPayment='';
   if(!state.menus||!state.menus.length) state.menus=[
     {id:1,name:'カット',price:0},{id:2,name:'シャンプーカット',price:0},
     {id:3,name:'カラー',price:0},{id:4,name:'ハイライト',price:0},
@@ -3234,7 +3226,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "7.7";
+var APP_VERSION = "7.8";
 
 function checkForUpdate(){
   try {
