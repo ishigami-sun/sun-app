@@ -233,6 +233,7 @@
 
   <div id="entryDateBanner" style="display:none;background:#FFF3E0;border:1.5px solid #FFB74D;border-radius:10px;padding:10px 12px;margin-bottom:10px;display:none;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"></div>
 
+  <div id="grp_info">
   <div class="section-title">STEP 1　担当者（施術）</div>
   <div class="card"><div class="toggle-group" id="staffGroup"></div></div>
 
@@ -263,8 +264,9 @@
 
   <div class="section-title">STEP 4　税区分</div>
   <!-- 税モード選択は撤廃（常に税込） -->
+  </div><!-- /grp_info -->
 
-
+  <div id="grp_menu">
   <div class="section-title">STEP 5　メニュー選択</div>
   <div class="card"><div id="menuList"></div></div>
 
@@ -272,7 +274,9 @@
     <div class="section-title">メニュー内容（金額調整可）</div>
     <div class="card"><div id="selectedMenuEdit"></div></div>
   </div>
+  </div><!-- /grp_menu -->
 
+  <div id="grp_product">
   <div class="section-title">STEP 6　物販（担当者ごとに選択）</div>
   <div class="card"><div id="productList"></div></div>
 
@@ -280,6 +284,7 @@
     <div class="section-title">物販内容（担当者・金額を設定）</div>
     <div class="card"><div id="selectedProductEdit"></div></div>
   </div>
+  </div><!-- /grp_product -->
 
   <div id="summarySection" style="display:none">
     <div class="section-title">合計確認</div>
@@ -4074,7 +4079,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "8.6";
+var APP_VERSION = "8.7";
 
 function checkForUpdate(){
   try {
@@ -4373,6 +4378,7 @@ function renderCustomerList(){
   var chtml = '';
   for(var i=0;i<filteredRecs.length;i++){
     var r = filteredRecs[i];
+    if(state.editInlineId && String(r.id)===String(state.editInlineId)){ chtml += '<div id="inlineEditor" style="margin-bottom:10px"></div>'; continue; }
     var d = new Date(r.time);
     // 日付＋時間を常に表示（曜日つき）
     var wd=['日','月','火','水','木','金','土'][d.getDay()];
@@ -4414,6 +4420,177 @@ function renderCustomerList(){
     chtml += '</div>';
   }
   custEl.innerHTML = chtml;
+  if(state.editInlineId){ try{ renderInlineEditor(); }catch(e){} }
+}
+
+
+/* ===== 記録カード内インライン編集（画面遷移なし・アコーディオン） ===== */
+function jsq(s){ return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+// 編集開始：記録カードを編集モードに
+function editRecord(id){
+  var r=null;
+  for(var i=0;i<state.records.length;i++){ if(String(state.records[i].id)===String(id)){ r=state.records[i]; break; } }
+  if(!r){ if(typeof showToast==='function') showToast('記録が見つかりません'); return; }
+  state.editInlineId=r.id;
+  state.editBuf=JSON.parse(JSON.stringify(r));
+  state.editTab='menu';
+  state.editPicker=null;
+  if(typeof renderCustomerList==='function') renderCustomerList();
+  try{ var el=document.getElementById('inlineEditor'); if(el) el.scrollIntoView({block:'center'}); }catch(e){}
+}
+function cancelInlineEdit(){ state.editInlineId=null; state.editBuf=null; state.editPicker=null; if(typeof renderCustomerList==='function') renderCustomerList(); }
+function setEditTab(t){ state.editTab=t; state.editPicker=null; renderInlineEditor(); }
+
+// 合計の再計算（submitRecordと同じ式）
+function computeTotals(menus, products){
+  var mInc=0, mExc=0;
+  (menus||[]).forEach(function(m){
+    mInc += menuLineInc(m);
+    var exc=(typeof menuExc==='function')?menuExc(m):(m.inputPrice||0); var q=m.qty||1;
+    var e=exc*q; if(m.discountPct>0) e-=Math.round(exc*m.discountPct/100)*q; if(m.pointDiscount) e-=Math.round(m.pointDiscount/1.1);
+    mExc+=e;
+  });
+  var pSell=0, pProfit=0;
+  (products||[]).forEach(function(p){ pSell+=prodLineSell(p); pProfit+=prodLineProfit(p); });
+  var total=mInc+pSell, totalExc=mExc+Math.round(pSell/1.1);
+  return { menuAmount:mInc, productSell:pSell, productProfit:pProfit, total:total, totalExc:totalExc, taxAmount:total-totalExc };
+}
+
+function renderInlineEditor(){
+  var el=document.getElementById('inlineEditor'); if(!el||!state.editBuf) return;
+  var b=state.editBuf; var tab=state.editTab||'menu';
+  var t=computeTotals(b.menus,b.products);
+  var tabBtn=function(key,label){ var a=tab===key; return '<button onclick="setEditTab(\''+key+'\')" style="flex:1;min-width:auto;padding:9px 4px;border:none;border-bottom:3px solid '+(a?'#2C7A6E':'transparent')+';background:'+(a?'#EAF5F3':'#fff')+';color:'+(a?'#2C7A6E':'#64748B')+';font-size:11px;font-weight:700;cursor:pointer">'+label+'</button>'; };
+  var s='<div style="background:#fff;border:2px solid #2C7A6E;border-radius:12px;overflow:hidden;box-shadow:0 3px 12px rgba(44,122,110,.2)">';
+  s+='<div style="background:#2C7A6E;color:#fff;padding:10px 12px;font-size:14px;font-weight:800">✏️ '+h(b.customerName||'(名前なし)')+' 様の記録を編集</div>';
+  s+='<div style="display:flex;border-bottom:1px solid #E8EFEE">'+tabBtn('menu','💇メニュー')+tabBtn('product','🛍️物販')+tabBtn('customer','👤顧客')+tabBtn('pay','💰会計')+'</div>';
+  s+='<div style="padding:12px">'+renderEditTab(tab,b)+'</div>';
+  s+='<div style="padding:10px 12px;border-top:1px solid #E8EFEE;background:#F8FAFA;font-size:12px;color:#64748B;display:flex;justify-content:space-between"><span>合計（税込）</span><b style="color:#1A4F47;font-size:14px">¥'+num(t.total)+'</b></div>';
+  s+='<div style="display:flex;gap:8px;padding:12px">'
+    +'<button onclick="cancelInlineEdit()" style="flex:1;padding:13px;border:2px solid #C8E0DC;background:#fff;color:#64748B;border-radius:10px;font-weight:700;cursor:pointer">キャンセル</button>'
+    +'<button onclick="saveInlineEdit()" style="flex:1;padding:13px;border:none;background:#2C7A6E;color:#fff;border-radius:10px;font-weight:800;cursor:pointer">保存</button></div>';
+  s+='</div>';
+  el.innerHTML=s;
+}
+
+function renderEditTab(tab,b){
+  if(tab==='menu') return et_menu(b);
+  if(tab==='product') return et_product(b);
+  if(tab==='customer') return et_customer(b);
+  if(tab==='pay') return et_pay(b);
+  return '';
+}
+
+function et_menu(b){
+  var s='';
+  if(state.editPicker==='menu'){
+    s+='<div style="font-size:12px;font-weight:700;color:#2C7A6E;margin-bottom:6px">追加するメニューを選ぶ</div>';
+    (state.menus||[]).forEach(function(m){ s+='<div onclick="editAddMenu('+m.id+')" style="padding:11px;border:1px solid #C8E0DC;border-radius:8px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between"><span>'+h(m.name)+'</span><span style="color:#2C7A6E;font-weight:700">税抜¥'+num(m.price)+'</span></div>'; });
+    s+='<button onclick="editClosePicker()" style="width:100%;padding:10px;border:1.5px solid #C8E0DC;background:#fff;border-radius:8px;margin-top:4px;cursor:pointer">閉じる</button>';
+    return s;
+  }
+  if(!b.menus||!b.menus.length){ s+='<div style="color:#94a3b8;font-size:13px;text-align:center;padding:8px">メニューがありません</div>'; }
+  (b.menus||[]).forEach(function(m,i){
+    s+='<div style="border:1px solid #E8EFEE;border-radius:8px;padding:10px;margin-bottom:8px">';
+    s+='<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:14px">'+h(m.name)+'</b><button onclick="editRemoveMenu('+i+')" style="border:none;background:#FDECEC;color:#E05555;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">削除</button></div>';
+    s+='<div style="display:flex;align-items:center;gap:8px;margin-top:8px"><span style="font-size:12px;color:#64748B">数量</span>'
+      +'<button onclick="editMenuQty('+i+',-1)" style="width:32px;height:32px;border:1px solid #C8E0DC;background:#fff;border-radius:6px;font-weight:700;cursor:pointer">−</button>'
+      +'<b style="min-width:20px;text-align:center">'+(m.qty||1)+'</b>'
+      +'<button onclick="editMenuQty('+i+',1)" style="width:32px;height:32px;border:1px solid #C8E0DC;background:#fff;border-radius:6px;font-weight:700;cursor:pointer">＋</button>'
+      +'<span style="margin-left:auto;color:#2C7A6E;font-weight:800">¥'+num(menuLineInc(m))+'</span></div>';
+    s+='</div>';
+  });
+  s+='<button onclick="editOpenPicker(\'menu\')" style="width:100%;padding:12px;border:1.5px dashed #2C7A6E;background:#fff;color:#2C7A6E;border-radius:8px;font-weight:700;cursor:pointer">＋ メニューを追加</button>';
+  s+='<div style="font-size:11px;color:#94a3b8;margin-top:6px">※価格・割引は「💰会計」で調整できます</div>';
+  return s;
+}
+
+function et_product(b){
+  var s='';
+  if(state.editPicker==='product'){
+    s+='<div style="font-size:12px;font-weight:700;color:#2C7A6E;margin-bottom:6px">追加する商品を選ぶ</div>';
+    (state.products||[]).forEach(function(p,idx){ s+='<div onclick="editAddProductByIdx('+idx+')" style="padding:11px;border:1px solid #C8E0DC;border-radius:8px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between"><span>'+h(p.name)+'</span><span style="color:#2C7A6E;font-weight:700">¥'+num(p.sell)+'</span></div>'; });
+    s+='<button onclick="editClosePicker()" style="width:100%;padding:10px;border:1.5px solid #C8E0DC;background:#fff;border-radius:8px;margin-top:4px;cursor:pointer">閉じる</button>';
+    return s;
+  }
+  if(!b.products||!b.products.length){ s+='<div style="color:#94a3b8;font-size:13px;text-align:center;padding:8px">物販はありません</div>'; }
+  (b.products||[]).forEach(function(p,i){
+    s+='<div style="border:1px solid #E8EFEE;border-radius:8px;padding:10px;margin-bottom:8px">';
+    s+='<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:14px">'+h(p.name)+'</b><button onclick="editRemoveProduct('+i+')" style="border:none;background:#FDECEC;color:#E05555;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">削除</button></div>';
+    s+='<div style="display:flex;align-items:center;gap:8px;margin-top:8px"><span style="font-size:12px;color:#64748B">数量</span>'
+      +'<button onclick="editProdQty('+i+',-1)" style="width:32px;height:32px;border:1px solid #C8E0DC;background:#fff;border-radius:6px;font-weight:700;cursor:pointer">−</button>'
+      +'<b style="min-width:20px;text-align:center">'+(p.qty||1)+'</b>'
+      +'<button onclick="editProdQty('+i+',1)" style="width:32px;height:32px;border:1px solid #C8E0DC;background:#fff;border-radius:6px;font-weight:700;cursor:pointer">＋</button>'
+      +'<span style="margin-left:auto;color:#2C7A6E;font-weight:800">¥'+num(prodLineSell(p))+'</span></div>';
+    s+='</div>';
+  });
+  s+='<button onclick="editOpenPicker(\'product\')" style="width:100%;padding:12px;border:1.5px dashed #2C7A6E;background:#fff;color:#2C7A6E;border-radius:8px;font-weight:700;cursor:pointer">＋ 物販を追加</button>';
+  s+='<div style="font-size:11px;color:#94a3b8;margin-top:6px">※割引は「💰会計」で調整できます</div>';
+  return s;
+}
+
+function et_customer(b){
+  var s='<div style="font-size:11px;color:#64748B;font-weight:700;margin-bottom:4px">お名前</div><input value="'+h(b.customerName||'')+'" oninput="editSetCustomerName(this.value)" style="width:100%;padding:11px;border:1.5px solid #C8E0DC;border-radius:8px;margin-bottom:12px;font-size:15px">';
+  s+='<div style="font-size:11px;color:#64748B;font-weight:700;margin-bottom:4px">客種</div><div style="display:flex;gap:6px;margin-bottom:12px">';
+  ['リピーター','新規'].forEach(function(ct){ var a=b.clientType===ct; s+='<button onclick="editSetClientType(\''+jsq(ct)+'\')" style="flex:1;padding:9px;border-radius:8px;border:1.5px solid '+(a?'#2C7A6E':'#C8E0DC')+';background:'+(a?'#2C7A6E':'#fff')+';color:'+(a?'#fff':'#64748B')+';font-weight:700;cursor:pointer">'+h(ct)+'</button>'; });
+  s+='</div>';
+  s+='<div style="font-size:11px;color:#64748B;font-weight:700;margin-bottom:4px">集客媒体</div><div style="display:flex;gap:6px;flex-wrap:wrap">';
+  (state.mediaList||[]).forEach(function(md){ var a=b.media===md; s+='<button onclick="editSetMedia(\''+jsq(md)+'\')" style="padding:6px 11px;border-radius:14px;border:1.5px solid '+(a?'#2C7A6E':'#C8E0DC')+';background:'+(a?'#2C7A6E':'#fff')+';color:'+(a?'#fff':'#64748B')+';font-size:11px;cursor:pointer">'+h(md)+'</button>'; });
+  s+='</div>';
+  return s;
+}
+
+function et_pay(b){
+  var s='<div style="font-size:11px;color:#64748B;font-weight:700;margin-bottom:4px">支払い方法</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">';
+  (state.payments||[]).forEach(function(pm){ var a=b.payment===pm; s+='<button onclick="editSetPayment(\''+jsq(pm)+'\')" style="padding:6px 11px;border-radius:14px;border:1.5px solid '+(a?'#2C7A6E':'#C8E0DC')+';background:'+(a?'#2C7A6E':'#fff')+';color:'+(a?'#fff':'#64748B')+';font-size:11px;cursor:pointer">'+h(pm)+'</button>'; });
+  s+='</div>';
+  var discRow=function(label,cur,fn,i){
+    var r='<div style="margin-bottom:10px"><div style="font-size:12px;color:#1A4F47;font-weight:600;margin-bottom:4px">'+label+'</div><div style="display:flex;gap:4px;flex-wrap:wrap">';
+    [0,5,10,15,20].forEach(function(pct){ var a=(cur||0)===pct; r+='<button onclick="'+fn+'('+i+','+pct+')" style="padding:5px 10px;border-radius:14px;border:1px solid '+(a?'#C2185B':'#C8E0DC')+';background:'+(a?'#C2185B':'#fff')+';color:'+(a?'#fff':'#64748B')+';font-size:11px;font-weight:'+(a?'700':'500')+';cursor:pointer">'+(pct===0?'なし':pct+'%')+'</button>'; });
+    r+='</div></div>'; return r;
+  };
+  if(b.menus&&b.menus.length){ s+='<div style="font-size:12px;font-weight:800;color:#2C7A6E;margin-bottom:6px">メニューの割引</div>'; b.menus.forEach(function(m,i){ s+=discRow(h(m.name),m.discountPct,'editMenuDisc',i); }); }
+  if(b.products&&b.products.length){ s+='<div style="font-size:12px;font-weight:800;color:#2C7A6E;margin:10px 0 6px">物販の割引</div>'; b.products.forEach(function(p,i){ s+=discRow(h(p.name),p.discountPct,'editProdDisc',i); }); }
+  if((!b.menus||!b.menus.length)&&(!b.products||!b.products.length)) s+='<div style="color:#94a3b8;font-size:13px">割引対象がありません</div>';
+  return s;
+}
+
+/* 編集ハンドラ（editBufを更新→再描画） */
+function editOpenPicker(t){ state.editPicker=t; renderInlineEditor(); }
+function editClosePicker(){ state.editPicker=null; renderInlineEditor(); }
+function editAddMenu(mid){ var m=null; for(var i=0;i<state.menus.length;i++) if(String(state.menus[i].id)===String(mid)){ m=state.menus[i]; break; } if(!m)return; if(!state.editBuf.menus) state.editBuf.menus=[]; state.editBuf.menus.push({id:m.id,name:m.name,price:m.price,qty:1,inputPrice:m.price,taxMode:'exc',extraAmount:0,discountPct:0,basePrice:m.price,menuStaff:state.editBuf.staff||''}); state.editPicker=null; renderInlineEditor(); }
+function editRemoveMenu(i){ if(state.editBuf&&state.editBuf.menus){ state.editBuf.menus.splice(i,1); renderInlineEditor(); } }
+function editMenuQty(i,delta){ var m=state.editBuf&&state.editBuf.menus&&state.editBuf.menus[i]; if(!m)return; m.qty=(m.qty||1)+delta; if(m.qty<1)m.qty=1; renderInlineEditor(); }
+function editMenuDisc(i,p){ if(state.editBuf&&state.editBuf.menus&&state.editBuf.menus[i]){ state.editBuf.menus[i].discountPct=p; renderInlineEditor(); } }
+function editAddProductByIdx(idx){ var p=state.products&&state.products[idx]; if(!p)return; if(!state.editBuf.products) state.editBuf.products=[]; state.editBuf.products.push({id:p.id,name:p.name,category:p.category,size:p.size,num:p.num,cost:p.cost,sell:p.sell,qty:1,customSell:p.sell,discountPct:0,productStaff:state.editBuf.staff||''}); state.editPicker=null; renderInlineEditor(); }
+function editRemoveProduct(i){ if(state.editBuf&&state.editBuf.products){ state.editBuf.products.splice(i,1); renderInlineEditor(); } }
+function editProdQty(i,delta){ var p=state.editBuf&&state.editBuf.products&&state.editBuf.products[i]; if(!p)return; p.qty=(p.qty||1)+delta; if(p.qty<1)p.qty=1; renderInlineEditor(); }
+function editProdDisc(i,p){ if(state.editBuf&&state.editBuf.products&&state.editBuf.products[i]){ state.editBuf.products[i].discountPct=p; renderInlineEditor(); } }
+function editSetCustomerName(v){ if(state.editBuf) state.editBuf.customerName=v; } // 入力中は再描画しない（フォーカス維持）
+function editSetClientType(t){ if(state.editBuf){ state.editBuf.clientType=t; renderInlineEditor(); } }
+function editSetMedia(m){ if(state.editBuf){ state.editBuf.media=m; renderInlineEditor(); } }
+function editSetPayment(p){ if(state.editBuf){ state.editBuf.payment=p; renderInlineEditor(); } }
+
+function saveInlineEdit(){
+  if(!state.editBuf){ return; }
+  var b=state.editBuf, oldId=state.editInlineId;
+  var t=computeTotals(b.menus,b.products);
+  var master=(typeof getPaymentMaster==='function')?getPaymentMaster(b.payment):null;
+  var feeRate=master?master.fee:0; var feeAmt=feeRate>0?Math.round(t.total*feeRate/100):0;
+  var rec=JSON.parse(JSON.stringify(b));
+  rec.id=Date.now();
+  rec.menuAmount=t.menuAmount; rec.productSell=t.productSell; rec.productProfit=t.productProfit;
+  rec.total=t.total; rec.totalExc=t.totalExc; rec.taxAmount=t.taxAmount;
+  rec.paymentFeeRate=feeRate; rec.paymentFeeAmount=feeAmt; rec.clientCount=1;
+  for(var i=0;i<state.records.length;i++){ if(String(state.records[i].id)===String(oldId)){ state.records.splice(i,1); break; } }
+  if(!state.deletedIds) state.deletedIds=[];
+  if(state.deletedIds.indexOf(oldId)<0) state.deletedIds.push(oldId);
+  state.records.push(rec);
+  state.editInlineId=null; state.editBuf=null; state.editPicker=null;
+  try{ saveLocal(); }catch(e){}
+  if(state.cloudUrl&&state.cloudKey&&typeof callCloud==='function'){ try{ callCloud('deleteRecord',{recordId:oldId},function(){ callCloud('addRecord',{record:rec},function(){}); }); }catch(e){} }
+  if(typeof renderAll==='function') renderAll(); else if(typeof renderCustomerList==='function') renderCustomerList();
+  if(typeof showToast==='function') showToast('✅ 記録を更新しました');
 }
 
 if(typeof window !== 'undefined'){
