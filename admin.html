@@ -1852,7 +1852,7 @@ function toggleProduct(id){
     // 未選択 → 追加
     state.selectedProducts.push({
       id:p.id, name:p.name, category:p.category, size:p.size, num:p.num,
-      cost:p.cost, sell:p.sell, qty:1, customSell:p.sell,
+      cost:p.cost, sell:p.sell, qty:1, customSell:p.sell, discountPct:0,
       productStaff:state.selectedStaff||''
     });
   }
@@ -1885,8 +1885,15 @@ function renderSelectedProductEdit(){
     html+='<div class="prod-sell-row"><span class="prod-sell-label">販売価格（税込）：¥</span>';
     html+='<input class="prod-sell-input" type="number" value="'+p.customSell+'" oninput="updateProductSell('+i+',this.value)">';
     html+='<span class="prod-sell-label"> × '+p.qty+'</span>';
-    if(p.cost>0) html+='<span class="prod-profit-badge">利益¥'+num(profit)+'</span>';
-    html+='</div></div>';
+    if(p.cost>0) html+='<span class="prod-profit-badge">利益¥'+num(prodLineProfit(p))+'</span>';
+    html+='</div>';
+    html+='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px"><span style="font-size:11px;color:#64748B;font-weight:700;align-self:center">割引：</span>';
+    var ppcts=[5,10,15,20];
+    for(var pdi=0;pdi<ppcts.length;pdi++){ var ppct=ppcts[pdi]; var pa=(p.discountPct===ppct); html+='<button onclick="setProductDiscount('+i+','+ppct+')" style="padding:5px 11px;border-radius:18px;border:1.5px solid '+(pa?'#C2185B':'#C8E0DC')+';background:'+(pa?'#C2185B':'#fff')+';color:'+(pa?'#fff':'#64748B')+';font-size:11px;font-weight:'+(pa?'700':'500')+';cursor:pointer;margin:0 2px 4px 0">'+ppct+'%OFF</button>'; }
+    if(p.discountPct>0) html+='<button onclick="setProductDiscount('+i+',0)" style="padding:5px 11px;border-radius:18px;border:1.5px solid #E05555;background:#FFF5F5;color:#E05555;font-size:11px;font-weight:600;cursor:pointer;margin:0 2px 4px 0">割引なし</button>';
+    html+='</div>';
+    if(p.discountPct>0) html+='<div style="font-size:12px;color:#C2185B;font-weight:700;margin-top:5px">'+p.discountPct+'%OFF → 売上¥'+num(prodLineSell(p))+(p.cost>0?'（利益¥'+num(prodLineProfit(p))+'）':'')+'</div>';
+    html+='</div>';
   }
   el.innerHTML=html;
   // スタッフボタンを描画
@@ -1912,6 +1919,10 @@ function renderStaffMiniGrids(){
 function removeSelectedProduct(i){ state.selectedProducts.splice(i,1); renderProductList(); renderSelectedProductEdit(); renderSummary(); }
 function updateProductSell(i,val){ if(state.selectedProducts[i]) state.selectedProducts[i].customSell=parseInt(val)||0; renderSummary(); }
 function updateProductStaff(i,val){ if(state.selectedProducts[i]) state.selectedProducts[i].productStaff=val; renderStaffMiniGrids(); renderProductList(); }
+// 物販1行の売上（割引適用後・税込）と利益
+function prodLineSell(p){ if(!p) return 0; var base=((p.customSell!==undefined?p.customSell:p.sell)||0)*(p.qty||1); var d=(p.discountPct>0)?Math.round(base*p.discountPct/100):0; var v=base-d; return v<0?0:v; }
+function prodLineProfit(p){ if(!p) return 0; return prodLineSell(p)-(p.cost||0)*(p.qty||1); }
+function setProductDiscount(i,val){ if(!state.selectedProducts[i]) return; var v=parseInt(val)||0; if(v<0)v=0; if(v>100)v=100; state.selectedProducts[i].discountPct=v; renderSelectedProductEdit(); renderSummary(); }
 
 /* SUMMARY */
 function renderSummary(){
@@ -1940,9 +1951,9 @@ function renderSummary(){
     if(m.pointDiscount) menuExcTotal -= Math.round(m.pointDiscount/1.1);
   }
   var prodSell=0;
-  for(var i=0;i<state.selectedProducts.length;i++) prodSell+=state.selectedProducts[i].customSell*state.selectedProducts[i].qty;
+  for(var i=0;i<state.selectedProducts.length;i++) prodSell+=prodLineSell(state.selectedProducts[i]);
   var prodProfit=0;
-  for(var i=0;i<state.selectedProducts.length;i++) prodProfit+=(state.selectedProducts[i].customSell-state.selectedProducts[i].cost)*state.selectedProducts[i].qty;
+  for(var i=0;i<state.selectedProducts.length;i++) prodProfit+=prodLineProfit(state.selectedProducts[i]);
   var total=menuIncTotal+prodSell;
   var totalExc=menuExcTotal+Math.round(prodSell/1.1);
   var taxAmt=total-totalExc;
@@ -2024,9 +2035,9 @@ function submitRecord(){
     if(m.pointDiscount) menuExcTotal -= Math.round(m.pointDiscount/1.1);
   }
   var prodSell=0;
-  for(var i=0;i<state.selectedProducts.length;i++) prodSell+=state.selectedProducts[i].customSell*state.selectedProducts[i].qty;
+  for(var i=0;i<state.selectedProducts.length;i++) prodSell+=prodLineSell(state.selectedProducts[i]);
   var prodProfit=0;
-  for(var i=0;i<state.selectedProducts.length;i++) prodProfit+=(state.selectedProducts[i].customSell-state.selectedProducts[i].cost)*state.selectedProducts[i].qty;
+  for(var i=0;i<state.selectedProducts.length;i++) prodProfit+=prodLineProfit(state.selectedProducts[i]);
   var clientCount=1; // 1記録＝1人（来店1回＝1客）。メニュー点数ではなく顧客数で数える
   var total=menuIncTotal+prodSell;
   var master=getPaymentMaster(state.selectedPayment);
@@ -2382,14 +2393,16 @@ function renderDashboard(){
       var qty=p.qty||1;
       var sell=(p.customSell!==undefined?p.customSell:p.sell)||0;
       var cost=resolveCost(p);
-      var profit=(cost!=null)?(sell-cost)*qty:null;
-      lines.push({time:r.time, staff:ps, name:p.name||'(商品名なし)', qty:qty, cost:cost, sell:sell, profit:profit, recId:r.id, prodIdx:j});
+      var disc=p.discountPct||0;
+      var lineSell=Math.max(0, sell*qty - (disc>0?Math.round(sell*qty*disc/100):0));
+      var profit=(cost!=null)?(lineSell - cost*qty):null;
+      lines.push({time:r.time, staff:ps, name:p.name||'(商品名なし)', qty:qty, cost:cost, sell:sell, disc:disc, lineSell:lineSell, profit:profit, recId:r.id, prodIdx:j});
     }
   }
   lines.sort(function(a,b){ return new Date(b.time)-new Date(a.time); });
 
   var units=0, sales=0, profitSum=0, hasUnknownCost=false, count=lines.length;
-  for(var i=0;i<lines.length;i++){ units+=lines[i].qty; sales+=lines[i].sell*lines[i].qty; if(lines[i].profit!=null) profitSum+=lines[i].profit; else hasUnknownCost=true; }
+  for(var i=0;i<lines.length;i++){ units+=lines[i].qty; sales+=lines[i].lineSell; if(lines[i].profit!=null) profitSum+=lines[i].profit; else hasUnknownCost=true; }
   var avgPerSale = count>0?Math.round(sales/count):0;
   var profitRate = sales>0?Math.round(profitSum/sales*1000)/10:0;
   var avgProfit = count>0?Math.round(profitSum/count):0;
@@ -2454,7 +2467,7 @@ function renderDashboard(){
       html+='<td style="padding:9px 8px;border-bottom:1px solid #E8EFEE">'+h(L.name)+'</td>';
       html+='<td style="padding:9px 8px;border-bottom:1px solid #E8EFEE;text-align:right;font-weight:600">'+L.qty+'</td>';
       html+='<td style="padding:9px 8px;border-bottom:1px solid #E8EFEE;text-align:right;color:#64748B">'+(L.cost!=null?'¥'+num(L.cost):'-')+'</td>';
-      html+='<td style="padding:9px 8px;border-bottom:1px solid #E8EFEE;text-align:right;font-weight:600">¥'+num(L.sell)+'</td>';
+      html+='<td style="padding:9px 8px;border-bottom:1px solid #E8EFEE;text-align:right;font-weight:600">¥'+num(L.sell)+(L.disc>0?'<br><span style="color:#C2185B;font-size:10px;font-weight:700">−'+L.disc+'%</span>':'')+'</td>';
       html+='<td style="padding:9px 8px;border-bottom:1px solid #E8EFEE;text-align:right;font-weight:700;color:'+(L.profit!=null?'#059669':'#94a3b8')+'">'+(L.profit!=null?'¥'+num(L.profit):'-')+'</td>';
       html+='<td style="padding:7px 8px;border-bottom:1px solid #E8EFEE;text-align:center"><button onclick="openProductEdit('+L.recId+','+L.prodIdx+')" style="padding:5px 9px;border:1px solid #2C7A6E;background:#fff;color:#2C7A6E;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">✏️編集</button></td>';
       html+='</tr>';
@@ -2658,7 +2671,7 @@ function renderPnlReport(){
     for(var j=0;j<r.products.length;j++){
       var pp=r.products[j];
       prodCost+=pp.cost*pp.qty;
-      productProfit+=(pp.customSell-pp.cost)*pp.qty;
+      productProfit+=prodLineProfit(pp);
     }
   }
 
@@ -2732,7 +2745,7 @@ function renderPnlReport(){
       var pp=r.products[j];
       var s=pp.productStaff||r.staff;
       if(!staffSell[s]) staffSell[s]={menu:0,prod:0,clients:0};
-      staffSell[s].prod+=pp.customSell*pp.qty;
+      staffSell[s].prod+=prodLineSell(pp);
     }
   }
   var staffEntries=[];
@@ -3088,6 +3101,7 @@ function openProductEdit(recId, prodIdx){
     +'<label style="'+lab+'">個数</label><input id="peQty" type="number" min="1" value="'+(p.qty||1)+'" style="'+inp+'">'
     +'<label style="'+lab+'">卸値（税抜）</label><input id="peCost" type="number" min="0" value="'+curCost+'" placeholder="未登録" style="'+inp+'">'
     +'<label style="'+lab+'">売値（税込）</label><input id="peSell" type="number" min="0" value="'+curSell+'" style="'+inp+'">'
+    +'<label style="'+lab+'">割引（%）</label><input id="peDisc" type="number" min="0" max="100" value="'+(p.discountPct||0)+'" style="'+inp+'">'
     +'<div style="display:flex;gap:8px;margin-top:6px"><button id="peCancel" style="flex:1;padding:13px;border:2px solid #C8E0DC;background:#fff;color:#64748B;border-radius:10px;font-weight:700;cursor:pointer">キャンセル</button>'
     +'<button id="peSave" style="flex:1;padding:13px;border:none;background:#2C7A6E;color:#fff;border-radius:10px;font-weight:800;cursor:pointer">保存</button></div>'
     +'</div>';
@@ -3106,6 +3120,7 @@ function saveProductEdit(recId, prodIdx){
   var costRaw=document.getElementById('peCost').value;
   var cost=(costRaw===''||costRaw==null)?0:(parseInt(costRaw)||0);
   var sell=parseInt(document.getElementById('peSell').value)||0;
+  var disc=parseInt(document.getElementById('peDisc').value)||0; if(disc<0)disc=0; if(disc>100)disc=100;
   var staff=document.getElementById('peStaff').value;
   var dtv=document.getElementById('peDate').value;
   if(!name){ if(typeof showToast==='function') showToast('商品名を入力してください'); return; }
@@ -3114,9 +3129,9 @@ function saveProductEdit(recId, prodIdx){
   edited.id=Date.now();
   if(dtv){ var nd=new Date(dtv); if(!isNaN(nd.getTime())) edited.time=nd.toISOString(); }
   var ep=edited.products[prodIdx];
-  ep.name=name; ep.qty=qty; ep.cost=cost; ep.customSell=sell; ep.sell=sell; ep.productStaff=staff;
+  ep.name=name; ep.qty=qty; ep.cost=cost; ep.customSell=sell; ep.sell=sell; ep.productStaff=staff; ep.discountPct=disc;
   var prodSell=0, prodProfit=0;
-  for(var j=0;j<edited.products.length;j++){ var pp=edited.products[j]; var s=(pp.customSell!==undefined?pp.customSell:pp.sell)||0; var c=pp.cost||0; var q=pp.qty||1; prodSell+=s*q; prodProfit+=(s-c)*q; }
+  for(var j=0;j<edited.products.length;j++){ var pp=edited.products[j]; prodSell+=prodLineSell(pp); prodProfit+=prodLineProfit(pp); }
   var menuInc=edited.menuAmount||0;
   var oldProdSell=rec.productSell||0;
   var menuExcOld=(rec.totalExc||0)-Math.round(oldProdSell/1.1);
@@ -3296,7 +3311,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "8.2";
+var APP_VERSION = "8.3";
 
 function checkForUpdate(){
   try {
