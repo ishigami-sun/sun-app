@@ -311,6 +311,7 @@
 
 <!-- ===== 記録 ===== -->
 <div class="page" id="page-records">
+  <div id="salesTrend" style="margin-bottom:10px"></div>
   <div class="section-title">TODAY</div>
   <div id="todayStats" class="dash-grid"></div>
 
@@ -2227,6 +2228,7 @@ function renderRecords(){
   document.getElementById('todayStats').innerHTML=
     '<div class="dash-stat"><div class="dash-stat-label">本日売上（税込）</div><div class="dash-stat-value">¥'+num(todayTotal)+'</div><div class="dash-stat-sub">'+todayRecs.length+'件</div></div>'+
     '<div class="dash-stat"><div class="dash-stat-label">本日の客数</div><div class="dash-stat-value">'+todayClients+'人</div><div class="dash-stat-sub">平均¥'+(todayClients>0?num(Math.round(todayTotal/todayClients)):0)+'</div></div>';
+  try{ var _st=document.getElementById('salesTrend'); if(_st&&typeof salesTrendCard==='function') _st.innerHTML=salesTrendCard(); }catch(e){}
   // 本日顧客リスト
   var custEl=document.getElementById('todayCustomerList');
   if(!todayRecs.length){ custEl.innerHTML='<div class="empty"><div class="empty-text">本日の記録はまだありません</div></div>'; }
@@ -2641,7 +2643,7 @@ function renderDashboard(){
   staffRank.sort(function(a,b){ return b.profit-a.profit; });
   html+=rankCard('👥 スタッフ別 物販利益（'+periodLabel+'）', staffRank.slice(0,8).map(function(x){ return {name:x.name, value:'¥'+num(x.profit)+(x.known?'':' ※'), sub:x.count+'件'}; }));
 
-  var cont=document.getElementById('dashContent'); if(cont) cont.innerHTML=(typeof salesTrendCard==='function'?salesTrendCard():'')+html;
+  var cont=document.getElementById('dashContent'); if(cont) cont.innerHTML=html;
 }
 
 /* ADMIN */
@@ -3458,7 +3460,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "8.9";
+var APP_VERSION = "9.0";
 
 function checkForUpdate(){
   try {
