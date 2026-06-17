@@ -1468,7 +1468,7 @@ function addMenuItem(id){
   var base=m.price; // メニュー価格は「税抜」で保存されている（そのまま使用）
   var ex=findById(state.selectedMenus,id);
   if(ex){ ex.qty++; }
-  else { state.selectedMenus.push({id:m.id,name:m.name,price:m.price,qty:1,inputPrice:base,taxMode:mode,extraAmount:0,discountPct:0,basePrice:base}); }
+  else { state.selectedMenus.push({id:m.id,name:m.name,price:m.price,qty:1,inputPrice:base,taxMode:mode,extraAmount:0,discountPct:0,basePrice:base,menuStaff:state.selectedStaff||''}); }
   renderMenuList(); renderSelectedMenuEdit(); renderSummary();
 }
 function changeMenuQty(id,delta){
@@ -1495,6 +1495,7 @@ function renderSelectedMenuEdit(){
     var extraInfo=m.extraAmount>0?'<div style="font-size:11px;color:#D4A843;font-weight:700;margin-top:4px">追加料金：＋¥'+num(m.extraAmount)+'</div>':'';
     html+='<div class="selected-item">';
     html+='<div class="selected-item-top"><div class="selected-item-name">'+h(m.name)+(m.qty>1?' × '+m.qty:'')+'</div><button class="remove-btn" onclick="removeSelectedMenu('+i+')">✕</button></div>';
+    html+='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0 4px"><span style="font-size:11px;color:#64748B;font-weight:700;align-self:center">担当：</span><span id="menuStaffGrid_'+i+'"></span></div>';
     html+='<div class="price-edit-wrap">';
     html+='<button type="button" onclick="toggleMenuTax('+i+')" style="margin-right:6px;padding:4px 8px;border:1.5px solid #2C7A6E;background:'+(curMode==='inc'?'#2C7A6E':'#fff')+';color:'+(curMode==='inc'?'#fff':'#2C7A6E')+';border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">'+(curMode==='inc'?'税込入力':'税抜入力')+' ⇄</button>';
     html+='<span class="price-edit-label">'+(curMode==='inc'?'税込':'税抜')+'：¥</span>';
@@ -1542,7 +1543,27 @@ function renderSelectedMenuEdit(){
     html+='</div>';
   }
   el.innerHTML=html;
+  renderMenuStaffGrids();
 }
+// メニューごとの担当者ピル（既定=全体担当、変更可・物販と同じUI）
+function renderMenuStaffGrids(){
+  for(var i=0;i<state.selectedMenus.length;i++){
+    var grid=document.getElementById('menuStaffGrid_'+i);
+    if(!grid) continue;
+    var cur=state.selectedMenus[i].menuStaff||state.selectedStaff||'';
+    var html='';
+    for(var si=0;si<state.staff.length;si++){
+      var s=state.staff[si];
+      var isActive=cur===s;
+      var bg=isActive?'#2C7A6E':'#fff', color=isActive?'#fff':'#64748B', border=isActive?'#2C7A6E':'#C8E0DC';
+      html+='<button data-midx="'+i+'" data-staff="'+h(s)+'" onclick="updateMenuStaff(parseInt(this.dataset.midx),this.dataset.staff)" style="padding:5px 12px;border-radius:20px;border:1.5px solid '+border+';background:'+bg+';color:'+color+';font-size:11px;font-weight:'+(isActive?'700':'500')+';cursor:pointer;margin:0 4px 4px 0">'+h(s)+'</button>';
+    }
+    grid.innerHTML=html;
+  }
+}
+function updateMenuStaff(i,val){ if(state.selectedMenus[i]) state.selectedMenus[i].menuStaff=val; renderMenuStaffGrids(); renderSummary(); }
+// メニュー1行の税込金額（担当者按分用・割引/ポイント反映）
+function menuLineInc(m){ if(!m) return 0; var inc=menuInc(m); var amt=inc*(m.qty||1); if(m.discountPct>0) amt-=Math.round(inc*m.discountPct/100)*(m.qty||1); if(m.pointDiscount) amt-=(m.pointDiscount||0); return amt; }
 function removeSelectedMenu(i){ state.selectedMenus.splice(i,1); renderMenuList(); renderSelectedMenuEdit(); renderSummary(); }
 function updateMenuPrice(i,val){
   if(state.selectedMenus[i]){
@@ -2367,7 +2388,7 @@ function renderDashboard(){
   var lines=[]; var techTotal=0;
   for(var i=0;i<filtered.length;i++){
     var r=filtered[i];
-    if(!staffFilter || r.staff===staffFilter) techTotal += (r.menuAmount||0);
+    for(var mk=0;mk<(r.menus||[]).length;mk++){ var mm=r.menus[mk]; var ms=mm.menuStaff||r.staff; if(!staffFilter || ms===staffFilter) techTotal += menuLineInc(mm); }
     var prods=r.products||[];
     for(var j=0;j<prods.length;j++){
       var p=prods[j]; var ps=p.productStaff||r.staff;
@@ -2841,8 +2862,8 @@ function renderPnlReport(){
   for(var i=0;i<filtered.length;i++){
     var r=filtered[i];
     if(!staffSell[r.staff]) staffSell[r.staff]={menu:0,prod:0,clients:0};
-    staffSell[r.staff].menu+=r.menuAmount||0;
-    staffSell[r.staff].clients+=1; // 1記録＝1人
+    staffSell[r.staff].clients+=1; // 1記録＝1人（来店は主担当に計上）
+    for(var mk=0;mk<(r.menus||[]).length;mk++){ var mm=r.menus[mk]; var ms=mm.menuStaff||r.staff; if(!staffSell[ms]) staffSell[ms]={menu:0,prod:0,clients:0}; staffSell[ms].menu+=menuLineInc(mm); }
     for(var j=0;j<r.products.length;j++){
       var pp=r.products[j];
       var s=pp.productStaff||r.staff;
@@ -3279,9 +3300,7 @@ function calcStaffActual(staffName, ym){
     var rym = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
     if(rym !== ym) continue;
     // 担当者一致：技術売上
-    if(r.staff === staffName){
-      techTotal += (r.menuAmount || r.menuTotal || 0);
-    }
+    for(var mk=0;mk<(r.menus||[]).length;mk++){ var mm=r.menus[mk]; var ms=mm.menuStaff||r.staff; if(ms===staffName) techTotal += menuLineInc(mm); }
     // 物販：商品ごとに productStaff を見る
     if(r.products && r.products.length){
       for(var j=0;j<r.products.length;j++){
@@ -3311,7 +3330,8 @@ function renderSpeedReport(){
   for(var i=0;i<state.records.length;i++){
     var r=state.records[i];
     if(recYMD(r)!==todayYMD) continue;
-    if(r.staff){ var a=ensure(r.staff); a.tech+=(r.menuAmount||0); a.clients+=1; }
+    if(r.staff){ ensure(r.staff).clients+=1; }
+    for(var mk=0;mk<(r.menus||[]).length;mk++){ var mm=r.menus[mk]; var ms=mm.menuStaff||r.staff; if(ms) ensure(ms).tech+=menuLineInc(mm); }
     if(r.products && r.products.length){
       for(var j=0;j<r.products.length;j++){
         var p=r.products[j]; var ps=p.productStaff||r.staff; if(!ps) continue;
@@ -4028,7 +4048,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "8.1";
+var APP_VERSION = "8.2";
 
 function checkForUpdate(){
   try {
