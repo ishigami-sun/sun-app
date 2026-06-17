@@ -313,6 +313,7 @@
 <div class="page" id="page-records">
   <div class="section-title">TODAY</div>
   <div id="todayStats" class="dash-grid"></div>
+  <div id="todayTarget" style="margin:10px 0"></div>
 
   <div class="section-title">📋 入力済み顧客リスト</div>
   
@@ -488,6 +489,9 @@
   </div>
   <div class="section-title">データ管理</div>
   <div class="card">
+    <button class="add-btn" style="width:100%;margin-bottom:8px" onclick="backupData()">💾 バックアップを保存（ファイル）</button>
+    <label class="add-btn" style="width:100%;margin-bottom:8px;display:block;text-align:center;cursor:pointer;background:#5B8A83">📂 バックアップから復元<input type="file" accept="application/json,.json" onchange="restoreDataFile(this)" style="display:none"></label>
+    <p style="font-size:11px;color:var(--text-light);text-align:center;margin-bottom:10px">※スマホの「ファイル」アプリ等に保存されます。復元は今のデータを上書きします。</p>
     <button class="submit-btn" style="background:linear-gradient(135deg,#E05555,#FF7B7B);margin-bottom:8px" onclick="clearRecords()">🗑 日報データをリセット</button>
     <p style="font-size:11px;color:var(--text-light);text-align:center">※マスタデータは消えません</p>
   </div>
@@ -2125,6 +2129,96 @@ function clearEditRecord(){
 }
 
 /* RECORDS */
+
+/* ===== 前月比・前年同月比 / 本日の目標バー / バックアップ・復元 ===== */
+function _ym(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function monthTotalSales(ym){ var s=0; for(var i=0;i<state.records.length;i++){ var r=state.records[i]; if((recYMD(r)||'').slice(0,7)===ym) s+=(r.total||0); } return s; }
+
+// 今月の総売上＋前月比・前年同月比カード（物販タブ上部）
+function salesTrendCard(){
+  var now=new Date();
+  var ymThis=_ym(now);
+  var ymLast=_ym(new Date(now.getFullYear(), now.getMonth()-1, 1));
+  var ymLY=_ym(new Date(now.getFullYear()-1, now.getMonth(), 1));
+  var tThis=monthTotalSales(ymThis), tLast=monthTotalSales(ymLast), tLY=monthTotalSales(ymLY);
+  var diff=function(cur,base){
+    if(!base){ return '<span style="color:#94a3b8">前データなし</span>'; }
+    var p=Math.round((cur-base)/base*1000)/10; var up=p>=0;
+    return '<span style="color:'+(up?'#2E7D32':'#E05555')+';font-weight:800">'+(up?'▲＋':'▼')+p+'%</span>';
+  };
+  var s='<div style="background:linear-gradient(135deg,#2C7A6E,#1A4F47);color:#fff;border-radius:12px;padding:14px;margin-bottom:14px">';
+  s+='<div style="font-size:11px;opacity:.85;font-weight:700">📈 今月の総売上（'+now.getFullYear()+'年'+(now.getMonth()+1)+'月）</div>';
+  s+='<div style="font-size:24px;font-weight:800;margin:2px 0 8px">¥'+num(tThis)+'</div>';
+  s+='<div style="display:flex;gap:14px;font-size:12px">'
+    +'<div><span style="opacity:.85">前月比</span> '+diff(tThis,tLast)+'<div style="font-size:10px;opacity:.7">前月 ¥'+num(tLast)+'</div></div>'
+    +'<div><span style="opacity:.85">前年同月比</span> '+diff(tThis,tLY)+'<div style="font-size:10px;opacity:.7">前年 ¥'+num(tLY)+'</div></div>'
+    +'</div></div>';
+  return s;
+}
+
+// 本日の目標バー（記録タブ TODAY 下）
+function renderTodayTarget(){
+  var el=document.getElementById('todayTarget'); if(!el) return;
+  var now=new Date(); var ym=_ym(now);
+  var goal=0; var g=state.goals&&state.goals[ym];
+  if(g){ for(var k in g){ goal+=(g[k].tech||0)+(g[k].product||0); } }
+  var daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+  var biz=0; for(var dd=1;dd<=daysInMonth;dd++){ if(new Date(now.getFullYear(),now.getMonth(),dd).getDay()!==0) biz++; } // 日曜=定休を除く
+  var dailyTarget=(goal>0&&biz>0)?Math.round(goal/biz):0;
+  var today=new Date().toDateString(); var todaySales=0;
+  for(var i=0;i<state.records.length;i++){ if(new Date(state.records[i].time).toDateString()===today) todaySales+=(state.records[i].total||0); }
+  if(dailyTarget<=0){ el.innerHTML='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:12px;text-align:center;color:#94a3b8;font-size:12px">🎯 本日の目標：「🎯目標」タブで今月の目標を設定すると表示されます</div>'; return; }
+  var pct=Math.round(todaySales/dailyTarget*100), bar=Math.min(pct,100);
+  var remain=Math.max(0,dailyTarget-todaySales);
+  var col=pct>=100?'#2E7D32':(pct>=70?'#E69500':'#2C7A6E');
+  el.innerHTML='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:13px 14px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px"><span style="font-size:13px;font-weight:800;color:#1A4F47">🎯 本日の目標</span><span style="font-size:12px;color:#64748B">¥'+num(todaySales)+' / ¥'+num(dailyTarget)+'</span></div>'
+    +'<div style="height:10px;background:#EEF2F1;border-radius:5px;overflow:hidden;margin-bottom:5px"><div style="height:100%;width:'+bar+'%;background:'+col+';border-radius:5px"></div></div>'
+    +'<div style="font-size:12px;color:#64748B;text-align:right"><b style="color:'+col+'">'+pct+'%</b>　'+(remain>0?'あと <b style="color:#2C7A6E">¥'+num(remain)+'</b>で達成':'<b style="color:#2E7D32">本日目標達成 🎉</b>')+'</div>'
+    +'<div style="font-size:10px;color:#94a3b8;margin-top:4px">※今月の目標¥'+num(goal)+' ÷ 営業日'+biz+'日（日曜除く）</div>'
+    +'</div>';
+}
+
+// バックアップ（ファイルに保存）
+function backupData(){
+  var data={ _app:'sun-app', _ver:(typeof APP_VERSION!=='undefined'?APP_VERSION:''), _date:new Date().toISOString(),
+    records:state.records||[], staff:state.staff||[], menus:state.menus||[], products:state.products||[],
+    payments:state.payments||[], paymentMaster:state.paymentMaster||[], mediaList:state.mediaList||[],
+    goals:state.goals||{}, tickets:state.tickets||{} };
+  try{
+    var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a'); a.href=url;
+    var n=new Date(); a.download='sun-app-backup-'+n.getFullYear()+String(n.getMonth()+1).padStart(2,'0')+String(n.getDate()).padStart(2,'0')+'.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    if(typeof showToast==='function') showToast('✅ バックアップを保存しました（記録'+(data.records.length)+'件）');
+  }catch(e){ if(typeof showToast==='function') showToast('⚠️ バックアップ失敗'); }
+}
+// 復元（ファイルから読み込み）
+function restoreDataFile(input){
+  var f=input&&input.files&&input.files[0]; if(!f) return;
+  var rd=new FileReader();
+  rd.onload=function(){
+    try{
+      var d=JSON.parse(rd.result);
+      if(!d||!d.records){ if(typeof showToast==='function') showToast('⚠️ バックアップ形式が違います'); input.value=''; return; }
+      if(!confirm('バックアップを復元しますか？\n今のデータは上書きされます（記録 '+d.records.length+'件）。')){ input.value=''; return; }
+      if(d.records) state.records=d.records;
+      if(d.staff) state.staff=d.staff;
+      if(d.menus) state.menus=d.menus;
+      if(d.products) state.products=d.products;
+      if(d.mediaList) state.mediaList=d.mediaList;
+      if(d.goals) state.goals=d.goals;
+      if(d.tickets) state.tickets=d.tickets;
+      try{ saveLocal(); }catch(e){}
+      if(typeof renderAll==='function') renderAll();
+      if(typeof showToast==='function') showToast('✅ 復元しました（記録 '+state.records.length+'件）');
+    }catch(e){ if(typeof showToast==='function') showToast('⚠️ 復元失敗：ファイルを確認してください'); }
+    input.value='';
+  };
+  rd.readAsText(f);
+}
+
 function renderRecords(){
   var today=new Date().toDateString();
   var todayRecs=[];
@@ -2134,6 +2228,7 @@ function renderRecords(){
   document.getElementById('todayStats').innerHTML=
     '<div class="dash-stat"><div class="dash-stat-label">本日売上（税込）</div><div class="dash-stat-value">¥'+num(todayTotal)+'</div><div class="dash-stat-sub">'+todayRecs.length+'件</div></div>'+
     '<div class="dash-stat"><div class="dash-stat-label">本日の客数</div><div class="dash-stat-value">'+todayClients+'人</div><div class="dash-stat-sub">平均¥'+(todayClients>0?num(Math.round(todayTotal/todayClients)):0)+'</div></div>';
+  try{ if(typeof renderTodayTarget==='function') renderTodayTarget(); }catch(e){}
   // 本日顧客リスト
   var custEl=document.getElementById('todayCustomerList');
   if(!todayRecs.length){ custEl.innerHTML='<div class="empty"><div class="empty-text">本日の記録はまだありません</div></div>'; }
@@ -2548,7 +2643,7 @@ function renderDashboard(){
   staffRank.sort(function(a,b){ return b.profit-a.profit; });
   html+=rankCard('👥 スタッフ別 物販利益（'+periodLabel+'）', staffRank.slice(0,8).map(function(x){ return {name:x.name, value:'¥'+num(x.profit)+(x.known?'':' ※'), sub:x.count+'件'}; }));
 
-  var cont=document.getElementById('dashContent'); if(cont) cont.innerHTML=html;
+  var cont=document.getElementById('dashContent'); if(cont) cont.innerHTML=(typeof salesTrendCard==='function'?salesTrendCard():'')+html;
 }
 
 /* ADMIN */
@@ -3365,7 +3460,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "8.7";
+var APP_VERSION = "8.8";
 
 function checkForUpdate(){
   try {
