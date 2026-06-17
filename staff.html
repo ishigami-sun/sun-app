@@ -2376,7 +2376,7 @@ function renderDashboard(){
       var sell=(p.customSell!==undefined?p.customSell:p.sell)||0;
       var cost=resolveCost(p);
       var profit=(cost!=null)?(sell-cost)*qty:null;
-      lines.push({time:r.time, staff:ps, name:p.name||'(商品名なし)', qty:qty, cost:cost, sell:sell, profit:profit});
+      lines.push({time:r.time, staff:ps, name:p.name||'(商品名なし)', qty:qty, cost:cost, sell:sell, profit:profit, recId:r.id, prodIdx:j});
     }
   }
   lines.sort(function(a,b){ return new Date(b.time)-new Date(a.time); });
@@ -2436,7 +2436,7 @@ function renderDashboard(){
   } else {
     html+='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;overflow-x:auto;-webkit-overflow-scrolling:touch">';
     html+='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:560px">';
-    html+='<thead><tr style="background:#2C7A6E;color:#fff">'+th('日時')+th('担当')+th('商品名')+th('個数',1)+th('卸値',1)+th('売値',1)+th('利益',1)+'</tr></thead><tbody>';
+    html+='<thead><tr style="background:#2C7A6E;color:#fff">'+th('日時')+th('担当')+th('商品名')+th('個数',1)+th('卸値',1)+th('売値',1)+th('利益',1)+th('操作')+'</tr></thead><tbody>';
     for(var i=0;i<lines.length;i++){
       var L=lines[i]; var d=new Date(L.time);
       var ds=(d.getMonth()+1)+'/'+d.getDate(); var tmn=d.getHours()+':'+(d.getMinutes()<10?'0':'')+d.getMinutes();
@@ -2449,6 +2449,7 @@ function renderDashboard(){
       html+='<td style="padding:9px 8px;border-bottom:1px solid #E8EFEE;text-align:right;color:#64748B">'+(L.cost!=null?'¥'+num(L.cost):'-')+'</td>';
       html+='<td style="padding:9px 8px;border-bottom:1px solid #E8EFEE;text-align:right;font-weight:600">¥'+num(L.sell)+'</td>';
       html+='<td style="padding:9px 8px;border-bottom:1px solid #E8EFEE;text-align:right;font-weight:700;color:'+(L.profit!=null?'#059669':'#94a3b8')+'">'+(L.profit!=null?'¥'+num(L.profit):'-')+'</td>';
+      html+='<td style="padding:7px 8px;border-bottom:1px solid #E8EFEE;text-align:center"><button onclick="openProductEdit('+L.recId+','+L.prodIdx+')" style="padding:5px 9px;border:1px solid #2C7A6E;background:#fff;color:#2C7A6E;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">✏️編集</button></td>';
       html+='</tr>';
     }
     html+='</tbody><tfoot><tr style="background:#E8F5F3">';
@@ -2457,6 +2458,7 @@ function renderDashboard(){
     html+='<td style="border-top:2px solid #2C7A6E"></td>';
     html+='<td style="padding:11px 8px;text-align:right;font-weight:800;border-top:2px solid #2C7A6E">¥'+num(sales)+'</td>';
     html+='<td style="padding:11px 8px;text-align:right;font-weight:800;color:#059669;border-top:2px solid #2C7A6E">¥'+num(profitSum)+'</td>';
+    html+='<td style="border-top:2px solid #2C7A6E"></td>';
     html+='</tr></tfoot></table></div>';
   }
   // 売れ筋ランキング
@@ -3674,6 +3676,91 @@ if(typeof window !== 'undefined') {
 }
 
 
+// ===== 物販データ編集（モーダル）=====
+function openProductEdit(recId, prodIdx){
+  var rec=null;
+  for(var i=0;i<state.records.length;i++){ if(String(state.records[i].id)===String(recId)){ rec=state.records[i]; break; } }
+  if(!rec || !rec.products || !rec.products[prodIdx]){ if(typeof showToast==='function') showToast('対象が見つかりません'); return; }
+  var p=rec.products[prodIdx];
+  var curStaff=p.productStaff||rec.staff||'';
+  var curCost=(p.cost!=null&&p.cost!=='')?p.cost:'';
+  var curSell=(p.customSell!==undefined?p.customSell:p.sell)||'';
+  var d=new Date(rec.time); var pad=function(n){return String(n).padStart(2,'0');};
+  var dtv=(isNaN(d.getTime())?new Date():d);
+  var dval=dtv.getFullYear()+'-'+pad(dtv.getMonth()+1)+'-'+pad(dtv.getDate())+'T'+pad(dtv.getHours())+':'+pad(dtv.getMinutes());
+  var sopts='';
+  var hasCur=false;
+  for(var i=0;i<state.staff.length;i++){ var sn=state.staff[i]; if(sn===curStaff)hasCur=true; sopts+='<option value="'+h(sn)+'"'+(sn===curStaff?' selected':'')+'>'+h(sn)+'</option>'; }
+  if(!hasCur && curStaff) sopts='<option value="'+h(curStaff)+'" selected>'+h(curStaff)+'</option>'+sopts;
+  var inp='width:100%;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;margin:4px 0 10px;font-size:14px;background:#fff;color:#1A4F47';
+  var lab='font-size:12px;font-weight:700;color:#64748B';
+  var ov=document.createElement('div');
+  ov.id='prodEditOverlay';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.innerHTML='<div style="background:#fff;border-radius:14px;max-width:380px;width:100%;max-height:90vh;overflow:auto;padding:18px;box-shadow:0 10px 30px rgba(0,0,0,.25)">'
+    +'<div style="font-size:16px;font-weight:800;color:#1A4F47;margin-bottom:12px">✏️ 物販データの編集</div>'
+    +'<label style="'+lab+'">日時</label><input id="peDate" type="datetime-local" value="'+dval+'" style="'+inp+'">'
+    +'<label style="'+lab+'">担当者</label><select id="peStaff" style="'+inp+'">'+sopts+'</select>'
+    +'<label style="'+lab+'">商品名</label><input id="peName" type="text" value="'+h(p.name||'')+'" style="'+inp+'">'
+    +'<label style="'+lab+'">個数</label><input id="peQty" type="number" min="1" value="'+(p.qty||1)+'" style="'+inp+'">'
+    +'<label style="'+lab+'">卸値（税抜）</label><input id="peCost" type="number" min="0" value="'+curCost+'" placeholder="未登録" style="'+inp+'">'
+    +'<label style="'+lab+'">売値（税込）</label><input id="peSell" type="number" min="0" value="'+curSell+'" style="'+inp+'">'
+    +'<div style="display:flex;gap:8px;margin-top:6px"><button id="peCancel" style="flex:1;padding:13px;border:2px solid #C8E0DC;background:#fff;color:#64748B;border-radius:10px;font-weight:700;cursor:pointer">キャンセル</button>'
+    +'<button id="peSave" style="flex:1;padding:13px;border:none;background:#2C7A6E;color:#fff;border-radius:10px;font-weight:800;cursor:pointer">保存</button></div>'
+    +'</div>';
+  document.body.appendChild(ov);
+  ov.addEventListener('click',function(e){ if(e.target===ov) closeProductEdit(); });
+  document.getElementById('peCancel').onclick=closeProductEdit;
+  document.getElementById('peSave').onclick=function(){ saveProductEdit(recId, prodIdx); };
+}
+function closeProductEdit(){ var ov=document.getElementById('prodEditOverlay'); if(ov) ov.remove(); }
+function saveProductEdit(recId, prodIdx){
+  var oldIdx=-1, rec=null;
+  for(var i=0;i<state.records.length;i++){ if(String(state.records[i].id)===String(recId)){ rec=state.records[i]; oldIdx=i; break; } }
+  if(!rec){ closeProductEdit(); return; }
+  var name=(document.getElementById('peName').value||'').trim();
+  var qty=parseInt(document.getElementById('peQty').value)||1; if(qty<1) qty=1;
+  var costRaw=document.getElementById('peCost').value;
+  var cost=(costRaw===''||costRaw==null)?0:(parseInt(costRaw)||0);
+  var sell=parseInt(document.getElementById('peSell').value)||0;
+  var staff=document.getElementById('peStaff').value;
+  var dtv=document.getElementById('peDate').value;
+  if(!name){ if(typeof showToast==='function') showToast('商品名を入力してください'); return; }
+  var edited=JSON.parse(JSON.stringify(rec));
+  var oldId=rec.id;
+  edited.id=Date.now();
+  if(dtv){ var nd=new Date(dtv); if(!isNaN(nd.getTime())) edited.time=nd.toISOString(); }
+  var ep=edited.products[prodIdx];
+  ep.name=name; ep.qty=qty; ep.cost=cost; ep.customSell=sell; ep.sell=sell; ep.productStaff=staff;
+  var prodSell=0, prodProfit=0;
+  for(var j=0;j<edited.products.length;j++){ var pp=edited.products[j]; var s=(pp.customSell!==undefined?pp.customSell:pp.sell)||0; var c=pp.cost||0; var q=pp.qty||1; prodSell+=s*q; prodProfit+=(s-c)*q; }
+  var menuInc=edited.menuAmount||0;
+  var oldProdSell=rec.productSell||0;
+  var menuExcOld=(rec.totalExc||0)-Math.round(oldProdSell/1.1);
+  edited.productSell=prodSell; edited.productProfit=prodProfit;
+  edited.total=menuInc+prodSell;
+  edited.totalExc=menuExcOld+Math.round(prodSell/1.1);
+  edited.taxAmount=edited.total-edited.totalExc;
+  state.records.splice(oldIdx,1);
+  state.records.push(edited);
+  if(!state.deletedIds) state.deletedIds=[];
+  if(state.deletedIds.indexOf(oldId)<0) state.deletedIds.push(oldId);
+  try{ saveLocal(); }catch(e){}
+  closeProductEdit();
+  if(typeof renderDashboard==='function') renderDashboard();
+  if(typeof renderRecords==='function') renderRecords();
+  if(typeof showToast==='function') showToast('✅ 保存しました。クラウドに反映中...');
+  if(state.cloudUrl && state.cloudKey && typeof callCloud==='function'){
+    try{
+      callCloud('deleteRecord',{recordId:oldId},function(){
+        callCloud('addRecord',{record:edited},function(res){
+          if(typeof showToast==='function') showToast(res&&res.ok?'✅ クラウド反映完了':'⚠️ ローカルのみ保存（クラウド未対応）');
+        });
+      });
+    }catch(e){ if(typeof showToast==='function') showToast('⚠️ ローカルのみ保存'); }
+  }
+}
+
 function deleteRecord(id){
   // 確認なしで即削除（間違えて入力した時用）
   // ローカルから削除
@@ -3941,7 +4028,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "8.0";
+var APP_VERSION = "8.1";
 
 function checkForUpdate(){
   try {
