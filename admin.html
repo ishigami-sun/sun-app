@@ -313,7 +313,6 @@
 <div class="page" id="page-records">
   <div class="section-title">TODAY</div>
   <div id="todayStats" class="dash-grid"></div>
-  <div id="todayTarget" style="margin:10px 0"></div>
 
   <div class="section-title">📋 入力済み顧客リスト</div>
   
@@ -2228,7 +2227,6 @@ function renderRecords(){
   document.getElementById('todayStats').innerHTML=
     '<div class="dash-stat"><div class="dash-stat-label">本日売上（税込）</div><div class="dash-stat-value">¥'+num(todayTotal)+'</div><div class="dash-stat-sub">'+todayRecs.length+'件</div></div>'+
     '<div class="dash-stat"><div class="dash-stat-label">本日の客数</div><div class="dash-stat-value">'+todayClients+'人</div><div class="dash-stat-sub">平均¥'+(todayClients>0?num(Math.round(todayTotal/todayClients)):0)+'</div></div>';
-  try{ if(typeof renderTodayTarget==='function') renderTodayTarget(); }catch(e){}
   // 本日顧客リスト
   var custEl=document.getElementById('todayCustomerList');
   if(!todayRecs.length){ custEl.innerHTML='<div class="empty"><div class="empty-text">本日の記録はまだありません</div></div>'; }
@@ -3460,7 +3458,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "8.8";
+var APP_VERSION = "8.9";
 
 function checkForUpdate(){
   try {

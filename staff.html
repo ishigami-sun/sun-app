@@ -312,7 +312,6 @@
 <div class="page" id="page-records">
   <div class="section-title">TODAY</div>
   <div id="todayStats" class="dash-grid"></div>
-  <div id="todayTarget" style="margin:10px 0"></div>
 
   <div class="section-title">🏆 本日のスタッフ別 売上速報</div>
   <div id="speedReport"></div>
@@ -2158,7 +2157,6 @@ function renderRecords(){
   document.getElementById('todayStats').innerHTML=
     '<div class="dash-stat"><div class="dash-stat-label">本日売上（税込）</div><div class="dash-stat-value">¥'+num(todayTotal)+'</div><div class="dash-stat-sub">'+todayRecs.length+'件</div></div>'+
     '<div class="dash-stat"><div class="dash-stat-label">本日の客数</div><div class="dash-stat-value">'+todayClients+'人</div><div class="dash-stat-sub">平均¥'+(todayClients>0?num(Math.round(todayTotal/todayClients)):0)+'</div></div>';
-  try{ if(typeof renderTodayTarget==='function') renderTodayTarget(); }catch(e){}
   // 🏆 スタッフ別 売上速報
   try{ renderSpeedReport(); }catch(e){}
   // 顧客リスト（月選択対応）
@@ -4177,7 +4175,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "8.8";
+var APP_VERSION = "8.9";
 
 function checkForUpdate(){
   try {
