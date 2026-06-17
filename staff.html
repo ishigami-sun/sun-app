@@ -210,7 +210,7 @@
 <!-- ログイン無効 -->
 <header class="app-header">
   <div class="header-top">
-    <div><div class="app-logo">S<span>U</span>N</div><div style="font-size:9px;color:rgba(255,255,255,0.6);letter-spacing:1px;margin-top:2px">STAFF v7.0</div></div>
+    <div><div class="app-logo">S<span>U</span>N</div><div id="verLabel" style="font-size:9px;color:rgba(255,255,255,0.6);letter-spacing:1px;margin-top:2px">STAFF</div></div>
     <div class="header-date" id="headerDate"></div>
   </div>
   <nav class="tab-nav">
@@ -4074,7 +4074,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "8.4";
+var APP_VERSION = "8.5";
 
 function checkForUpdate(){
   try {
@@ -4138,6 +4138,7 @@ function showUpdateBanner(newVer){
 
 if(typeof window !== 'undefined'){
   window.checkForUpdate = checkForUpdate;
+  try{ var _vl=document.getElementById('verLabel'); if(_vl) _vl.textContent='STAFF v'+APP_VERSION; }catch(e){}
   // ページ読み込み3秒後に1度チェック
   setTimeout(function(){ try{ checkForUpdate(); }catch(e){} }, 3000);
   // その後10分ごとにチェック
