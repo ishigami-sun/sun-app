@@ -3365,7 +3365,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "8.5";
+var APP_VERSION = "8.6";
 
 function checkForUpdate(){
   try {
@@ -3612,6 +3612,7 @@ function renderCustomerList(){
     chtml += '</div>';
     chtml += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">';
     chtml += '<div class="customer-chip-amount">¥'+num(r.total)+'</div>';
+    chtml += '<button onclick="editRecord('+r.id+')" style="padding:3px 8px;background:#fff;border:1px solid #2C7A6E;color:#2C7A6E;border-radius:6px;font-size:10px;cursor:pointer">✏️編集</button>';
     chtml += '<button onclick="deleteRecord('+r.id+')" style="padding:3px 8px;background:#fff;border:1px solid #E05555;color:#E05555;border-radius:6px;font-size:10px;cursor:pointer">🗑削除</button>';
     chtml += '</div>';
     chtml += '</div>';
