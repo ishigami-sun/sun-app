@@ -237,6 +237,8 @@
 <!-- ===== 日報入力 ===== -->
 <div class="page active" id="page-input">
 
+  <div id="editBanner" style="display:none;background:#E3F2FD;border:1.5px solid #1565C0;border-radius:10px;padding:10px 12px;margin-bottom:10px;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"></div>
+
   <div class="section-title">STEP 1　担当者（施術）</div>
   <div class="card"><div class="toggle-group" id="staffGroup"></div></div>
 
@@ -2043,8 +2045,11 @@ function submitRecord(){
   var master=getPaymentMaster(state.selectedPayment);
   var feeRate=master?master.fee:0;
   var feeAmt=feeRate>0?Math.round(total*feeRate/100):0;
+  var editId = state.editingRecordId || null;
+  var entryTime = (editId && state.editingOrigTime) ? new Date(state.editingOrigTime) : new Date();
+  if(isNaN(entryTime.getTime())) entryTime = new Date();
   var record={
-    id:Date.now(), time:new Date().toISOString(),
+    id:Date.now(), time:entryTime.toISOString(),
     staff:state.selectedStaff,
     customerName:document.getElementById('customerName').value.trim(),
     clientType:state.clientType, media:state.mediaType,
@@ -2056,18 +2061,67 @@ function submitRecord(){
     total:total, totalExc:menuExcTotal+Math.round(prodSell/1.1),
     taxAmount:total-(menuExcTotal+Math.round(prodSell/1.1)), clientCount:clientCount,
   };
+  if(editId){
+    for(var ei=0;ei<state.records.length;ei++){ if(String(state.records[ei].id)===String(editId)){ state.records.splice(ei,1); break; } }
+    if(!state.deletedIds) state.deletedIds=[];
+    if(state.deletedIds.indexOf(editId)<0) state.deletedIds.push(editId);
+  }
   state.records.push(record);
   state.selectedMenus=[]; state.selectedProducts=[];
   document.getElementById('customerName').value='';
+  state.editingRecordId=null; state.editingOrigTime=null; state.editingCustomerName=null;
+  try{ updateEditBanner(); }catch(e){}
   saveLocal();
-  // クラウドにも送信
+  // クラウド：編集時は旧を削除してから追加
+  if(editId && state.cloudUrl && state.cloudKey && typeof callCloud==='function'){ try{ callCloud('deleteRecord',{recordId:editId},function(){}); }catch(e){} }
   callCloud('addRecord', {record:record}, function(res){
-    if(res.ok){ showToast('✅ 日報を登録＆クラウド保存しました！'); }
+    if(res.ok){ showToast(editId?'✅ 記録を更新しました！':'✅ 日報を登録＆クラウド保存しました！'); }
     else if(res.queued){ showToast('📵 オフライン保存（復旧時に自動送信）'); }
     else { showToast('⚠️ クラウド送信失敗: '+(res.error||'')); }
   });
   renderAll();
   switchTab('records');
+}
+// 記録をタップ→入力フォームに読み込んで編集
+function updateEditBanner(){
+  var b=document.getElementById('editBanner'); if(!b) return;
+  if(state.editingRecordId){
+    b.innerHTML='<span style="font-size:13px;font-weight:700;color:#1565C0">✏️ '+(state.editingCustomerName?h(state.editingCustomerName)+' 様の':'')+'記録を編集中（修正して「登録」）</span>'+
+      '<button onclick="clearEditRecord()" style="padding:5px 12px;border:1.5px solid #1565C0;background:#fff;color:#1565C0;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">編集をやめる</button>';
+    b.style.display='flex';
+  } else { b.style.display='none'; }
+}
+function editRecord(id){
+  var r=null;
+  for(var i=0;i<state.records.length;i++){ if(String(state.records[i].id)===String(id)){ r=state.records[i]; break; } }
+  if(!r){ if(typeof showToast==='function') showToast('記録が見つかりません'); return; }
+  state.editingRecordId=r.id;
+  state.editingOrigTime=r.time;
+  state.editingCustomerName=r.customerName||'';
+  state.selectedStaff=r.staff||'';
+  state.clientType=r.clientType||'リピーター';
+  state.mediaType=r.media||'';
+  state.selectedPayment=r.payment||'';
+  state.selectedMenus=r.menus?JSON.parse(JSON.stringify(r.menus)):[];
+  state.selectedProducts=r.products?JSON.parse(JSON.stringify(r.products)):[];
+  try{ saveLocal(); }catch(e){}
+  if(typeof switchTab==='function') switchTab('input');
+  var cn=document.getElementById('customerName'); if(cn) cn.value=r.customerName||'';
+  if(typeof renderAll==='function') renderAll();
+  updateEditBanner();
+  try{ window.scrollTo(0,0); }catch(e){}
+  if(typeof showToast==='function') showToast('✏️ 編集モード：内容を直して「登録」してください');
+}
+function clearEditRecord(){
+  state.editingRecordId=null; state.editingOrigTime=null; state.editingCustomerName=null;
+  state.selectedMenus=[]; state.selectedProducts=[];
+  state.selectedStaff=''; state.clientType='リピーター'; state.mediaType=''; state.selectedPayment='';
+  var cn=document.getElementById('customerName'); if(cn) cn.value='';
+  try{ saveLocal(); }catch(e){}
+  updateEditBanner();
+  if(typeof renderAll==='function') renderAll();
+  if(typeof showToast==='function') showToast('編集をやめました');
+  if(typeof switchTab==='function') switchTab('records');
 }
 
 /* RECORDS */
@@ -2099,7 +2153,7 @@ function renderRecords(){
       chtml+='<div class="customer-chip-staff">施術：'+h(r.staff)+'</div>';
       if(r.products.length) chtml+='<div style="font-size:11px;color:#27AE60;margin-top:2px">📦 '+pnames+'</div>';
       chtml+='<div class="customer-chip-tags"><span class="tag '+(r.clientType==='新規'?'tag-new':'tag-repeater')+'">'+r.clientType+'</span><span class="tag tag-media">'+h(r.media)+'</span><span class="tag tag-payment">'+h(r.payment)+'</span></div>';
-      chtml+='</div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><div class="customer-chip-amount">¥'+num(r.total)+'</div><button onclick="deleteRecord('+r.id+')" style="padding:3px 8px;background:#fff;border:1px solid #E05555;color:#E05555;border-radius:6px;font-size:10px;cursor:pointer">🗑削除</button></div></div>';
+      chtml+='</div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><div class="customer-chip-amount">¥'+num(r.total)+'</div><button onclick="editRecord('+r.id+')" style="padding:3px 8px;background:#fff;border:1px solid #2C7A6E;color:#2C7A6E;border-radius:6px;font-size:10px;cursor:pointer">✏️編集</button><button onclick="deleteRecord('+r.id+')" style="padding:3px 8px;background:#fff;border:1px solid #E05555;color:#E05555;border-radius:6px;font-size:10px;cursor:pointer">🗑削除</button></div></div>';
     }
     custEl.innerHTML=chtml;
   }
@@ -2191,7 +2245,7 @@ function renderRecords(){
           if(pdetail) rhtml+='<div class="record-prod-detail">📦 '+pdetail+'</div>';
           rhtml+='<div class="record-footer"><div class="record-tags"><span class="tag '+(r.clientType==='新規'?'tag-new':'tag-repeater')+'">'+r.clientType+'</span><span class="tag tag-media">'+h(r.media)+'</span><span class="tag tag-payment">'+h(r.payment)+'</span></div>';
           rhtml+='<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><div class="record-amount">¥'+num(r.total)+'</div>';
-          rhtml+='<button onclick="deleteRecord('+r.id+')" style="padding:3px 8px;background:#fff;border:1px solid #E05555;color:#E05555;border-radius:6px;font-size:10px;cursor:pointer">🗑削除</button></div></div></div>';
+          rhtml+='<button onclick="editRecord('+r.id+')" style="padding:3px 8px;background:#fff;border:1px solid #2C7A6E;color:#2C7A6E;border-radius:6px;font-size:10px;cursor:pointer;margin-right:4px">✏️編集</button><button onclick="deleteRecord('+r.id+')" style="padding:3px 8px;background:#fff;border:1px solid #E05555;color:#E05555;border-radius:6px;font-size:10px;cursor:pointer">🗑削除</button></div></div></div>';
         }
       }
     }
@@ -3311,7 +3365,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "8.3";
+var APP_VERSION = "8.4";
 
 function checkForUpdate(){
   try {
