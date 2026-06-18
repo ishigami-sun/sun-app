@@ -3508,7 +3508,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "9.2";
+var APP_VERSION = "9.3";
 
 function checkForUpdate(){
   try {
@@ -3711,6 +3711,7 @@ function renderCustomerList(){
     var emptyMsg = (state.todayStaffFilter && state.todayStaffFilter !== '全員') ? state.todayStaffFilter+'の' : '';
     emptyMsg += getCustListPeriodLabel().replace('📅 ','')+'の記録はまだありません';
     custEl.innerHTML = '<div class="empty"><div class="empty-text">'+emptyMsg+'</div></div>';
+    try{ renderDeletedHistory(); }catch(e){}
     return;
   }
   
