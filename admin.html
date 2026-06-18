@@ -3312,7 +3312,7 @@ function deleteRecord(id){
   // 確認なしで即削除（間違えて入力した時用）
   // ローカルから削除
   for(var i=0;i<state.records.length;i++){
-    if(state.records[i].id === id){
+    if(String(state.records[i].id) === String(id)){
       state.records.splice(i,1);
       break;
     }
@@ -3460,7 +3460,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "9.0";
+var APP_VERSION = "9.1";
 
 function checkForUpdate(){
   try {
