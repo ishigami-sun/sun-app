@@ -335,6 +335,7 @@
   </div>
   
   <div id="todayCustomerList" class="customer-list"></div>
+  <div id="deletedHistory" style="margin-top:14px"></div>
 
   <div class="section-title">全記録</div>
   <div id="recordsList"></div>
@@ -3308,11 +3309,58 @@ function saveProductEdit(recId, prodIdx){
   }
 }
 
+
+/* ===== 削除確認・削除履歴・クラウド復元 ===== */
+function renderDeletedHistory(){
+  var el=document.getElementById('deletedHistory'); if(!el) return;
+  var hist=state.deletedHistory||[];
+  var s='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;overflow:hidden">';
+  s+='<div onclick="toggleDeletedHistory()" style="padding:11px 14px;background:#FBF0F0;color:#1A4F47;font-weight:800;font-size:13px;cursor:pointer;display:flex;justify-content:space-between;align-items:center"><span>🗑 削除履歴・復元（'+hist.length+'件）</span><span>'+(state._delHistOpen?'▲':'▼')+'</span></div>';
+  if(state._delHistOpen){
+    s+='<div style="padding:12px">';
+    s+='<button onclick="recoverFromCloud()" style="width:100%;padding:11px;border:1.5px solid #2C7A6E;background:#fff;color:#2C7A6E;border-radius:8px;font-weight:700;cursor:pointer;margin-bottom:6px">🔄 クラウドから記録を取り戻す</button>';
+    s+='<div style="font-size:11px;color:#94a3b8;margin-bottom:12px">※履歴に無い「以前に削除した記録」も、クラウドに残っていれば復元します（今回の誤削除はこちら）。</div>';
+    if(!hist.length){ s+='<div style="text-align:center;color:#94a3b8;font-size:12px;padding:6px">この端末での削除履歴はありません</div>'; }
+    hist.forEach(function(r,i){
+      var d=new Date(r.time); var ds=(isNaN(d.getTime())?'':(d.getMonth()+1)+'/'+d.getDate());
+      s+='<div style="display:flex;justify-content:space-between;align-items:center;border:1px solid #E8EFEE;border-radius:8px;padding:9px;margin-bottom:6px">'
+        +'<div style="min-width:0"><div style="font-weight:700;font-size:13px;color:#1A4F47">'+h(r.customerName||'(名前なし)')+' 様</div><div style="font-size:11px;color:#64748B">'+ds+' / '+h(r.staff||'')+' / ¥'+num(r.total||0)+'</div></div>'
+        +'<button onclick="restoreDeleted('+i+')" style="flex:0 0 auto;margin-left:8px;padding:7px 13px;border:none;background:#2C7A6E;color:#fff;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">↩️ 戻す</button></div>';
+    });
+    if(hist.length) s+='<button onclick="clearDeletedHistory()" style="width:100%;padding:9px;border:1px solid #E05555;background:#fff;color:#E05555;border-radius:8px;font-size:12px;cursor:pointer;margin-top:4px">履歴を消す</button>';
+    s+='</div>';
+  }
+  s+='</div>';
+  el.innerHTML=s;
+}
+function toggleDeletedHistory(){ state._delHistOpen=!state._delHistOpen; renderDeletedHistory(); }
+function restoreDeleted(i){
+  var hist=state.deletedHistory||[]; var rec=hist[i]; if(!rec) return;
+  var clone=JSON.parse(JSON.stringify(rec)); delete clone._deletedAt;
+  var oldId=clone.id; clone.id=Date.now();
+  state.records.push(clone);
+  if(state.deletedIds){ for(var k=state.deletedIds.length-1;k>=0;k--){ if(String(state.deletedIds[k])===String(oldId)) state.deletedIds.splice(k,1); } }
+  state.deletedHistory.splice(i,1);
+  try{ saveLocal(); }catch(e){}
+  if(state.cloudUrl&&state.cloudKey&&typeof callCloud==='function'){ try{ callCloud('addRecord',{record:clone},function(){}); }catch(e){} }
+  if(typeof renderAll==='function') renderAll();
+  if(typeof showToast==='function') showToast('↩️ 記録を元に戻しました');
+}
+function clearDeletedHistory(){ if(!confirm('削除履歴を消しますか？（履歴からは元に戻せなくなります）')) return; state.deletedHistory=[]; try{ saveLocal(); }catch(e){} renderDeletedHistory(); if(typeof showToast==='function') showToast('履歴を消しました'); }
+function recoverFromCloud(){
+  if(!confirm('クラウドに残っている記録を取り戻します。\n（以前この端末で削除した記録も、クラウドに残っていれば復活します）\n\n実行しますか？')) return;
+  state.deletedIds=[];
+  try{ saveLocal(); }catch(e){}
+  if(typeof syncFromCloud==='function'){ if(typeof showToast==='function') showToast('🔄 クラウドから取得中...'); syncFromCloud(); }
+  else if(typeof showToast==='function') showToast('⚠️ クラウド未設定');
+}
+
 function deleteRecord(id){
-  // 確認なしで即削除（間違えて入力した時用）
-  // ローカルから削除
+  if(!confirm('この記録を削除しますか？\n（あとで「🗑 削除履歴」から元に戻せます）')) return;
+  // ローカルから削除（削除履歴へ退避）
   for(var i=0;i<state.records.length;i++){
     if(String(state.records[i].id) === String(id)){
+      try{ if(!state.deletedHistory) state.deletedHistory=[]; var _d=JSON.parse(JSON.stringify(state.records[i])); _d._deletedAt=Date.now(); state.deletedHistory.unshift(_d); if(state.deletedHistory.length>50) state.deletedHistory=state.deletedHistory.slice(0,50); }catch(e){}
       state.records.splice(i,1);
       break;
     }
@@ -3460,7 +3508,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "9.1";
+var APP_VERSION = "9.2";
 
 function checkForUpdate(){
   try {
@@ -3715,6 +3763,7 @@ function renderCustomerList(){
   }
   custEl.innerHTML = chtml;
   if(state.editInlineId){ try{ renderInlineEditor(); }catch(e){} }
+  try{ renderDeletedHistory(); }catch(e){}
 }
 
 
