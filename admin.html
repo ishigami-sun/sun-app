@@ -1667,12 +1667,12 @@ function updateMenuPrice(i,val){
   if(state.selectedMenus[i]){
     var v=parseInt(val)||0;
     state.selectedMenus[i].inputPrice=v;
-    state.selectedMenus[i].taxMode=state.taxMode;
     state.selectedMenus[i].basePrice=v-(state.selectedMenus[i].extraAmount||0);
     // 税込表示も更新
     var noteEl = document.getElementById('taxNote_'+i);
     if(noteEl){
-      noteEl.textContent = '→税込¥' + num(toTaxInc(v));
+      var mm=state.selectedMenus[i];
+      noteEl.textContent = '→'+((mm.taxMode==='inc')?'税抜':'税込')+'¥' + num((mm.taxMode==='inc')?menuExc(mm):menuInc(mm));
     }
   }
   updateFinalAmount(i);
@@ -3889,7 +3889,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "11.0";
+var APP_VERSION = "11.1";
 
 function checkForUpdate(){
   try {
