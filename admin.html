@@ -312,6 +312,7 @@
 
 <!-- ===== 記録 ===== -->
 <div class="page" id="page-records">
+  <button onclick="syncFromCloud()" style="width:100%;padding:11px;margin-bottom:10px;background:#3DA892;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">🔄 同期して最新にする</button>
   <div id="salesTrend" style="margin-bottom:10px"></div>
   <div class="section-title">TODAY</div>
   <div id="todayStats" class="dash-grid"></div>
@@ -3871,7 +3872,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "10.5";
+var APP_VERSION = "10.6";
 
 function checkForUpdate(){
   try {
