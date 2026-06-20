@@ -2858,7 +2858,10 @@ function staffPostAllowance(name){ name=name||''; if(name.indexOf('副店長')>=
 function staffPostLabel(name){ name=name||''; if(name.indexOf('副店長')>=0) return '副店長'; if(name.indexOf('店長')>=0) return '店長'; if(name.indexOf('代表')>=0) return '代表'; return ''; }
 function getStaffType(name){
   if(state.staffTypes && state.staffTypes[name]) return state.staffTypes[name];
-  return (String(name).indexOf('代表')>=0)?'excluded':'stylist';
+  var n=String(name);
+  if(n.indexOf('代表')>=0) return 'excluded';
+  if(n.indexOf('梅田')>=0 || n.indexOf('カノン')>=0) return 'assistant';
+  return 'stylist'; // 花岡・東・堀井・林 ほか
 }
 function setStaffType(name,val){ if(!state.staffTypes) state.staffTypes={}; state.staffTypes[name]=val; if(typeof save==='function') save(); renderPnlReport(); }
 // 技術歩合（スタイリスト：累進）。base は技術売上(税込)
@@ -3772,7 +3775,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "9.9";
+var APP_VERSION = "10.0";
 
 function checkForUpdate(){
   try {
