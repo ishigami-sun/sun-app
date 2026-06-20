@@ -2024,7 +2024,7 @@ function renderSummary(){
   var master=getPaymentMaster(state.selectedPayment);
   var feeRate=master?master.fee:0;
   var feeBox=document.getElementById('feeInfoBox');
-  if(feeRate>0&&has){
+  if(false){ // 決済手数料の差引表示は代表版(admin)のみ。スタッフ版では非表示
     var feeAmt=Math.round(total*feeRate/100);
     document.getElementById('feeRateLabel').textContent=feeRate+'%';
     document.getElementById('feeAmount').textContent='−¥'+num(feeAmt);
@@ -4370,7 +4370,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "11.1";
+var APP_VERSION = "11.2";
 
 function checkForUpdate(){
   try {
