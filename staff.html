@@ -730,17 +730,6 @@
   <div class="section-title">🎓 SUN ACADEMY</div>
   <div style="font-size:12px;color:#64748B;margin-bottom:12px;line-height:1.7">入社からカットデビューまでの教育の流れです。各ステップを確認し、できたら「成長チェックシート」に記録しよう。<b style="color:#2C7A6E">Simple is the best.</b></div>
   <div style="display:flex;gap:4px;align-items:stretch;margin-bottom:16px"><div style="flex:1;text-align:center;background:#fff;border:1px solid #C8E0DC;border-radius:10px;padding:8px 4px;font-size:11px;font-weight:800;color:#2C7A6E">P1<br><span style="font-weight:600;color:#64748B">1〜3ヶ月</span></div><div style="align-self:center;color:#9BC9C2;font-weight:800">›</div><div style="flex:1;text-align:center;background:#fff;border:1px solid #C8E0DC;border-radius:10px;padding:8px 4px;font-size:11px;font-weight:800;color:#2C7A6E">P2<br><span style="font-weight:600;color:#64748B">4〜9ヶ月</span></div><div style="align-self:center;color:#9BC9C2;font-weight:800">›</div><div style="flex:1;text-align:center;background:#fff;border:1px solid #C8E0DC;border-radius:10px;padding:8px 4px;font-size:11px;font-weight:800;color:#2C7A6E">P3<br><span style="font-weight:600;color:#64748B">10〜18ヶ月</span></div><div style="align-self:center;color:#9BC9C2;font-weight:800">›</div><div style="flex:1;text-align:center;background:#fff;border:1px solid #C8E0DC;border-radius:10px;padding:8px 4px;font-size:11px;font-weight:800;color:#C98A2B">P4<br><span style="font-weight:600;color:#64748B">19〜24ヶ月</span></div></div>
-  <div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:14px;margin-bottom:14px">
-    <div style="font-size:13px;font-weight:800;color:#2C7A6E;margin-bottom:10px">🎬 参考動画の管理</div>
-    <input id="eduTitle" placeholder="動画タイトル" style="width:100%;box-sizing:border-box;padding:10px;margin-bottom:8px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:13px">
-    <input id="eduUrl" placeholder="GoogleドライブのURL（共有リンク）" style="width:100%;box-sizing:border-box;padding:10px;margin-bottom:8px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:13px">
-    <div style="display:flex;gap:8px;align-items:center">
-      <select id="eduPhase" style="flex:1;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:13px;background:#fff"><option value="1">Phase1（基礎の型）</option><option value="2">Phase2（カラー&スタイリング）</option><option value="3">Phase3（パーマ&カット導入）</option><option value="4">Phase4（カットデビューへ）</option></select>
-      <button class="add-btn" style="flex:0 0 auto;white-space:nowrap" onclick="addEduVideo()">＋ 追加</button>
-    </div>
-    <div id="eduAdminList" style="margin-top:12px"></div>
-    <div style="font-size:10px;color:#94a3b8;margin-top:8px;line-height:1.7">※ Googleドライブ側で「リンクを知っている全員が閲覧可」に共有設定してください。URLは /preview 形式へ自動変換して保存します。</div>
-  </div>
   <div style="font-size:13px;font-weight:800;color:#1A4F47;margin:4px 0 10px">📋 教育の流れ（タップで開く）</div>
   <div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;margin-bottom:10px;overflow:hidden">
     <button onclick="toggleAcademy(1)" style="width:100%;text-align:left;background:#2C7A6E;color:#fff;border:none;padding:13px 16px;font-size:14px;font-weight:800;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px"><span>STEP 1 ・ Phase 1　基礎の型<br><span style="font-weight:600;font-size:11px;opacity:.9">期間目安：1〜3ヶ月</span></span><span id="acaArrow_1" style="font-size:12px">▼</span></button>
@@ -776,6 +765,17 @@
       ・デビュー後も半年間は店長が手厚く伴走します<br><br>
       <span style="font-size:12px;color:#888;">一人の成長をチーム全員で支える。それがSUNのスタイルです。</span>
     </div>
+  </div>
+  <div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:14px;margin-bottom:14px">
+    <div style="font-size:13px;font-weight:800;color:#2C7A6E;margin-bottom:10px">🎬 参考動画の管理</div>
+    <input id="eduTitle" placeholder="動画タイトル" style="width:100%;box-sizing:border-box;padding:10px;margin-bottom:8px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:13px">
+    <input id="eduUrl" placeholder="GoogleドライブのURL（共有リンク）" style="width:100%;box-sizing:border-box;padding:10px;margin-bottom:8px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:13px">
+    <div style="display:flex;gap:8px;align-items:center">
+      <select id="eduPhase" style="flex:1;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:13px;background:#fff"><option value="1">Phase1（基礎の型）</option><option value="2">Phase2（カラー&スタイリング）</option><option value="3">Phase3（パーマ&カット導入）</option><option value="4">Phase4（カットデビューへ）</option></select>
+      <button class="add-btn" style="flex:0 0 auto;white-space:nowrap" onclick="addEduVideo()">＋ 追加</button>
+    </div>
+    <div id="eduAdminList" style="margin-top:12px"></div>
+    <div style="font-size:10px;color:#94a3b8;margin-top:8px;line-height:1.7">※ Googleドライブ側で「リンクを知っている全員が閲覧可」に共有設定してください。URLは /preview 形式へ自動変換して保存します。</div>
   </div>
 </div>
 <script>
@@ -4356,7 +4356,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "10.4";
+var APP_VERSION = "10.5";
 
 function checkForUpdate(){
   try {
