@@ -1168,6 +1168,8 @@ function processSyncQueue(){
 }
 
 // クラウドから全データを取得して同期
+function mergeMasterById(local, cloud){ local=Array.isArray(local)?local:[]; cloud=Array.isArray(cloud)?cloud:[]; var seen={},out=[]; local.concat(cloud).forEach(function(x){ if(!x||x.id==null) return; var k=String(x.id); if(!seen[k]){ seen[k]=1; out.push(x); } }); return out; }
+function mergeMasterUnique(local, cloud){ local=Array.isArray(local)?local:[]; cloud=Array.isArray(cloud)?cloud:[]; var seen={},out=[]; local.concat(cloud).forEach(function(x){ var k=String(x); if(!seen[k]){ seen[k]=1; out.push(x); } }); return out; }
 function syncFromCloud(silent){
   if(!state.cloudUrl||!state.cloudKey){
     if(!silent) showToast('⚠️ クラウド未設定');
@@ -1186,19 +1188,13 @@ function syncFromCloud(silent){
       // マスタも同期（ローカルが多い場合は上書きしない）
       if(res.masters){
         // staff: ローカルとクラウドをマージ（重複排除）
-        if(res.masters.staff && res.masters.staff.length > (state.staff||[]).length){
-          state.staff = res.masters.staff;
-        }
-        if(res.masters.mediaList && res.masters.mediaList.length > (state.mediaList||[]).length){
-          state.mediaList = res.masters.mediaList;
-        }
+        // ID/名前でマージ（どの端末の追加も全端末へ反映。ローカル編集は保持）
+        if(res.masters.staff) state.staff = mergeMasterUnique(state.staff, res.masters.staff);
+        if(res.masters.mediaList) state.mediaList = mergeMasterUnique(state.mediaList, res.masters.mediaList);
         // 支払い方法は5種固定のためクラウドからは同期しない
-        if(res.masters.menus && res.masters.menus.length > (state.menus||[]).length){
-          state.menus = res.masters.menus;
-        }
-        if(res.masters.products && res.masters.products.length > (state.products||[]).length){
-          state.products = res.masters.products;
-        }
+        if(res.masters.menus) state.menus = mergeMasterById(state.menus, res.masters.menus);
+        if(res.masters.products) state.products = mergeMasterById(state.products, res.masters.products);
+        if(res.masters.productBrands) state.productBrands = mergeMasterUnique(state.productBrands, res.masters.productBrands);
         if(res.masters.eduVideos && res.masters.eduVideos.length >= (state.eduVideos||[]).length){ state.eduVideos = res.masters.eduVideos; }
         if(typeof renderAcademyVideos==='function'){ try{ renderAcademyVideos(); if(typeof renderEduAdmin==='function') renderEduAdmin(); }catch(e){} }
         if(res.masters.expenses){ state.expenses = Object.assign({}, res.masters.expenses, state.expenses||{}); }
@@ -3889,7 +3885,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "11.2";
+var APP_VERSION = "11.3";
 
 function checkForUpdate(){
   try {
