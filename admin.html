@@ -1073,6 +1073,7 @@ var state = {
   pnlPassword:'sun2026', pnlAuthenticated:false,
   // 固定費（P&L用）
   fixedCosts:{},
+  expenses:{}, staffTypes:{},
   // クラウド設定
   cloudUrl:'https://script.google.com/macros/s/AKfycbytWfE31hbXzNNdPbx2NkwgIMudBCslNWJIP7LIfcvMt8hfg-FvB3VUZD73VHsKFHYi/exec', cloudKey:'sun-secret-2026-ishigami-abc', lastSync:0,
 };
@@ -1185,6 +1186,8 @@ function syncFromCloud(silent){
         if(res.masters.products && res.masters.products.length > (state.products||[]).length){
           state.products = res.masters.products;
         }
+        if(res.masters.expenses){ state.expenses = Object.assign({}, res.masters.expenses, state.expenses||{}); }
+        if(res.masters.staffTypes){ state.staffTypes = Object.assign({}, res.masters.staffTypes, state.staffTypes||{}); }
       }
       saveLocal();
       renderAll();
@@ -1246,7 +1249,9 @@ function saveMastersToCloud(){
       productBrands: state.productBrands || [],
       productSubCategories: state.productSubCategories || [],
       goals: state.goals || {},
-      tickets: state.tickets || {}
+      tickets: state.tickets || {},
+      expenses: state.expenses || {},
+      staffTypes: state.staffTypes || {}
     }}, function(){});
   } catch(e){}
 }
@@ -2834,6 +2839,219 @@ function setPnlCustomMonth(val){
   save(); renderPnlReport();
 }
 
+/* ===== P&L 人件費（自動計算）＋経費＋損益サマリー ===== */
+var PNL_BASE=254000; // 基本給213,000+定額残業31,000+交通費10,000
+var PNL_POST_MANAGER=100000, PNL_POST_SUB=50000;
+var PNL_AXA=30000;   // アクサ積立（損金不算入：参考のみ）
+var PNL_EXP=[
+  {k:'家賃', def:0, manual:true, note:'毎月固定（手入力）'},
+  {k:'水道光熱費', def:89130, note:'年1,069,558の月割'},
+  {k:'材料費', def:904389, note:'年10,852,666の月割'},
+  {k:'消耗品費', def:201680, note:'年2,420,165の月割'},
+  {k:'減価償却費', def:163156, note:'年1,957,866の月割'},
+  {k:'広告費', def:0, manual:true, note:'HotPepper等（手入力）'},
+  {k:'その他経費', def:0, manual:true, note:'自由入力'}
+];
+var PNL_SPA_KW=['トリートメント','ヘッドスパ','炭酸']; // アシスタント特例メニュー
+function isSpaMenu(name){ name=name||''; for(var i=0;i<PNL_SPA_KW.length;i++){ if(name.indexOf(PNL_SPA_KW[i])>=0) return true; } return false; }
+function staffPostAllowance(name){ name=name||''; if(name.indexOf('副店長')>=0) return PNL_POST_SUB; if(name.indexOf('店長')>=0) return PNL_POST_MANAGER; return 0; }
+function staffPostLabel(name){ name=name||''; if(name.indexOf('副店長')>=0) return '副店長'; if(name.indexOf('店長')>=0) return '店長'; if(name.indexOf('代表')>=0) return '代表'; return ''; }
+function getStaffType(name){
+  if(state.staffTypes && state.staffTypes[name]) return state.staffTypes[name];
+  return (String(name).indexOf('代表')>=0)?'excluded':'stylist';
+}
+function setStaffType(name,val){ if(!state.staffTypes) state.staffTypes={}; state.staffTypes[name]=val; if(typeof save==='function') save(); renderPnlReport(); }
+// 技術歩合（スタイリスト：累進）。base は技術売上(税込)
+function stylistComm(s){
+  s=Math.max(0,s); var c=0, rem=s;
+  var br=[[500000,0.135],[500000,0.15],[500000,0.30],[500000,0.35],[1000000,0.40]];
+  for(var i=0;i<br.length;i++){ if(rem<=0) break; var amt=Math.min(rem,br[i][0]); c+=amt*br[i][1]; rem-=amt; }
+  if(rem>0) c+=rem*0.45; // 3,000,000超は45%
+  return Math.round(c);
+}
+// 物販歩合（全スタッフ：物販利益ベース）
+function prodComm(p){ if(p<=0) return 0; var r=p>=80000?0.40:(p>=50000?0.35:(p>=30000?0.30:0.20)); return Math.round(p*r); }
+// 期間内のスタッフ別売上集計（技術売上税込・特例メニュー税込・物販利益）
+function pnlStaffAgg(filtered){
+  var per={};
+  function ens(n){ if(!per[n]) per[n]={tech:0,spa:0,prof:0}; return per[n]; }
+  for(var i=0;i<filtered.length;i++){
+    var r=filtered[i];
+    var ms=r.menus||[];
+    for(var j=0;j<ms.length;j++){ var m=ms[j]; var st=m.menuStaff||r.staff; var inc=menuLineInc(m); ens(st).tech+=inc; if(isSpaMenu(m.name)) ens(st).spa+=inc; }
+    var ps=r.products||[];
+    for(var k=0;k<ps.length;k++){ var p=ps[k]; var pst=p.productStaff||r.staff; ens(pst).prof+=prodLineProfit(p); }
+  }
+  return per;
+}
+// 人件費（全員分）を自動計算
+function pnlPayroll(filtered){
+  var agg=pnlStaffAgg(filtered);
+  var roster=state.staff||[];
+  var rows=[], total=0;
+  for(var i=0;i<roster.length;i++){
+    var name=roster[i]; var type=getStaffType(name);
+    var a=agg[name]||{tech:0,spa:0,prof:0};
+    if(type==='excluded'){ rows.push({name:name,type:type,excluded:true}); continue; }
+    var fixed=PNL_BASE;
+    var post=staffPostAllowance(name);
+    var tech=(type==='assistant')?Math.round(a.spa*0.20):stylistComm(a.tech);
+    var prod=prodComm(a.prof);
+    var sum=fixed+post+tech+prod;
+    total+=sum;
+    rows.push({name:name,type:type,fixed:fixed,post:post,tech:tech,prod:prod,sum:sum,techSales:a.tech,spaSales:a.spa,prodProfit:a.prof});
+  }
+  return {rows:rows,total:total};
+}
+// 月キー
+function pnlMonthKeys(){
+  var p=state.pnlPeriod, cm=state.pnlCustomMonth, now=new Date();
+  function key(y,m){ return y+'-'+String(m+1).padStart(2,'0'); }
+  if(p==='thisMonth'||p==='today') return {keys:[key(now.getFullYear(),now.getMonth())], single:true};
+  if(p==='lastMonth'){ var lm=now.getMonth()-1, ly=now.getFullYear(); if(lm<0){lm=11;ly--;} return {keys:[key(ly,lm)], single:true}; }
+  if(p==='custom'&&cm) return {keys:[cm], single:true};
+  if(p==='thisYear'||p==='lastYear'){ var yr=(p==='thisYear')?now.getFullYear():now.getFullYear()-1; var a=[]; for(var m=0;m<12;m++)a.push(key(yr,m)); return {keys:a, single:false}; }
+  return {keys:Object.keys(state.expenses||{}), single:false};
+}
+function pnlExpVal(monthKey,cat){
+  var e=(state.expenses||{})[monthKey];
+  if(e && e[cat.k]!=null) return Number(e[cat.k])||0;
+  return cat.def||0;
+}
+function pnlExpenseSum(keys){
+  var by={}, total=0;
+  for(var c=0;c<PNL_EXP.length;c++) by[PNL_EXP[c].k]=0;
+  for(var i=0;i<keys.length;i++){
+    for(var c2=0;c2<PNL_EXP.length;c2++){ var v=pnlExpVal(keys[i],PNL_EXP[c2]); by[PNL_EXP[c2].k]+=v; total+=v; }
+  }
+  return {by:by,total:total};
+}
+function pnlLiveTotal(){
+  var t=0; for(var c=0;c<PNL_EXP.length;c++){ var el=document.getElementById('pnlExp_'+c); if(el) t+=Number(el.value||0); }
+  var o=document.getElementById('pnlExpTotalLive'); if(o) o.textContent='¥'+num(t);
+}
+function saveExpenses(monthKey){
+  if(!state.expenses) state.expenses={};
+  var obj={};
+  for(var c=0;c<PNL_EXP.length;c++){ var el=document.getElementById('pnlExp_'+c); obj[PNL_EXP[c].k]=el?Math.max(0,Math.round(Number(el.value||0))):(PNL_EXP[c].def||0); }
+  obj.updatedAt=new Date().toISOString();
+  state.expenses[monthKey]=obj;
+  if(typeof save==='function') save();
+  renderPnlReport();
+  showToast('💾 '+monthKey+' の経費を保存しました');
+}
+function copyLastMonthExpenses(monthKey){
+  var parts=monthKey.split('-'); var y=parseInt(parts[0]), m=parseInt(parts[1]);
+  m--; if(m<1){ m=12; y--; }
+  var prev=y+'-'+String(m).padStart(2,'0');
+  var pe=(state.expenses||{})[prev];
+  if(!pe){ showToast('⚠️ '+prev+' の経費データがありません'); return; }
+  for(var c=0;c<PNL_EXP.length;c++){ var el=document.getElementById('pnlExp_'+c); if(el) el.value=Number(pe[PNL_EXP[c].k]||0)||''; }
+  pnlLiveTotal();
+  showToast('📋 '+prev+' の経費をコピー（保存を押してください）');
+}
+// 人件費＋経費＋損益サマリー＋ビジュアル のHTML
+function pnlExtraHtml(filtered,totalSell,prodCost,feeAmount){
+  var html='';
+  var pay=pnlPayroll(filtered);
+  var laborTotal=pay.total;
+  var laborRate=totalSell>0?(laborTotal/totalSell*100):0;
+  // 人件費（自動計算）
+  html+='<div class="pnl-section">';
+  html+='<div class="pnl-section-title">👥 人件費（自動計算）</div>';
+  for(var i=0;i<pay.rows.length;i++){
+    var rw=pay.rows[i];
+    var sel='<select onchange="setStaffType(\''+rw.name+'\',this.value)" style="font-size:11px;padding:3px 6px;border:1.5px solid #C8E0DC;border-radius:7px;background:#fff;color:#2C7A6E;font-weight:700">'
+      +'<option value="stylist"'+(rw.type==='stylist'?' selected':'')+'>スタイリスト</option>'
+      +'<option value="assistant"'+(rw.type==='assistant'?' selected':'')+'>アシスタント</option>'
+      +'<option value="excluded"'+(rw.type==='excluded'?' selected':'')+'>対象外</option></select>';
+    html+='<div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px;margin-bottom:8px">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:'+(rw.excluded?'0':'6px')+'"><div style="font-weight:700;font-size:13px;color:#1A4F47">'+staffBadge(rw.name)+'</div>'+sel+'</div>';
+    if(!rw.excluded){
+      var techLabel=(rw.type==='assistant')?'技術歩合（特例20%）':'技術歩合（累進）';
+      html+='<div style="display:grid;grid-template-columns:1fr auto;gap:3px 10px;font-size:12px;color:#475569">';
+      html+='<span>固定給</span><span style="text-align:right;font-family:DM Sans,sans-serif">¥'+num(rw.fixed)+'</span>';
+      html+='<span>役職手当'+(staffPostLabel(rw.name)?'（'+staffPostLabel(rw.name)+'）':'')+'</span><span style="text-align:right;font-family:DM Sans,sans-serif">¥'+num(rw.post)+'</span>';
+      html+='<span>'+techLabel+'</span><span style="text-align:right;font-family:DM Sans,sans-serif">¥'+num(rw.tech)+'</span>';
+      html+='<span>物販歩合</span><span style="text-align:right;font-family:DM Sans,sans-serif">¥'+num(rw.prod)+'</span>';
+      html+='</div>';
+      html+='<div style="display:flex;justify-content:space-between;border-top:1px solid #E2E8F0;margin-top:6px;padding-top:6px;font-weight:700;color:#2C7A6E"><span>合計</span><span style="font-family:DM Sans,sans-serif">¥'+num(rw.sum)+'</span></div>';
+      html+='<div style="font-size:10px;color:#94a3b8;margin-top:4px">技術売上(税込)¥'+num(rw.techSales)+(rw.type==='assistant'?'（特例¥'+num(rw.spaSales)+'）':'')+' / 物販利益¥'+num(rw.prodProfit)+'</div>';
+    }
+    html+='</div>';
+  }
+  html+='<div class="pnl-row total"><div class="pnl-label">人件費合計</div><div class="pnl-value">¥'+num(laborTotal)+'</div></div>';
+  html+='<div class="pnl-row"><div class="pnl-label pnl-sub">　人件費率</div><div class="pnl-value pnl-sub">'+(Math.round(laborRate*10)/10)+'%</div></div>';
+  html+='</div>';
+
+  // その他経費
+  var mk=pnlMonthKeys();
+  var single=mk.single && mk.keys.length===1;
+  var sum=pnlExpenseSum(mk.keys);
+  var expTotal=sum.total;
+  var axaTotal=PNL_AXA*mk.keys.length;
+  html+='<div class="pnl-section">';
+  html+='<div class="pnl-section-title">🧾 その他経費</div>';
+  if(single){
+    var monthKey=mk.keys[0]; var lp=monthKey.split('-'); var mlabel=lp[0]+'年'+parseInt(lp[1])+'月';
+    for(var c=0;c<PNL_EXP.length;c++){
+      var cat=PNL_EXP[c]; var val=pnlExpVal(monthKey,cat);
+      html+='<div class="pnl-row" style="align-items:center">';
+      html+='<div class="pnl-label">'+cat.k+'<span style="font-size:10px;color:#94a3b8;margin-left:6px">'+cat.note+'</span></div>';
+      html+='<div style="display:flex;align-items:center;gap:4px">¥<input type="number" inputmode="numeric" id="pnlExp_'+c+'" value="'+(val||'')+'" placeholder="0" oninput="pnlLiveTotal()" style="width:104px;padding:6px 8px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:13px;text-align:right;font-family:DM Sans,sans-serif"></div>';
+      html+='</div>';
+    }
+    html+='<div class="pnl-row total"><div class="pnl-label">その他経費合計</div><div class="pnl-value" id="pnlExpTotalLive">¥'+num(expTotal)+'</div></div>';
+    html+='<div style="display:flex;gap:8px;margin-top:12px">';
+    html+='<button class="add-btn" style="flex:1" onclick="saveExpenses(\''+monthKey+'\')">💾 保存</button>';
+    html+='<button class="filter-btn" style="white-space:nowrap" onclick="copyLastMonthExpenses(\''+monthKey+'\')">📋 前月からコピー</button>';
+    html+='</div>';
+    html+='<div style="font-size:10px;color:#94a3b8;margin-top:8px;text-align:center">'+mlabel+'の経費として保存（端末・クラウドに保持）。未保存の月はデフォルト月割り値を表示中。</div>';
+  } else {
+    html+='<div style="font-size:12px;color:#94a3b8;padding:6px 0;line-height:1.7">複数月の合計（未保存月はデフォルト月割り値）。編集するには「今月／先月」または月を1つ選んでください。</div>';
+    for(var c3=0;c3<PNL_EXP.length;c3++){ var cat3=PNL_EXP[c3]; html+='<div class="pnl-row"><div class="pnl-label">'+cat3.k+'</div><div class="pnl-value">¥'+num(sum.by[cat3.k])+'</div></div>'; }
+    html+='<div class="pnl-row total"><div class="pnl-label">その他経費合計</div><div class="pnl-value">¥'+num(expTotal)+'</div></div>';
+  }
+  html+='<div class="pnl-row"><div class="pnl-label pnl-sub">［参考］アクサ積立（損金不算入・計算対象外）</div><div class="pnl-value pnl-sub">¥'+num(axaTotal)+'</div></div>';
+  html+='</div>';
+
+  // 損益サマリー
+  var grossSpec=totalSell-prodCost;
+  var operating=grossSpec-laborTotal-expTotal-feeAmount;
+  var margin=totalSell>0?(operating/totalSell*100):0;
+  var mColor=margin>=20?'#27AE60':(margin>=10?'#D4A843':'#E05555');
+  var mr=Math.round(margin*10)/10;
+  html+='<div class="pnl-section">';
+  html+='<div class="pnl-section-title">📊 損益サマリー</div>';
+  html+='<div class="pnl-row"><div class="pnl-label">売上合計（税込）</div><div class="pnl-value">¥'+num(totalSell)+'</div></div>';
+  html+='<div class="pnl-row loss"><div class="pnl-label">物販原価</div><div class="pnl-value">−¥'+num(prodCost)+'</div></div>';
+  html+='<div class="pnl-row total"><div class="pnl-label">粗利</div><div class="pnl-value">¥'+num(grossSpec)+'</div></div>';
+  html+='<div class="pnl-row loss"><div class="pnl-label">人件費合計</div><div class="pnl-value">−¥'+num(laborTotal)+'</div></div>';
+  html+='<div class="pnl-row loss"><div class="pnl-label">その他経費合計</div><div class="pnl-value">−¥'+num(expTotal)+'</div></div>';
+  html+='<div class="pnl-row loss"><div class="pnl-label">決済手数料（自動）</div><div class="pnl-value">−¥'+num(feeAmount)+'</div></div>';
+  html+='<div class="pnl-row total"><div class="pnl-label">営業利益</div><div class="pnl-value" style="color:'+(operating>=0?'#27AE60':'#E05555')+'">¥'+num(operating)+'</div></div>';
+  html+='<div class="pnl-row"><div class="pnl-label">利益率</div><div class="pnl-value" style="color:'+mColor+';font-weight:700">'+mr+'%</div></div>';
+  html+='<div class="pnl-row"><div class="pnl-label">人件費率</div><div class="pnl-value">'+(Math.round(laborRate*10)/10)+'%</div></div>';
+  html+='</div>';
+
+  // ビジュアル
+  var costTotal=prodCost+laborTotal+expTotal+feeAmount;
+  var maxV=Math.max(totalSell,costTotal,Math.abs(operating),1);
+  function bar(label,val,color){
+    var w=Math.max(0,Math.min(100,val/maxV*100));
+    return '<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="color:#475569">'+label+'</span><span style="font-weight:700;color:'+color+'">¥'+num(val)+'</span></div><div style="height:14px;background:#F1F5F9;border-radius:7px;overflow:hidden"><div style="height:100%;width:'+w+'%;background:'+color+';border-radius:7px"></div></div></div>';
+  }
+  html+='<div class="pnl-section">';
+  html+='<div class="pnl-section-title">📉 ビジュアル</div>';
+  html+=bar('売上合計', totalSell, '#4DB8B2');
+  html+=bar('人件費', laborTotal, '#7C9CF0');
+  html+=bar('その他経費＋原価＋手数料', prodCost+expTotal+feeAmount, '#E05555');
+  html+=bar('営業利益', Math.max(operating,0), mColor);
+  html+='<div style="text-align:center;margin-top:6px;padding:14px;border-radius:12px;background:'+mColor+'15"><div style="font-size:11px;color:#64748b;letter-spacing:1px">営業利益率</div><div style="font-size:30px;font-weight:800;color:'+mColor+'">'+mr+'%</div><div style="font-size:11px;color:#94a3b8">'+(margin>=20?'優良（20%以上）':(margin>=10?'標準（10〜20%）':'要改善（10%未満）'))+'　／　人件費率 '+(Math.round(laborRate*10)/10)+'%</div></div>';
+  html+='</div>';
+  return html;
+}
+
 function renderPnlReport(){
   var period=state.pnlPeriod, customMonth=state.pnlCustomMonth;
   var filtered=getFilteredRecords(period, customMonth, '');
@@ -2906,6 +3124,9 @@ function renderPnlReport(){
   html+='<div style="padding:16px 16px 0"><div class="pnl-section-title">💰 売上総利益（Gross Profit）</div></div>';
   html+='<div class="pnl-row profit"><div class="pnl-label">差引き</div><div class="pnl-value">¥'+num(grossProfit)+'</div></div>';
   html+='</div>';
+
+  // 人件費（自動）＋その他経費＋損益サマリー＋ビジュアル
+  html+=pnlExtraHtml(filtered,totalSell,prodCost,feeAmount);
 
   // 物販利益（内訳）
   html+='<div class="pnl-section">';
@@ -3551,7 +3772,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "9.8";
+var APP_VERSION = "9.9";
 
 function checkForUpdate(){
   try {
