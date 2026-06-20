@@ -313,6 +313,7 @@
 <!-- ===== 記録 ===== -->
 <div class="page" id="page-records">
   <button onclick="syncFromCloud()" style="width:100%;padding:11px;margin-bottom:10px;background:#3DA892;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">🔄 同期して最新にする</button>
+  <button onclick="pushDeletionsToCloud()" style="width:100%;padding:9px;margin-bottom:10px;background:#fff;color:#E05555;border:1.5px solid #E05555;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer">🧹 この端末で削除した記録を全端末に反映</button>
   <div id="salesTrend" style="margin-bottom:10px"></div>
   <div class="section-title">TODAY</div>
   <div id="todayStats" class="dash-grid"></div>
@@ -2851,6 +2852,19 @@ function renderEduAdmin(){
   el.innerHTML=s;
 }
 
+function pushDeletionsToCloud(){
+  if(!state.cloudUrl||!state.cloudKey){ showToast('⚠️ クラウド未設定'); return; }
+  var ids=(state.deletedIds||[]).slice();
+  if(!ids.length){ showToast('この端末に削除待ちはありません'); return; }
+  if(!confirm('この端末で削除した '+ids.length+' 件を、クラウド（全端末）からも削除します。\nよろしいですか？')) return;
+  showToast('🧹 クラウドに反映中…('+ids.length+'件)');
+  var done=0,total=ids.length;
+  for(var i=0;i<ids.length;i++){ (function(id){
+    try{ callCloud('deleteRecord',{recordId:id},function(res){ done++; if(done>=total){ showToast('✅ 反映完了。最新に同期します'); setTimeout(function(){ syncFromCloud(); },700); } }); }
+    catch(e){ done++; if(done>=total){ setTimeout(function(){ syncFromCloud(); },700); } }
+  })(ids[i]); }
+}
+
 function switchTab(tab){
   var pages=document.querySelectorAll('.page');
   for(var i=0;i<pages.length;i++) pages[i].classList.remove('active');
@@ -3872,7 +3886,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "10.6";
+var APP_VERSION = "10.7";
 
 function checkForUpdate(){
   try {
