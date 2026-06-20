@@ -2843,12 +2843,14 @@ function setPnlCustomMonth(val){
 var PNL_BASE=254000; // 基本給213,000+定額残業31,000+交通費10,000
 var PNL_POST_MANAGER=100000, PNL_POST_SUB=50000;
 var PNL_AXA=30000;   // アクサ積立（損金不算入：参考のみ）
+var PNL_OFFICER_PAY=1600000; // 石上（代表）役員報酬
 var PNL_EXP=[
-  {k:'家賃', def:0, manual:true, note:'毎月固定（手入力）'},
+  {k:'家賃', def:726000, note:'本館605,000＋別館374,000−転貸253,000'},
   {k:'水道光熱費', def:89130, note:'年1,069,558の月割'},
   {k:'材料費', def:904389, note:'年10,852,666の月割'},
   {k:'消耗品費', def:201680, note:'年2,420,165の月割'},
   {k:'減価償却費', def:163156, note:'年1,957,866の月割'},
+  {k:'業務委託費', def:0, manual:true, note:'ネイリスト等／請求書到着後に入力'},
   {k:'広告費', def:0, manual:true, note:'HotPepper等（手入力）'},
   {k:'その他経費', def:0, manual:true, note:'自由入力'}
 ];
@@ -2859,7 +2861,7 @@ function staffPostLabel(name){ name=name||''; if(name.indexOf('副店長')>=0) r
 function getStaffType(name){
   if(state.staffTypes && state.staffTypes[name]) return state.staffTypes[name];
   var n=String(name);
-  if(n.indexOf('代表')>=0) return 'excluded';
+  if(n.indexOf('代表')>=0) return 'officer'; // 石上＝役員報酬
   if(n.indexOf('梅田')>=0 || n.indexOf('カノン')>=0) return 'assistant';
   return 'stylist'; // 花岡・東・堀井・林 ほか
 }
@@ -2896,6 +2898,7 @@ function pnlPayroll(filtered){
     var name=roster[i]; var type=getStaffType(name);
     var a=agg[name]||{tech:0,spa:0,prof:0};
     if(type==='excluded'){ rows.push({name:name,type:type,excluded:true}); continue; }
+    if(type==='officer'){ var op=PNL_OFFICER_PAY; total+=op; rows.push({name:name,type:type,officer:true,sum:op}); continue; }
     var fixed=PNL_BASE;
     var post=staffPostAllowance(name);
     var tech=(type==='assistant')?Math.round(a.spa*0.20):stylistComm(a.tech);
@@ -2967,10 +2970,15 @@ function pnlExtraHtml(filtered,totalSell,prodCost,feeAmount){
     var sel='<select onchange="setStaffType(\''+rw.name+'\',this.value)" style="font-size:11px;padding:3px 6px;border:1.5px solid #C8E0DC;border-radius:7px;background:#fff;color:#2C7A6E;font-weight:700">'
       +'<option value="stylist"'+(rw.type==='stylist'?' selected':'')+'>スタイリスト</option>'
       +'<option value="assistant"'+(rw.type==='assistant'?' selected':'')+'>アシスタント</option>'
+      +'<option value="officer"'+(rw.type==='officer'?' selected':'')+'>役員</option>'
       +'<option value="excluded"'+(rw.type==='excluded'?' selected':'')+'>対象外</option></select>';
     html+='<div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px;margin-bottom:8px">';
-    html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:'+(rw.excluded?'0':'6px')+'"><div style="font-weight:700;font-size:13px;color:#1A4F47">'+staffBadge(rw.name)+'</div>'+sel+'</div>';
-    if(!rw.excluded){
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:'+((rw.excluded)?'0':'6px')+'"><div style="font-weight:700;font-size:13px;color:#1A4F47">'+staffBadge(rw.name)+'</div>'+sel+'</div>';
+    if(rw.officer){
+      html+='<div style="display:flex;justify-content:space-between;font-size:12px;color:#475569"><span>役員報酬</span><span style="text-align:right;font-family:DM Sans,sans-serif">¥'+num(rw.sum)+'</span></div>';
+      html+='<div style="display:flex;justify-content:space-between;border-top:1px solid #E2E8F0;margin-top:6px;padding-top:6px;font-weight:700;color:#2C7A6E"><span>合計</span><span style="font-family:DM Sans,sans-serif">¥'+num(rw.sum)+'</span></div>';
+      html+='<div style="font-size:10px;color:#94a3b8;margin-top:4px">役員報酬（固定）／歩合・役職手当は対象外</div>';
+    } else if(!rw.excluded){
       var techLabel=(rw.type==='assistant')?'技術歩合（特例20%）':'技術歩合（累進）';
       html+='<div style="display:grid;grid-template-columns:1fr auto;gap:3px 10px;font-size:12px;color:#475569">';
       html+='<span>固定給</span><span style="text-align:right;font-family:DM Sans,sans-serif">¥'+num(rw.fixed)+'</span>';
@@ -3775,7 +3783,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "10.0";
+var APP_VERSION = "10.1";
 
 function checkForUpdate(){
   try {
