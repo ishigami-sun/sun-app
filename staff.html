@@ -1642,7 +1642,6 @@ function updateMenuPrice(i,val){
   if(state.selectedMenus[i]){
     var v=parseInt(val)||0;
     state.selectedMenus[i].inputPrice=v;
-    state.selectedMenus[i].taxMode=state.taxMode;
     state.selectedMenus[i].basePrice=v-(state.selectedMenus[i].extraAmount||0);
     // 税込表示も更新
     var noteEl = document.getElementById('taxNote_'+i);
@@ -4371,7 +4370,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "11.0";
+var APP_VERSION = "11.1";
 
 function checkForUpdate(){
   try {
