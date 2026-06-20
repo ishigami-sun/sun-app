@@ -1,5 +1,5 @@
 {
-  "version": "10.9",
+  "version": "11.0",
   "releaseDate": "2026-06-20",
-  "notes": "メニューの税抜/税込をメニュー名で自動判定（HotPepper=税込/その他=税抜）。admin/staffの初期モード不一致を統一。税切替ボタンの表示を分かりやすく改善。"
+  "notes": "admin側の税計算がtaxModeを無視し常に×1.1していた不具合を修正（menuInc/menuExc追加・menu計算をtaxMode尊重に統一）。過去記録の表示・集計が正しくなる（データ自体は変更なし）。"
 }

@@ -1423,6 +1423,8 @@ function init(){
 function h(str){ return str?String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):''; }
 function num(n){ return Number(n||0).toLocaleString('ja-JP'); }
 function toTaxInc(price){ return Math.round(price * 1.1); }  // 税抜→税込変換
+function menuInc(m){ var p=m.inputPrice||0; return (m.taxMode==='inc') ? Math.round(p) : Math.round(p*1.1); } // taxMode尊重
+function menuExc(m){ var p=m.inputPrice||0; return (m.taxMode==='inc') ? Math.round(p/1.1) : Math.round(p); }
 function defaultTaxMode(n){ return /HOT|ホットペッパー/i.test(n||'') ? 'inc' : 'exc'; } // HOT=税込 / その他=税抜（自動判定）
 
 function renderAll(){
@@ -1587,9 +1589,9 @@ function renderSelectedMenuEdit(){
   var html='';
   for(var i=0;i<state.selectedMenus.length;i++){
     var m=state.selectedMenus[i];
-    var incAmt=toTaxInc(m.inputPrice);
+    var incAmt=menuInc(m);
     var taxNote='<span id="taxNote_'+i+'" style="color:#2C7A6E;margin-left:8px;font-size:12px;font-weight:600">→税込¥'+num(incAmt)+'</span>';
-    var discInfo=m.discountPct>0?'<div id="discInfo_'+i+'" style="font-size:11px;color:#C2185B;font-weight:700;margin-top:4px">割引：−'+m.discountPct+'%OFF（−¥'+num(Math.round(toTaxInc(m.inputPrice)*m.discountPct/100)*m.qty)+'）</div>':'<div id="discInfo_'+i+'" style="display:none"></div>';
+    var discInfo=m.discountPct>0?'<div id="discInfo_'+i+'" style="font-size:11px;color:#C2185B;font-weight:700;margin-top:4px">割引：−'+m.discountPct+'%OFF（−¥'+num(Math.round(menuInc(m)*m.discountPct/100)*m.qty)+'）</div>':'<div id="discInfo_'+i+'" style="display:none"></div>';
     var extraInfo=m.extraAmount>0?'<div style="font-size:11px;color:#D4A843;font-weight:700;margin-top:4px">追加料金：＋¥'+num(m.extraAmount)+'</div>':'';
     html+='<div class="selected-item">';
     html+='<div class="selected-item-top"><div class="selected-item-name">'+h(m.name)+(m.qty>1?' × '+m.qty:'')+'</div><button class="remove-btn" onclick="removeSelectedMenu('+i+')">✕</button></div>';
@@ -1626,7 +1628,7 @@ function renderSelectedMenuEdit(){
     html+='</div>';
     var pointInfo=m.pointDiscount>0?'<div id="pointInfo_'+i+'" style="font-size:11px;color:#D4A843;font-weight:700;margin-top:4px">ポイント割引：−¥'+num(m.pointDiscount)+'</div>':'<div id="pointInfo_'+i+'" style="display:none"></div>';
     // 最終金額の計算（税込ベース）
-    var incPrice = toTaxInc(m.inputPrice);
+    var incPrice = menuInc(m);
     var baseIncAmt = incPrice * m.qty;
     var extraIncAmt = (m.extraAmount || 0);
     // 割引額は税込ベース
@@ -1659,7 +1661,7 @@ function renderMenuStaffGrids(){
 }
 function updateMenuStaff(i,val){ if(state.selectedMenus[i]) state.selectedMenus[i].menuStaff=val; renderMenuStaffGrids(); renderSummary(); }
 // メニュー1行の税込金額（担当者按分用・割引/ポイント反映）
-function menuLineInc(m){ if(!m) return 0; var inc=(typeof toTaxInc==='function')?toTaxInc(m.inputPrice||0):Math.round((m.inputPrice||0)*1.1); var amt=inc*(m.qty||1); if(m.discountPct>0) amt-=Math.round(inc*m.discountPct/100)*(m.qty||1); if(m.pointDiscount) amt-=(m.pointDiscount||0); return amt; }
+function menuLineInc(m){ if(!m) return 0; var inc=menuInc(m); var amt=inc*(m.qty||1); if(m.discountPct>0) amt-=Math.round(inc*m.discountPct/100)*(m.qty||1); if(m.pointDiscount) amt-=(m.pointDiscount||0); return amt; }
 function removeSelectedMenu(i){ state.selectedMenus.splice(i,1); renderMenuList(); renderSelectedMenuEdit(); renderSummary(); }
 function updateMenuPrice(i,val){
   if(state.selectedMenus[i]){
@@ -1725,7 +1727,7 @@ function setPointDiscount(i,val){
 function updateFinalAmount(i){
   var m = state.selectedMenus[i];
   if(!m) return;
-  var incPrice = toTaxInc(m.inputPrice);
+  var incPrice = menuInc(m);
   var baseIncAmt = incPrice * m.qty;
   // 税込表示も更新
   var noteEl = document.getElementById('taxNote_'+i);
@@ -2001,7 +2003,7 @@ function renderSummary(){
   var menuIncTotal=0;
   for(var i=0;i<state.selectedMenus.length;i++){
     var m = state.selectedMenus[i];
-    var incPrice = toTaxInc(m.inputPrice);  // 税込価格
+    var incPrice = menuInc(m);  // 税込価格
     menuIncTotal += incPrice * m.qty;
     // 割引%を引く（税込ベース）
     if(m.discountPct > 0){
@@ -2013,7 +2015,7 @@ function renderSummary(){
   var menuExcTotal=0;
   for(var i=0;i<state.selectedMenus.length;i++){
     var m = state.selectedMenus[i];
-    var incPrice = toTaxInc(m.inputPrice);
+    var incPrice = menuInc(m);
     menuExcTotal += m.inputPrice * m.qty;  // 入力が税抜なのでそのまま
     // 割引%を引く（税抜ベース）
     if(m.discountPct > 0){
@@ -2058,7 +2060,7 @@ function renderSummary(){
     var m = state.selectedMenus[i];
     if(m.discountPct && m.discountPct > 0){
       // 実際の控除（menuIncTotal）と同じ税込ベースで算出して表示を一致させる
-      var disc = Math.round(toTaxInc(m.inputPrice) * m.discountPct / 100) * m.qty;
+      var disc = Math.round(menuInc(m) * m.discountPct / 100) * m.qty;
       totalDiscount += disc;
     }
     if(m.pointDiscount && m.pointDiscount > 0){
@@ -2085,7 +2087,7 @@ function submitRecord(){
   var menuIncTotal=0;
   for(var i=0;i<state.selectedMenus.length;i++){
     var m = state.selectedMenus[i];
-    var incPrice = toTaxInc(m.inputPrice);  // 税込価格
+    var incPrice = menuInc(m);  // 税込価格
     menuIncTotal += incPrice * m.qty;
     // 割引%を引く（税込ベース）
     if(m.discountPct > 0){
@@ -2097,7 +2099,7 @@ function submitRecord(){
   var menuExcTotal=0;
   for(var i=0;i<state.selectedMenus.length;i++){
     var m = state.selectedMenus[i];
-    var incPrice = toTaxInc(m.inputPrice);
+    var incPrice = menuInc(m);
     menuExcTotal += m.inputPrice * m.qty;  // 入力が税抜なのでそのまま
     // 割引%を引く（税抜ベース）
     if(m.discountPct > 0){
@@ -3887,7 +3889,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "10.9";
+var APP_VERSION = "11.0";
 
 function checkForUpdate(){
   try {
