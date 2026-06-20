@@ -1423,6 +1423,7 @@ function init(){
 function h(str){ return str?String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):''; }
 function num(n){ return Number(n||0).toLocaleString('ja-JP'); }
 function toTaxInc(price){ return Math.round(price * 1.1); }  // 税抜→税込変換
+function defaultTaxMode(n){ return /HOT|ホットペッパー/i.test(n||'') ? 'inc' : 'exc'; } // HOT=税込 / その他=税抜（自動判定）
 
 function renderAll(){
   renderStaffButtons(); renderMediaButtons(); renderPaymentButtons();
@@ -1567,7 +1568,7 @@ function addMenuItem(id){
   var base=m.price;
   var ex=findById(state.selectedMenus,id);
   if(ex){ ex.qty++; }
-  else { state.selectedMenus.push({id:m.id,name:m.name,price:m.price,qty:1,inputPrice:base,taxMode:state.taxMode,extraAmount:0,discountPct:0,basePrice:base,menuStaff:state.selectedStaff||''}); }
+  else { state.selectedMenus.push({id:m.id,name:m.name,price:m.price,qty:1,inputPrice:base,taxMode:defaultTaxMode(m.name),extraAmount:0,discountPct:0,basePrice:base,menuStaff:state.selectedStaff||''}); }
   renderMenuList(); renderSelectedMenuEdit(); renderSummary();
 }
 function changeMenuQty(id,delta){
@@ -3886,7 +3887,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "10.8";
+var APP_VERSION = "10.9";
 
 function checkForUpdate(){
   try {
@@ -4280,7 +4281,7 @@ function et_pay(b){
 /* 編集ハンドラ（editBufを更新→再描画） */
 function editOpenPicker(t){ state.editPicker=t; renderInlineEditor(); }
 function editClosePicker(){ state.editPicker=null; renderInlineEditor(); }
-function editAddMenu(mid){ var m=null; for(var i=0;i<state.menus.length;i++) if(String(state.menus[i].id)===String(mid)){ m=state.menus[i]; break; } if(!m)return; if(!state.editBuf.menus) state.editBuf.menus=[]; state.editBuf.menus.push({id:m.id,name:m.name,price:m.price,qty:1,inputPrice:m.price,taxMode:'exc',extraAmount:0,discountPct:0,basePrice:m.price,menuStaff:state.editBuf.staff||''}); state.editPicker=null; renderInlineEditor(); }
+function editAddMenu(mid){ var m=null; for(var i=0;i<state.menus.length;i++) if(String(state.menus[i].id)===String(mid)){ m=state.menus[i]; break; } if(!m)return; if(!state.editBuf.menus) state.editBuf.menus=[]; state.editBuf.menus.push({id:m.id,name:m.name,price:m.price,qty:1,inputPrice:m.price,taxMode:defaultTaxMode(m.name),extraAmount:0,discountPct:0,basePrice:m.price,menuStaff:state.editBuf.staff||''}); state.editPicker=null; renderInlineEditor(); }
 function editRemoveMenu(i){ if(state.editBuf&&state.editBuf.menus){ state.editBuf.menus.splice(i,1); renderInlineEditor(); } }
 function editMenuQty(i,delta){ var m=state.editBuf&&state.editBuf.menus&&state.editBuf.menus[i]; if(!m)return; m.qty=(m.qty||1)+delta; if(m.qty<1)m.qty=1; renderInlineEditor(); }
 function editMenuDisc(i,p){ if(state.editBuf&&state.editBuf.menus&&state.editBuf.menus[i]){ state.editBuf.menus[i].discountPct=p; renderInlineEditor(); } }
