@@ -311,6 +311,7 @@
 
 <!-- ===== 記録 ===== -->
 <div class="page" id="page-records">
+  <button onclick="syncFromCloud()" style="width:100%;padding:11px;margin-bottom:10px;background:#3DA892;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">🔄 同期して最新にする</button>
   <div id="salesTrend" style="margin-bottom:10px"></div>
   <div class="section-title">TODAY</div>
   <div id="todayStats" class="dash-grid"></div>
@@ -394,7 +395,7 @@
       <div id="goalsEditList"></div>
     </div>
   </div>
-  <div class="page" id="page-admin"><div class="card" style="margin-bottom:14px"><button class="add-btn" style="width:100%;background:#E05555" onclick="logoutSession()">🔒 ログアウト</button><div style="font-size:11px;color:var(--text-light);margin-top:6px;text-align:center" id="sessionInfo"></div></div>
+  <div class="page" id="page-admin"><div class="card" style="margin-bottom:14px"><div class="section-title" style="margin:0 0 8px">☁️ クラウド同期</div><button class="add-btn" style="width:100%;background:#3DA892" onclick="syncFromCloud()">🔄 今すぐ同期する</button><div style="font-size:11px;color:var(--text-light);margin-top:6px;text-align:center">他の端末で入力した記録を最新にします</div></div><div class="card" style="margin-bottom:14px"><button class="add-btn" style="width:100%;background:#E05555" onclick="logoutSession()">🔒 ログアウト</button><div style="font-size:11px;color:var(--text-light);margin-top:6px;text-align:center" id="sessionInfo"></div></div>
   <div class="section-title">スタッフ管理</div>
   <div class="card">
     <div class="add-form-row"><div class="form-group"><label class="form-label">スタッフ名</label><input class="form-input" id="newStaff" placeholder="例：田中"></div><button class="add-btn" onclick="addStaff()">追加</button></div>
@@ -4356,7 +4357,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "10.5";
+var APP_VERSION = "10.6";
 
 function checkForUpdate(){
   try {
