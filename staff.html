@@ -3609,8 +3609,7 @@ function renderSpeedReport(){
     if(r.products && r.products.length){
       for(var j=0;j<r.products.length;j++){
         var p=r.products[j]; var ps=p.productStaff||r.staff; if(!ps) continue;
-        var qty=p.qty||1; var sell=(p.customSell!==undefined?p.customSell:p.sell)||0;
-        ensure(ps).prod+=sell*qty;
+        ensure(ps).prod+=(typeof prodLineSell==='function'?prodLineSell(p):(((p.customSell!==undefined?p.customSell:p.sell)||0)*(p.qty||1)));
       }
     }
   }
@@ -4371,7 +4370,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "10.7";
+var APP_VERSION = "10.8";
 
 function checkForUpdate(){
   try {
