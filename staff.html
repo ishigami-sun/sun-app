@@ -1376,6 +1376,7 @@ function init(){
 function h(str){ return str?String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):''; }
 function num(n){ return Number(n||0).toLocaleString('ja-JP'); }
 function toTaxInc(price){ return Math.round(price * 1.1); }  // 税抜→税込変換
+function defaultTaxMode(n){ return /HOT|ホットペッパー/i.test(n||'') ? 'inc' : 'exc'; } // HOT=税込 / その他=税抜（自動判定）
 // メニュー1行の税込/税抜を、その行の入力モード(taxMode)に応じて算出
 // taxMode==='inc' → inputPriceは税込 ／ それ以外 → inputPriceは税抜（既定）
 function menuInc(m){ var p=m.inputPrice||0; return (m.taxMode==='inc') ? Math.round(p) : Math.round(p*1.1); }
@@ -1536,7 +1537,7 @@ function findIdxById(arr,id){ for(var i=0;i<arr.length;i++) if(arr[i].id===id) r
 
 function addMenuItem(id){
   var m=findById(state.menus,id); if(!m) return;
-  var mode='exc'; // 既定は税抜入力（メニューごとに切替可）
+  var mode=defaultTaxMode(m.name); // HOT=税込/その他=税抜（自動判定）
   var base=m.price; // メニュー価格は「税抜」で保存されている（そのまま使用）
   var ex=findById(state.selectedMenus,id);
   if(ex){ ex.qty++; }
@@ -1569,7 +1570,7 @@ function renderSelectedMenuEdit(){
     html+='<div class="selected-item-top"><div class="selected-item-name">'+h(m.name)+(m.qty>1?' × '+m.qty:'')+'</div><button class="remove-btn" onclick="removeSelectedMenu('+i+')">✕</button></div>';
     html+='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0 4px"><span style="font-size:11px;color:#64748B;font-weight:700;align-self:center">担当：</span><span id="menuStaffGrid_'+i+'"></span></div>';
     html+='<div class="price-edit-wrap">';
-    html+='<button type="button" onclick="toggleMenuTax('+i+')" style="margin-right:6px;padding:4px 8px;border:1.5px solid #2C7A6E;background:'+(curMode==='inc'?'#2C7A6E':'#fff')+';color:'+(curMode==='inc'?'#fff':'#2C7A6E')+';border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">'+(curMode==='inc'?'税込入力':'税抜入力')+' ⇄</button>';
+    html+='<button type="button" onclick="toggleMenuTax('+i+')" style="margin-right:6px;padding:4px 8px;border:1.5px solid #2C7A6E;background:'+(curMode==='inc'?'#2C7A6E':'#fff')+';color:'+(curMode==='inc'?'#fff':'#2C7A6E')+';border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">いま'+(curMode==='inc'?'税込':'税抜')+'｜タップで'+(curMode==='inc'?'税抜':'税込')+'に切替</button>';
     html+='<span class="price-edit-label">'+(curMode==='inc'?'税込':'税抜')+'：¥</span>';
     html+='<input class="price-edit-input" type="number" value="'+m.inputPrice+'" oninput="updateMenuPrice('+i+',this.value)">'+taxNote+'</div>';
     html+='<div style="display:flex;gap:6px;flex-wrap:wrap"><span style="font-size:11px;color:#64748B;align-self:center">追加：</span>';
@@ -4370,7 +4371,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "10.8";
+var APP_VERSION = "10.9";
 
 function checkForUpdate(){
   try {
@@ -4851,7 +4852,7 @@ function et_pay(b){
 /* 編集ハンドラ（editBufを更新→再描画） */
 function editOpenPicker(t){ state.editPicker=t; renderInlineEditor(); }
 function editClosePicker(){ state.editPicker=null; renderInlineEditor(); }
-function editAddMenu(mid){ var m=null; for(var i=0;i<state.menus.length;i++) if(String(state.menus[i].id)===String(mid)){ m=state.menus[i]; break; } if(!m)return; if(!state.editBuf.menus) state.editBuf.menus=[]; state.editBuf.menus.push({id:m.id,name:m.name,price:m.price,qty:1,inputPrice:m.price,taxMode:'exc',extraAmount:0,discountPct:0,basePrice:m.price,menuStaff:state.editBuf.staff||''}); state.editPicker=null; renderInlineEditor(); }
+function editAddMenu(mid){ var m=null; for(var i=0;i<state.menus.length;i++) if(String(state.menus[i].id)===String(mid)){ m=state.menus[i]; break; } if(!m)return; if(!state.editBuf.menus) state.editBuf.menus=[]; state.editBuf.menus.push({id:m.id,name:m.name,price:m.price,qty:1,inputPrice:m.price,taxMode:defaultTaxMode(m.name),extraAmount:0,discountPct:0,basePrice:m.price,menuStaff:state.editBuf.staff||''}); state.editPicker=null; renderInlineEditor(); }
 function editRemoveMenu(i){ if(state.editBuf&&state.editBuf.menus){ state.editBuf.menus.splice(i,1); renderInlineEditor(); } }
 function editMenuQty(i,delta){ var m=state.editBuf&&state.editBuf.menus&&state.editBuf.menus[i]; if(!m)return; m.qty=(m.qty||1)+delta; if(m.qty<1)m.qty=1; renderInlineEditor(); }
 function editMenuDisc(i,p){ if(state.editBuf&&state.editBuf.menus&&state.editBuf.menus[i]){ state.editBuf.menus[i].discountPct=p; renderInlineEditor(); } }
