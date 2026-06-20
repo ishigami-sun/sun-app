@@ -1127,7 +1127,8 @@ function syncFromCloud(silent){
         if(res.masters.products && res.masters.products.length > (state.products||[]).length){
           state.products = res.masters.products;
         }
-        if(res.masters.eduVideos){ state.eduVideos = res.masters.eduVideos; }
+        if(res.masters.eduVideos && res.masters.eduVideos.length >= (state.eduVideos||[]).length){ state.eduVideos = res.masters.eduVideos; }
+        if(typeof renderAcademyVideos==='function'){ try{ renderAcademyVideos(); if(typeof renderEduAdmin==='function') renderEduAdmin(); }catch(e){} }
       }
       saveLocal();
       renderAll();
@@ -4310,7 +4311,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "10.2";
+var APP_VERSION = "10.3";
 
 function checkForUpdate(){
   try {
