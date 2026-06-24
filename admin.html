@@ -204,6 +204,7 @@
   .staff-badge-7{background:#E0F7FA;color:#006064;}
   ::-webkit-scrollbar{display:none;}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 </head>
 <body>
 <!-- ログイン無効 -->
@@ -216,6 +217,7 @@
     <button class="tab-btn active" onclick="switchTab('input')">📝 入力</button>
     <button class="tab-btn" onclick="switchTab('records')">📋 記録</button>
     <button class="tab-btn" onclick="switchTab('dashboard')">📊 物販</button>
+    <button class="tab-btn" onclick="switchTab('sales')">💹 売上</button>
     <button class="tab-btn" onclick="switchTab('pnl')">📈 P&L</button>
     <button class="tab-btn" onclick="switchTab('admin')">⚙️ 管理</button>
     <button class="tab-btn" onclick="switchTab('manual')">📖 マニュアル</button>
@@ -767,6 +769,104 @@
   </div>
 
 </div>
+<div class="page" id="page-sales">
+  <style>
+  #page-sales .sl-subtabs{display:flex;background:#4DB8B2;border-radius:10px;overflow:hidden;margin-bottom:12px}
+  #page-sales .sl-subtab{flex:1;padding:11px 4px;text-align:center;color:rgba(255,255,255,0.75);font-size:13px;font-weight:700;cursor:pointer;border-bottom:3px solid transparent}
+  #page-sales .sl-subtab.active{color:#fff;border-bottom:3px solid #fff}
+  #page-sales .sl-panel{display:none}
+  #page-sales .sl-panel.active{display:block}
+  #page-sales .sl-card{background:#fff;border-radius:10px;padding:14px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.08)}
+  #page-sales .sl-filter{display:flex;gap:8px;align-items:center}
+  #page-sales .sl-filter select{flex:1;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:13px;background:#fff}
+  #page-sales .sl-btn{background:#4DB8B2;color:#fff;border:none;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+  #page-sales .sl-chart-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  #page-sales .sl-ttl{font-size:14px;font-weight:800;color:#1A4F47}
+  #page-sales .sl-toggle{font-size:12px;color:#666;display:flex;align-items:center;gap:5px;cursor:pointer}
+  #page-sales .sl-sec{font-size:13px;font-weight:800;color:#333;margin-bottom:8px}
+  #page-sales .sl-tbl{width:100%;border-collapse:collapse;font-size:13px}
+  #page-sales .sl-tbl th{background:#f8f8f8;padding:8px 6px;text-align:right;font-size:12px;color:#666;border-bottom:1px solid #eee}
+  #page-sales .sl-tbl th:first-child{text-align:left}
+  #page-sales .sl-tbl td{padding:9px 6px;border-bottom:1px solid #f3f3f3;text-align:right}
+  #page-sales .sl-tbl td:first-child{text-align:left;font-weight:600;color:#333}
+  #page-sales .sl-tbl tr:last-child td{border-bottom:none}
+  #page-sales .sl-total td{font-weight:800;background:#f4fbfa;color:#1A4F47}
+  #page-sales .sl-inner{display:flex;gap:8px;margin-bottom:12px}
+  #page-sales .sl-itab{flex:1;padding:8px;text-align:center;border:1.5px solid #4DB8B2;border-radius:20px;font-size:13px;font-weight:700;color:#4DB8B2;cursor:pointer}
+  #page-sales .sl-itab.active{background:#4DB8B2;color:#fff}
+  #page-sales .sl-strow{display:flex;justify-content:space-between;align-items:center;padding:12px 2px;border-bottom:1px solid #f0f0f0;cursor:pointer}
+  #page-sales .sl-stname{font-size:14px;font-weight:800;color:#1A4F47}
+  #page-sales .sl-stsub{font-size:11px;color:#999;margin-top:2px}
+  #page-sales .sl-stamt{text-align:right}
+  #page-sales .sl-stamt .amt{font-size:15px;font-weight:800;color:#333}
+  #page-sales .sl-stamt .cnt{font-size:11px;color:#999}
+  #page-sales .sl-chev{color:#ccc;font-size:14px;margin-left:8px}
+  #page-sales .sl-stdetail{background:#fafafa;border-radius:8px;padding:6px 10px;margin:0 0 6px}
+  #page-sales .sl-detrow{display:flex;justify-content:space-between;font-size:12px;color:#555;padding:5px 0;border-bottom:1px dashed #eee}
+  #page-sales .sl-detrow:last-child{border-bottom:none}
+  #page-sales .sl-empty{text-align:center;color:#aaa;font-size:13px;padding:18px}
+  #page-sales .sl-periods{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto}
+  #page-sales .sl-ptab{padding:6px 14px;border:1px solid #ddd;border-radius:20px;font-size:12px;white-space:nowrap;cursor:pointer;background:#fff;color:#555}
+  #page-sales .sl-ptab.active{background:#4DB8B2;color:#fff;border-color:#4DB8B2}
+  #page-sales .sl-metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+  #page-sales .sl-mcard{background:#fff;border-radius:10px;padding:14px;box-shadow:0 1px 4px rgba(0,0,0,0.08)}
+  #page-sales .sl-mlabel{font-size:12px;color:#666;margin-bottom:6px}
+  #page-sales .sl-mval{font-size:21px;font-weight:800;color:#333}
+  #page-sales .sl-diff{font-size:11px;margin-top:5px}
+  #page-sales .sl-diff.up{color:#2680eb}
+  #page-sales .sl-diff.down{color:#e74c3c}
+  </style>
+  <div class="sl-subtabs">
+    <div class="sl-subtab active" id="slSub_daily" onclick="switchSalesSub('daily')">日別売上</div>
+    <div class="sl-subtab" id="slSub_product" onclick="switchSalesSub('product')">商品別売上</div>
+    <div class="sl-subtab" id="slSub_analysis" onclick="switchSalesSub('analysis')">分析</div>
+  </div>
+
+  <div class="sl-panel active" id="slPanel_daily">
+    <div class="sl-card">
+      <div class="sl-filter">
+        <select id="slGroupBy" onchange="state.salesGroupBy=this.value;renderSalesDaily()">
+          <option value="month">月別</option>
+          <option value="day">日別（今月）</option>
+          <option value="year">年別</option>
+        </select>
+        <select id="slYear" onchange="state.salesYear=parseInt(this.value);renderSalesDaily()"></select>
+        <button class="sl-btn" onclick="renderSalesDaily()">表示する</button>
+      </div>
+    </div>
+    <div class="sl-card">
+      <div class="sl-chart-head"><span class="sl-ttl">売上推移</span>
+        <label class="sl-toggle"><input type="checkbox" id="slChartOn" checked onchange="state.salesChartOn=this.checked;renderSalesDaily()"> グラフ表示</label>
+      </div>
+      <div id="slChartWrap"><canvas id="slSalesChart" height="180"></canvas></div>
+    </div>
+    <div class="sl-card">
+      <div class="sl-sec">売上集計</div>
+      <div id="slDailyTable"></div>
+    </div>
+  </div>
+
+  <div class="sl-panel" id="slPanel_product">
+    <div class="sl-inner">
+      <div class="sl-itab active" id="slPv_staff" onclick="setSalesProd('staff')">スタッフ別</div>
+      <div class="sl-itab" id="slPv_menu" onclick="setSalesProd('menu')">メニュー別</div>
+      <div class="sl-itab" id="slPv_retail" onclick="setSalesProd('retail')">物販別</div>
+    </div>
+    <div class="sl-card" style="padding:8px 12px"><div id="slProdHint" style="font-size:11px;color:#999;margin:4px 0 6px"></div><div id="slProdBody"></div></div>
+  </div>
+
+  <div class="sl-panel" id="slPanel_analysis">
+    <div class="sl-periods">
+      <div class="sl-ptab active" onclick="setSalesRange('week',this)">直近1週間</div>
+      <div class="sl-ptab" onclick="setSalesRange('month',this)">直近1ヶ月</div>
+      <div class="sl-ptab" onclick="setSalesRange('3month',this)">直近3ヶ月</div>
+      <div class="sl-ptab" onclick="setSalesRange('year',this)">今年</div>
+    </div>
+    <div id="slMetrics" class="sl-metrics"></div>
+    <div class="sl-card"><div class="sl-ttl" style="margin-bottom:12px">スタッフ別売上ランキング</div><canvas id="slStaffChart" height="200"></canvas></div>
+  </div>
+</div>
+
 <div class="page" id="page-academy">
   <div class="section-title">🎓 SUN ACADEMY</div>
   <div style="font-size:12px;color:#64748B;margin-bottom:12px;line-height:1.7">入社からカットデビューまでの教育の流れです。各ステップを確認し、できたら「成長チェックシート」に記録しよう。<b style="color:#2C7A6E">Simple is the best.</b></div>
@@ -2892,17 +2992,191 @@ function pushDeletionsToCloud(){
   })(ids[i]); }
 }
 
+/* ===== 売上タブ（日別・商品別・分析） ===== */
+var SALES_ADMIN = true; // admin=true / staff=false（自動置換）
+var _slSalesChart=null,_slStaffChart=null;
+function salesMe(){ if(SALES_ADMIN) return null; try{ var s=JSON.parse(localStorage.getItem('sun_session')||'null'); return (s&&s.staff)||''; }catch(e){ return ''; } }
+// 1記録のスコープ別集計（admin=全体 / staff=自分の担当分）
+function salesRec(r){
+  var me=salesMe(), tech=0,prod=0,items=0;
+  var menus=r.menus||[], prods=r.products||[];
+  for(var i=0;i<menus.length;i++){ var m=menus[i]; var st=m.menuStaff||r.staff; if(me==null||st===me) tech+=menuLineInc(m); }
+  for(var j=0;j<prods.length;j++){ var p=prods[j]; var st=p.productStaff||r.staff; if(me==null||st===me){ prod+=prodLineSell(p); items+=(p.qty||1); } }
+  var client=(me==null)?1:(r.staff===me?1:0);
+  return {tech:tech,prod:prod,items:items,client:client};
+}
+function makeSalesChart(id, which, config){
+  if(typeof Chart==='undefined') return;
+  var cv=document.getElementById(id); if(!cv) return;
+  try{
+    if(which==='sales'&&_slSalesChart){ _slSalesChart.destroy(); _slSalesChart=null; }
+    if(which==='staff'&&_slStaffChart){ _slStaffChart.destroy(); _slStaffChart=null; }
+    var ch=new Chart(cv, config);
+    if(which==='sales') _slSalesChart=ch; else _slStaffChart=ch;
+  }catch(e){}
+}
+function salesPopulateYears(){
+  var sel=document.getElementById('slYear'); if(!sel) return;
+  var now=new Date().getFullYear(); var yrs={}; yrs[now]=1;
+  (state.records||[]).forEach(function(r){ var d=new Date(r.time); if(!isNaN(d.getTime())) yrs[d.getFullYear()]=1; });
+  if(!state.salesYear) state.salesYear=now;
+  var arr=Object.keys(yrs).map(Number).sort(function(a,b){return b-a;});
+  sel.innerHTML=arr.map(function(y){ return '<option value="'+y+'"'+(y===state.salesYear?' selected':'')+'>'+y+'年度</option>'; }).join('');
+}
+function renderSales(){
+  if(!state.salesSub) state.salesSub='daily';
+  ['daily','product','analysis'].forEach(function(t){
+    var b=document.getElementById('slSub_'+t), p=document.getElementById('slPanel_'+t);
+    if(b) b.classList.toggle('active', state.salesSub===t);
+    if(p) p.classList.toggle('active', state.salesSub===t);
+  });
+  salesPopulateYears();
+  if(state.salesSub==='daily') renderSalesDaily();
+  else if(state.salesSub==='product') renderSalesProduct();
+  else renderSalesAnalysis();
+}
+function switchSalesSub(t){ state.salesSub=t; renderSales(); }
+function renderSalesDaily(){
+  if(!state.salesYear) state.salesYear=new Date().getFullYear();
+  var groupBy=state.salesGroupBy||'month', year=state.salesYear, recs=state.records||[];
+  var buckets=[];
+  function bk(label){ var b={label:label,tech:0,prod:0,clients:0}; buckets.push(b); return b; }
+  var headLabel='月';
+  if(groupBy==='month'){
+    var bm=[]; for(var m=0;m<12;m++) bm.push(bk((m+1)+'月'));
+    recs.forEach(function(r){ var d=new Date(r.time); if(isNaN(d.getTime())||d.getFullYear()!==year) return; var a=salesRec(r); var b=bm[d.getMonth()]; b.tech+=a.tech;b.prod+=a.prod;b.clients+=a.client; });
+  } else if(groupBy==='year'){
+    headLabel='年'; var ym={};
+    recs.forEach(function(r){ var d=new Date(r.time); if(isNaN(d.getTime()))return; var y=d.getFullYear(); if(!ym[y]) ym[y]=bk(y+'年'); var a=salesRec(r); ym[y].tech+=a.tech;ym[y].prod+=a.prod;ym[y].clients+=a.client; });
+    buckets.sort(function(a,b){return a.label<b.label?-1:1;});
+  } else {
+    headLabel='日'; var now=new Date(), yy=now.getFullYear(), mm=now.getMonth(), dim=new Date(yy,mm+1,0).getDate();
+    var bd=[]; for(var d=1;d<=dim;d++) bd.push(bk(d+'日'));
+    recs.forEach(function(r){ var dt=new Date(r.time); if(isNaN(dt.getTime())||dt.getFullYear()!==yy||dt.getMonth()!==mm) return; var a=salesRec(r); var b=bd[dt.getDate()-1]; b.tech+=a.tech;b.prod+=a.prod;b.clients+=a.client; });
+  }
+  var keep=function(b){ return groupBy==='month'?true:(b.tech+b.prod+b.clients)>0; };
+  var tot={tech:0,prod:0,clients:0};
+  var html='<table class="sl-tbl"><tr><th>'+headLabel+'</th><th>客数</th><th>技術</th><th>物販</th><th>合計</th></tr>';
+  buckets.forEach(function(b){ if(!keep(b)) return; tot.tech+=b.tech;tot.prod+=b.prod;tot.clients+=b.clients;
+    html+='<tr><td>'+b.label+'</td><td>'+num(b.clients)+'</td><td>¥'+num(b.tech)+'</td><td>¥'+num(b.prod)+'</td><td>¥'+num(b.tech+b.prod)+'</td></tr>'; });
+  html+='<tr class="sl-total"><td>合計</td><td>'+num(tot.clients)+'</td><td>¥'+num(tot.tech)+'</td><td>¥'+num(tot.prod)+'</td><td>¥'+num(tot.tech+tot.prod)+'</td></tr></table>';
+  var tEl=document.getElementById('slDailyTable'); if(tEl) tEl.innerHTML=html;
+  var wrap=document.getElementById('slChartWrap');
+  if(state.salesChartOn===false){ if(wrap) wrap.style.display='none'; return; }
+  if(wrap) wrap.style.display='block';
+  var shown=buckets.filter(keep);
+  makeSalesChart('slSalesChart','sales',{
+    type:'bar',
+    data:{ labels:shown.map(function(b){return b.label;}),
+      datasets:[
+        {label:'売上',data:shown.map(function(b){return b.tech+b.prod;}),backgroundColor:'#4DB8B2',borderRadius:4,yAxisID:'y'},
+        {label:'客数',data:shown.map(function(b){return b.clients;}),type:'line',borderColor:'#f0a500',backgroundColor:'transparent',pointBackgroundColor:'#f0a500',tension:0.3,yAxisID:'y1'}
+      ]},
+    options:{responsive:true,plugins:{legend:{display:true,labels:{font:{size:10},boxWidth:12}}},
+      scales:{ y:{position:'left',beginAtZero:true,ticks:{callback:function(v){return '¥'+Math.round(v/10000)+'万';},font:{size:10}},grid:{color:'#f0f0f0'}},
+        y1:{position:'right',beginAtZero:true,ticks:{font:{size:10}},grid:{display:false}} }}
+  });
+}
+function setSalesProd(v){ state.salesProdView=v; renderSalesProduct(); }
+function renderSalesProduct(){
+  var v=state.salesProdView||'staff';
+  ['staff','menu','retail'].forEach(function(t){ var b=document.getElementById('slPv_'+t); if(b) b.classList.toggle('active', t===v); });
+  var year=state.salesYear||new Date().getFullYear(), me=salesMe();
+  var recs=(state.records||[]).filter(function(r){ var d=new Date(r.time); return !isNaN(d.getTime())&&d.getFullYear()===year; });
+  var hint=document.getElementById('slProdHint'); if(hint) hint.textContent=year+'年度の集計'+(me!=null?'（'+me+' の担当分）':'');
+  var body=document.getElementById('slProdBody'); if(!body) return;
+  if(v==='staff'){
+    var by={};
+    function ens(n){ if(!by[n]) by[n]={tech:0,prod:0,items:0,clients:0,menus:{}}; return by[n]; }
+    recs.forEach(function(r){
+      (r.menus||[]).forEach(function(m){ var st=m.menuStaff||r.staff; if(me!=null&&st!==me)return; var o=ens(st); var v2=menuLineInc(m); o.tech+=v2; o.menus[m.name]=(o.menus[m.name]||0)+v2; });
+      (r.products||[]).forEach(function(p){ var st=p.productStaff||r.staff; if(me!=null&&st!==me)return; var o=ens(st); o.prod+=prodLineSell(p); o.items+=(p.qty||1); });
+      var ms=r.staff; if(me==null||ms===me){ ens(ms).clients+=1; }
+    });
+    var arr=Object.keys(by).map(function(k){return [k,by[k]];}).sort(function(a,b){return (b[1].tech+b[1].prod)-(a[1].tech+a[1].prod);});
+    var html='';
+    arr.forEach(function(e,idx){ var n=e[0],d=e[1], amt=d.tech+d.prod;
+      html+='<div class="sl-strow" onclick="toggleSalesStaff('+idx+')"><div><div class="sl-stname">'+staffBadge(n)+'</div><div class="sl-stsub">技術¥'+num(d.tech)+' / 物販¥'+num(d.prod)+'</div></div><div style="display:flex;align-items:center"><div class="sl-stamt"><div class="amt">¥'+num(amt)+'</div><div class="cnt">客数 '+num(d.clients)+'名</div></div><span class="sl-chev">›</span></div></div>';
+      var mk=Object.keys(d.menus).sort(function(a,b){return d.menus[b]-d.menus[a];});
+      html+='<div class="sl-stdetail" id="slStDet_'+idx+'" style="display:none">'+(mk.length?mk.map(function(k){return '<div class="sl-detrow"><span>'+h(k)+'</span><span>¥'+num(d.menus[k])+'</span></div>';}).join(''):'<div class="sl-detrow"><span>メニュー内訳なし</span><span></span></div>')+'</div>';
+    });
+    body.innerHTML=html||'<div class="sl-empty">データがありません</div>';
+  } else if(v==='menu'){
+    var bym={};
+    recs.forEach(function(r){ (r.menus||[]).forEach(function(m){ var st=m.menuStaff||r.staff; if(me!=null&&st!==me)return; if(!bym[m.name]) bym[m.name]={c:0,s:0}; bym[m.name].c+=(m.qty||1); bym[m.name].s+=menuLineInc(m); }); });
+    var am=Object.keys(bym).map(function(k){return [k,bym[k]];}).sort(function(a,b){return b[1].s-a[1].s;});
+    var t1={c:0,s:0}, h1='<table class="sl-tbl"><tr><th>メニュー</th><th>件数</th><th>売上</th></tr>';
+    am.forEach(function(e){ t1.c+=e[1].c;t1.s+=e[1].s; h1+='<tr><td>'+h(e[0])+'</td><td>'+num(e[1].c)+'件</td><td>¥'+num(e[1].s)+'</td></tr>'; });
+    h1+='<tr class="sl-total"><td>合計</td><td>'+num(t1.c)+'件</td><td>¥'+num(t1.s)+'</td></tr></table>';
+    body.innerHTML=am.length?h1:'<div class="sl-empty">データがありません</div>';
+  } else {
+    var byp={};
+    recs.forEach(function(r){ (r.products||[]).forEach(function(p){ var st=p.productStaff||r.staff; if(me!=null&&st!==me)return; if(!byp[p.name]) byp[p.name]={c:0,s:0}; byp[p.name].c+=(p.qty||1); byp[p.name].s+=prodLineSell(p); }); });
+    var ap=Object.keys(byp).map(function(k){return [k,byp[k]];}).sort(function(a,b){return b[1].s-a[1].s;});
+    var t2={c:0,s:0}, h2='<table class="sl-tbl"><tr><th>商品名</th><th>点数</th><th>売上</th></tr>';
+    ap.forEach(function(e){ t2.c+=e[1].c;t2.s+=e[1].s; h2+='<tr><td>'+h(e[0])+'</td><td>'+num(e[1].c)+'点</td><td>¥'+num(e[1].s)+'</td></tr>'; });
+    h2+='<tr class="sl-total"><td>合計</td><td>'+num(t2.c)+'点</td><td>¥'+num(t2.s)+'</td></tr></table>';
+    body.innerHTML=ap.length?h2:'<div class="sl-empty">データがありません</div>';
+  }
+}
+function toggleSalesStaff(i){ var el=document.getElementById('slStDet_'+i); if(el) el.style.display=(el.style.display==='none')?'block':'none'; }
+function setSalesRange(v,el){ state.salesRange=v; if(el&&el.parentNode){ var ps=el.parentNode.querySelectorAll('.sl-ptab'); for(var i=0;i<ps.length;i++) ps[i].classList.remove('active'); el.classList.add('active'); } renderSalesAnalysis(); }
+function salesRangeBounds(v){
+  var ref=new Date(), start=new Date(ref), end=new Date(ref);
+  if(v==='week'){ start.setDate(start.getDate()-6); }
+  else if(v==='month'){ start.setMonth(start.getMonth()-1); start.setDate(start.getDate()+1); }
+  else if(v==='3month'){ start.setMonth(start.getMonth()-3); start.setDate(start.getDate()+1); }
+  else { start=new Date(ref.getFullYear(),0,1); end=new Date(ref.getFullYear(),11,31); }
+  start.setHours(0,0,0,0); end.setHours(23,59,59,999);
+  return {start:start,end:end};
+}
+function salesAggRange(start,end){
+  var me=salesMe(), tech=0,prod=0,clients=0,rep=0;
+  (state.records||[]).forEach(function(r){ var d=new Date(r.time); if(isNaN(d.getTime())||d<start||d>end) return; var a=salesRec(r); tech+=a.tech;prod+=a.prod; if(a.client>0){ clients+=a.client; if(r.clientType!=='新規') rep+=1; } });
+  return {sales:tech+prod,tech:tech,prod:prod,clients:clients,rep:rep};
+}
+function renderSalesAnalysis(){
+  var v=state.salesRange||'week', cur=salesRangeBounds(v);
+  var len=cur.end-cur.start;
+  var prevEnd=new Date(cur.start.getTime()-1), prevStart=new Date(prevEnd.getTime()-len);
+  var A=salesAggRange(cur.start,cur.end), P=salesAggRange(prevStart,prevEnd);
+  var avg=A.clients>0?Math.round(A.sales/A.clients):0, pavg=P.clients>0?Math.round(P.sales/P.clients):0;
+  var rr=A.clients>0?Math.round(A.rep/A.clients*100):0, prr=P.clients>0?Math.round(P.rep/P.clients*100):0;
+  function diff(c,p,unit,money){ var d=c-p, up=d>=0; return '<div class="sl-diff '+(up?'up':'down')+'">'+(up?'▲ ':'▼ ')+(money?'¥':'')+num(Math.abs(d))+(unit||'')+'（前期比）</div>'; }
+  function card(label,val,dh){ return '<div class="sl-mcard"><div class="sl-mlabel">'+label+'</div><div class="sl-mval">'+val+'</div>'+dh+'</div>'; }
+  var html='';
+  html+=card('売上合計','¥'+num(A.sales),diff(A.sales,P.sales,'',true));
+  html+=card('来客数',num(A.clients)+'名',diff(A.clients,P.clients,'名',false));
+  html+=card('客単価','¥'+num(avg),diff(avg,pavg,'',true));
+  html+=card('リピート率',rr+'%',diff(rr,prr,'%',false));
+  var mEl=document.getElementById('slMetrics'); if(mEl) mEl.innerHTML=html;
+  var me=salesMe(), by={};
+  (state.records||[]).forEach(function(r){ var d=new Date(r.time); if(isNaN(d.getTime())||d<cur.start||d>cur.end) return;
+    (r.menus||[]).forEach(function(m){ var st=m.menuStaff||r.staff; if(me!=null&&st!==me)return; by[st]=(by[st]||0)+menuLineInc(m); });
+    (r.products||[]).forEach(function(p){ var st=p.productStaff||r.staff; if(me!=null&&st!==me)return; by[st]=(by[st]||0)+prodLineSell(p); });
+  });
+  var arr=Object.keys(by).map(function(k){return [k,by[k]];}).sort(function(a,b){return b[1]-a[1];}).slice(0,10);
+  var pal=['#4DB8B2','#5CC5BF','#6DD2CC','#7EDFD9','#8FECE6','#A0EFEA','#B0F0ED','#C0F3F0','#D0F5F3','#E0F8F6'];
+  makeSalesChart('slStaffChart','staff',{
+    type:'bar',
+    data:{ labels:arr.map(function(e){return e[0];}), datasets:[{ data:arr.map(function(e){return e[1];}), backgroundColor:arr.map(function(e,i){return pal[i%pal.length];}), borderRadius:4 }] },
+    options:{ indexAxis:'y', responsive:true, plugins:{legend:{display:false}},
+      scales:{ x:{beginAtZero:true,ticks:{callback:function(v){return '¥'+Math.round(v/10000)+'万';},font:{size:10}},grid:{color:'#f0f0f0'}}, y:{ticks:{font:{size:12}}} } }
+  });
+}
+
 function switchTab(tab){
   var pages=document.querySelectorAll('.page');
   for(var i=0;i<pages.length;i++) pages[i].classList.remove('active');
   var tabs=document.querySelectorAll('.tab-btn');
   for(var i=0;i<tabs.length;i++) tabs[i].classList.remove('active');
   document.getElementById('page-'+tab).classList.add('active');
-  var idx=['input','records','dashboard','pnl','admin','manual','academy'].indexOf(tab);
+  var idx=['input','records','dashboard','sales','pnl','admin','manual','academy'].indexOf(tab);
   if(idx>=0) tabs[idx].classList.add('active');
   if(tab==='admin'){ updateSessionInfo(); loadStaffPinManagement(); }
   if(tab==='records') renderRecords();
   if(tab==='dashboard') renderDashboard();
+  if(tab==='sales'){ if(typeof renderSales==='function') renderSales(); }
   if(tab==='academy'){ if(typeof renderAcademyVideos==='function') renderAcademyVideos(); if(typeof renderEduAdmin==='function') renderEduAdmin(); }
   if(tab==='pnl') renderPnl();
 }
@@ -3913,7 +4187,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "11.4";
+var APP_VERSION = "11.5";
 
 function checkForUpdate(){
   try {
