@@ -1118,7 +1118,7 @@ function cloudCall(action, payload, callback){
 
 
 var state = {
-  staff:[], mediaList:[], payments:[], paymentMaster:[], menus:[], products:[], records:[], eduVideos:[],
+  staff:[], mediaList:[], payments:[], paymentMaster:[], menus:[], products:[], records:[], eduVideos:[], airegi:{},
   selectedStaff:'', clientType:'リピーター', mediaType:'',
   selectedPayment:'', taxMode:'inc',
   selectedMenus:[], selectedProducts:[],
@@ -1265,6 +1265,7 @@ function syncFromCloud(silent){
         if(res.masters.products) state.products = mergeMasterById(state.products, res.masters.products);
         if(res.masters.productBrands) state.productBrands = mergeMasterUnique(state.productBrands, res.masters.productBrands);
         if(res.masters.eduVideos && res.masters.eduVideos.length >= (state.eduVideos||[]).length){ state.eduVideos = res.masters.eduVideos; }
+        if(res.masters.airegi){ state.airegi = Object.assign({}, res.masters.airegi, state.airegi||{}); }
         if(typeof renderAcademyVideos==='function'){ try{ renderAcademyVideos(); if(typeof renderEduAdmin==='function') renderEduAdmin(); }catch(e){} }
       }
       saveLocal();
@@ -1329,7 +1330,8 @@ function saveMastersToCloud(){
       productSubCategories: state.productSubCategories || [],
       goals: state.goals || {},
       tickets: state.tickets || {},
-      eduVideos: state.eduVideos || []
+      eduVideos: state.eduVideos || [],
+      airegi: state.airegi || {}
     }}, function(){});
   } catch(e){}
 }
@@ -3146,12 +3148,36 @@ function renderSalesDaily(){
     var bd=[]; for(var d=1;d<=dim;d++) bd.push(bk(d+'日'));
     recs.forEach(function(r){ var dt=new Date(r.time); if(isNaN(dt.getTime())||dt.getFullYear()!==yy||dt.getMonth()!==mm) return; var a=salesRec(r); var b=bd[dt.getDate()-1]; b.tech+=a.tech;b.prod+=a.prod;b.clients+=a.client; });
   }
-  var keep=function(b){ return groupBy==='month'?true:(b.tech+b.prod+b.clients)>0; };
-  var tot={tech:0,prod:0,clients:0};
-  var html='<table class="sl-tbl"><tr><th>'+headLabel+'</th><th>客数</th><th>技術</th><th>物販</th><th>合計</th></tr>';
-  buckets.forEach(function(b){ if(!keep(b)) return; tot.tech+=b.tech;tot.prod+=b.prod;tot.clients+=b.clients;
-    html+='<tr><td>'+b.label+'</td><td>'+num(b.clients)+'</td><td>¥'+num(b.tech)+'</td><td>¥'+num(b.prod)+'</td><td>¥'+num(b.tech+b.prod)+'</td></tr>'; });
-  html+='<tr class="sl-total"><td>合計</td><td>'+num(tot.clients)+'</td><td>¥'+num(tot.tech)+'</td><td>¥'+num(tot.prod)+'</td><td>¥'+num(tot.tech+tot.prod)+'</td></tr></table>';
+  var airMap={}, hasAir=false;
+  if(SALES_ADMIN && state.airegi){
+    var nowA=new Date(), yyA=nowA.getFullYear(), mmA=nowA.getMonth();
+    Object.keys(state.airegi).forEach(function(k){ var val=state.airegi[k]||0; if(!val) return; var pp=k.split('-'); var Y=+pp[0],M=+pp[1],D=+pp[2], lab=null;
+      if(groupBy==='month'){ if(Y===year) lab=M+'月'; }
+      else if(groupBy==='year'){ lab=Y+'年'; }
+      else { if(Y===yyA&&(M-1)===mmA) lab=D+'日'; }
+      if(lab!=null){ airMap[lab]=(airMap[lab]||0)+val; hasAir=true; }
+    });
+  }
+  var keep=function(b){ return groupBy==='month'?true:((b.tech+b.prod+b.clients)>0||(airMap[b.label]||0)>0); };
+  var tot={tech:0,prod:0,clients:0,air:0};
+  var html;
+  function _dcell(diff){ return diff>0?'<span style="color:#2680eb;font-weight:700">▲¥'+num(diff)+'</span>':(diff<0?'<span style="color:#e74c3c;font-weight:700">▼¥'+num(-diff)+'</span>':'<span style="color:#27AE60">¥0</span>'); }
+  if(hasAir){
+    html='<table class="sl-tbl"><tr><th>'+headLabel+'</th><th>客数</th><th>sun-app</th><th>エアレジ</th><th>差</th></tr>';
+    buckets.forEach(function(b){ if(!keep(b)) return; var sun=b.tech+b.prod, air=airMap[b.label]||0, diff=sun-air;
+      tot.tech+=b.tech;tot.prod+=b.prod;tot.clients+=b.clients;tot.air+=air;
+      var sunCell=(sun===0)?'<span style="color:#ccc">未入力</span>':'¥'+num(sun);
+      var diffCell=(sun===0)?'―':_dcell(diff);
+      var bg=(sun!==0&&diff!==0)?' style="background:#fff5f5"':((sun===0&&air>0)?' style="background:#fffdf0"':'');
+      html+='<tr'+bg+'><td>'+b.label+'</td><td>'+num(b.clients)+'</td><td>'+sunCell+'</td><td>'+(air?'¥'+num(air):'<span style="color:#ccc">—</span>')+'</td><td>'+diffCell+'</td></tr>'; });
+    var tsun=tot.tech+tot.prod, tdiff=tsun-tot.air;
+    html+='<tr class="sl-total"><td>合計</td><td>'+num(tot.clients)+'</td><td>¥'+num(tsun)+'</td><td>¥'+num(tot.air)+'</td><td>'+_dcell(tdiff)+'</td></tr></table>';
+  } else {
+    html='<table class="sl-tbl"><tr><th>'+headLabel+'</th><th>客数</th><th>技術</th><th>物販</th><th>合計</th></tr>';
+    buckets.forEach(function(b){ if(!keep(b)) return; tot.tech+=b.tech;tot.prod+=b.prod;tot.clients+=b.clients;
+      html+='<tr><td>'+b.label+'</td><td>'+num(b.clients)+'</td><td>¥'+num(b.tech)+'</td><td>¥'+num(b.prod)+'</td><td>¥'+num(b.tech+b.prod)+'</td></tr>'; });
+    html+='<tr class="sl-total"><td>合計</td><td>'+num(tot.clients)+'</td><td>¥'+num(tot.tech)+'</td><td>¥'+num(tot.prod)+'</td><td>¥'+num(tot.tech+tot.prod)+'</td></tr></table>';
+  }
   var tEl=document.getElementById('slDailyTable'); if(tEl) tEl.innerHTML=html;
   var wrap=document.getElementById('slChartWrap');
   if(state.salesChartOn===false){ if(wrap) wrap.style.display='none'; return; }
@@ -4668,7 +4694,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "11.6";
+var APP_VERSION = "11.7";
 
 function checkForUpdate(){
   try {
