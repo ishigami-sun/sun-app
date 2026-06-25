@@ -315,7 +315,7 @@
 
 <!-- ===== 記録 ===== -->
 <div class="page" id="page-records">
-  <button onclick="pushAndSync()" style="width:100%;padding:11px;margin-bottom:10px;background:#3DA892;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">🔄 更新する（入力・修正をみんなに反映）</button>
+  <button onclick="syncFromCloud()" style="width:100%;padding:11px;margin-bottom:10px;background:#3DA892;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">🔄 同期して最新にする</button>
   <button onclick="pushDeletionsToCloud()" style="width:100%;padding:9px;margin-bottom:10px;background:#fff;color:#E05555;border:1.5px solid #E05555;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer">🧹 この端末で削除した記録を全端末に反映</button>
   <div id="salesTrend" style="margin-bottom:10px"></div>
   <div class="section-title">TODAY</div>
@@ -4343,7 +4343,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "11.8";
+var APP_VERSION = "11.9";
 
 function checkForUpdate(){
   try {
