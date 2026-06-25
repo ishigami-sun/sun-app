@@ -215,7 +215,7 @@
   </div>
   <nav class="tab-nav">
     <button class="tab-btn active" onclick="switchTab('input')">📝 入力</button>
-    <button class="tab-btn" onclick="switchTab('records')">📋 記録</button>
+    <button class="tab-btn" onclick="switchTab('records')">📋 日報</button>
     <button class="tab-btn" onclick="switchTab('dashboard')">📊 物販</button>
     <button class="tab-btn" onclick="switchTab('sales')">💹 売上</button>
     <button class="tab-btn" onclick="switchTab('pnl')">📈 P&L</button>
@@ -313,10 +313,10 @@
   </div>
 </div>
 
-<!-- ===== 記録 ===== -->
+<!-- ===== 日報 ===== -->
 <div class="page" id="page-records">
   <button onclick="syncFromCloud()" style="width:100%;padding:11px;margin-bottom:10px;background:#3DA892;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">🔄 同期して最新にする</button>
-  <button onclick="pushDeletionsToCloud()" style="width:100%;padding:9px;margin-bottom:10px;background:#fff;color:#E05555;border:1.5px solid #E05555;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer">🧹 この端末で削除した記録を全端末に反映</button>
+  <button onclick="pushDeletionsToCloud()" style="width:100%;padding:9px;margin-bottom:10px;background:#fff;color:#E05555;border:1.5px solid #E05555;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer">🧹 この端末で削除した日報を全端末に反映</button>
   <div id="salesTrend" style="margin-bottom:10px"></div>
   <div class="section-title">TODAY</div>
   <div id="todayStats" class="dash-grid"></div>
@@ -343,7 +343,7 @@
   <div id="todayCustomerList" class="customer-list"></div>
   <div id="deletedHistory" style="margin-top:14px"></div>
 
-  <div class="section-title">全記録</div>
+  <div class="section-title">全日報</div>
   <div id="recordsList"></div>
 </div>
 
@@ -1320,7 +1320,7 @@ function pushAndSync(){
       state.records=merged;
       try{ saveLocal(); }catch(e){}
       if(typeof renderAll==='function') renderAll();
-      showToast('✅ 反映完了！（記録 '+state.records.length+'件）');
+      showToast('✅ 反映完了！（日報 '+state.records.length+'件）');
     }
     var pending=toPush.length+toDelete.length;
     if(pending===0){ finish(); return; }
@@ -1363,7 +1363,7 @@ function syncFromCloud(silent){
       }
       saveLocal();
       renderAll();
-      if(!silent) showToast('✅ 同期完了！記録 '+state.records.length+'件');
+      if(!silent) showToast('✅ 同期完了！日報 '+state.records.length+'件');
     } else {
       if(!silent) showToast('⚠️ 同期失敗: '+(res.error||''));
     }
@@ -1391,7 +1391,7 @@ function migrateToCloud(){
     staff:state.staff, mediaList:state.mediaList, payments:state.payments,
     paymentMaster:state.paymentMaster, menus:state.menus, products:state.products
   }}, function(res){
-    // 次に記録を一括送信
+    // 次に日報を一括送信
     callCloud('bulkImport', {records:state.records}, function(res2){
       if(res2.ok){
         document.getElementById('migrateStatus').textContent = '✅ '+res2.count+'件 移行完了！';
@@ -2270,7 +2270,7 @@ function submitRecord(){
   for(var i=0;i<state.selectedProducts.length;i++) prodSell+=prodLineSell(state.selectedProducts[i]);
   var prodProfit=0;
   for(var i=0;i<state.selectedProducts.length;i++) prodProfit+=prodLineProfit(state.selectedProducts[i]);
-  var clientCount=1; // 1記録＝1人（来店1回＝1客）。メニュー点数ではなく顧客数で数える
+  var clientCount=1; // 1日報＝1人（来店1回＝1客）。メニュー点数ではなく顧客数で数える
   var total=menuIncTotal+prodSell;
   var master=getPaymentMaster(state.selectedPayment);
   var feeRate=master?master.fee:0;
@@ -2305,18 +2305,18 @@ function submitRecord(){
   // クラウド：編集時は旧を削除してから追加
   if(editId && state.cloudUrl && state.cloudKey && typeof callCloud==='function'){ try{ callCloud('deleteRecord',{id:editId},function(){}); }catch(e){} }
   callCloud('addRecord', {record:record}, function(res){
-    if(res.ok){ showToast(editId?'✅ 記録を更新しました！':'✅ 日報を登録＆クラウド保存しました！'); }
+    if(res.ok){ showToast(editId?'✅ 日報を更新しました！':'✅ 日報を登録＆クラウド保存しました！'); }
     else if(res.queued){ showToast('📵 オフライン保存（復旧時に自動送信）'); }
     else { showToast('⚠️ クラウド送信失敗: '+(res.error||'')); }
   });
   renderAll();
   switchTab('records');
 }
-// 記録をタップ→入力フォームに読み込んで編集
+// 日報をタップ→入力フォームに読み込んで編集
 function updateEditBanner(){
   var b=document.getElementById('editBanner'); if(!b) return;
   if(state.editingRecordId){
-    b.innerHTML='<span style="font-size:13px;font-weight:700;color:#1565C0">✏️ '+(state.editingCustomerName?h(state.editingCustomerName)+' 様の':'')+'記録を編集中（修正して「登録」）</span>'+
+    b.innerHTML='<span style="font-size:13px;font-weight:700;color:#1565C0">✏️ '+(state.editingCustomerName?h(state.editingCustomerName)+' 様の':'')+'日報を編集中（修正して「登録」）</span>'+
       '<button onclick="clearEditRecord()" style="padding:5px 12px;border:1.5px solid #1565C0;background:#fff;color:#1565C0;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">編集をやめる</button>';
     b.style.display='flex';
   } else { b.style.display='none'; }
@@ -2324,7 +2324,7 @@ function updateEditBanner(){
 function editRecord(id){
   var r=null;
   for(var i=0;i<state.records.length;i++){ if(String(state.records[i].id)===String(id)){ r=state.records[i]; break; } }
-  if(!r){ if(typeof showToast==='function') showToast('記録が見つかりません'); return; }
+  if(!r){ if(typeof showToast==='function') showToast('日報が見つかりません'); return; }
   state.editingRecordId=r.id;
   state.editingOrigTime=r.time;
   state.editingCustomerName=r.customerName||'';
@@ -2382,7 +2382,7 @@ function salesTrendCard(){
   return s;
 }
 
-// 本日の目標バー（記録タブ TODAY 下）
+// 本日の目標バー（日報タブ TODAY 下）
 function renderTodayTarget(){
   var el=document.getElementById('todayTarget'); if(!el) return;
   var now=new Date(); var ym=_ym(now);
@@ -2417,7 +2417,7 @@ function backupData(){
     var a=document.createElement('a'); a.href=url;
     var n=new Date(); a.download='sun-app-backup-'+n.getFullYear()+String(n.getMonth()+1).padStart(2,'0')+String(n.getDate()).padStart(2,'0')+'.json';
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-    if(typeof showToast==='function') showToast('✅ バックアップを保存しました（記録'+(data.records.length)+'件）');
+    if(typeof showToast==='function') showToast('✅ バックアップを保存しました（日報'+(data.records.length)+'件）');
   }catch(e){ if(typeof showToast==='function') showToast('⚠️ バックアップ失敗'); }
 }
 // 復元（ファイルから読み込み）
@@ -2428,7 +2428,7 @@ function restoreDataFile(input){
     try{
       var d=JSON.parse(rd.result);
       if(!d||!d.records){ if(typeof showToast==='function') showToast('⚠️ バックアップ形式が違います'); input.value=''; return; }
-      if(!confirm('バックアップを復元しますか？\n今のデータは上書きされます（記録 '+d.records.length+'件）。')){ input.value=''; return; }
+      if(!confirm('バックアップを復元しますか？\n今のデータは上書きされます（日報 '+d.records.length+'件）。')){ input.value=''; return; }
       if(d.records) state.records=d.records;
       if(d.staff) state.staff=d.staff;
       if(d.menus) state.menus=d.menus;
@@ -2438,7 +2438,7 @@ function restoreDataFile(input){
       if(d.tickets) state.tickets=d.tickets;
       try{ saveLocal(); }catch(e){}
       if(typeof renderAll==='function') renderAll();
-      if(typeof showToast==='function') showToast('✅ 復元しました（記録 '+state.records.length+'件）');
+      if(typeof showToast==='function') showToast('✅ 復元しました（日報 '+state.records.length+'件）');
     }catch(e){ if(typeof showToast==='function') showToast('⚠️ 復元失敗：ファイルを確認してください'); }
     input.value='';
   };
@@ -2450,14 +2450,14 @@ function renderRecords(){
   var todayRecs=[];
   for(var i=0;i<state.records.length;i++) if(new Date(state.records[i].time).toDateString()===today) todayRecs.push(state.records[i]);
   var todayTotal=0; for(var i=0;i<todayRecs.length;i++) todayTotal+=todayRecs[i].total;
-  var todayClients=todayRecs.length; // 1記録＝1人
+  var todayClients=todayRecs.length; // 1日報＝1人
   document.getElementById('todayStats').innerHTML=
     '<div class="dash-stat"><div class="dash-stat-label">本日売上（税込）</div><div class="dash-stat-value">¥'+num(todayTotal)+'</div><div class="dash-stat-sub">'+todayRecs.length+'件</div></div>'+
     '<div class="dash-stat"><div class="dash-stat-label">本日の客数</div><div class="dash-stat-value">'+todayClients+'人</div><div class="dash-stat-sub">平均¥'+(todayClients>0?num(Math.round(todayTotal/todayClients)):0)+'</div></div>';
   try{ var _st=document.getElementById('salesTrend'); if(_st&&typeof salesTrendCard==='function') _st.innerHTML=salesTrendCard(); }catch(e){}
   // 本日顧客リスト
   var custEl=document.getElementById('todayCustomerList');
-  if(!todayRecs.length){ custEl.innerHTML='<div class="empty"><div class="empty-text">本日の記録はまだありません</div></div>'; }
+  if(!todayRecs.length){ custEl.innerHTML='<div class="empty"><div class="empty-text">本日の日報はまだありません</div></div>'; }
   else {
     todayRecs.sort(function(a,b){ return new Date(b.time)-new Date(a.time); });
     var chtml='';
@@ -2478,7 +2478,7 @@ function renderRecords(){
     }
     custEl.innerHTML=chtml;
   }
-  // 全記録（月別→担当者別セクション分け、削除ボタン付き）
+  // 全日報（月別→担当者別セクション分け、削除ボタン付き）
   var el=document.getElementById('recordsList');
   if(!state.records.length){ 
     el.innerHTML='<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">まだ日報がありません</div></div>'; 
@@ -2724,7 +2724,7 @@ function setDashStaff(val){
   try{ saveLocal(); }catch(e){}
   renderDashboard();
 }
-// 商品の卸値を解決：本人の値→マスタ→過去記録（同名）の順。無ければ null
+// 商品の卸値を解決：本人の値→マスタ→過去日報（同名）の順。無ければ null
 function resolveCost(p){
   if(p && p.cost && p.cost>0) return p.cost;
   var nm = p && p.name;
@@ -2892,7 +2892,7 @@ function removePayment(i){
   for(var j=0;j<state.paymentMaster.length;j++) if(state.paymentMaster[j].name===name){ state.paymentMaster.splice(j,1); break; }
   save(); renderAll();
 }
-// 支払い方法を代表的な5種に置き換える（記録済み日報には影響しない）
+// 支払い方法を代表的な5種に置き換える（日報済み日報には影響しない）
 function resetPaymentsToSimple(){
   if(!confirm('支払い方法を「現金 / クレジットカード / 交通系IC / QRコード決済 / その他」の代表5種に置き換えます。\n（今の支払い方法リストは消えます。登録済みの日報は影響しません）\n\n実行しますか？')) return;
   state.paymentMaster=[
@@ -3030,7 +3030,7 @@ function pushDeletionsToCloud(){
 var SALES_ADMIN = true; // admin=true / staff=false（自動置換）
 var _slSalesChart=null,_slStaffChart=null;
 function salesMe(){ if(SALES_ADMIN) return null; try{ var s=JSON.parse(localStorage.getItem('sun_session')||'null'); return (s&&s.staff)||''; }catch(e){ return ''; } }
-// 1記録のスコープ別集計（admin=全体 / staff=自分の担当分）
+// 1日報のスコープ別集計（admin=全体 / staff=自分の担当分）
 function salesRec(r){
   var me=salesMe(), tech=0,prod=0,items=0;
   var menus=r.menus||[], prods=r.products||[];
@@ -3647,7 +3647,7 @@ function renderPnlReport(){
     prodSell+=r.productSell||0;
     prodSellExc+=Math.round((r.productSell||0)/1.1);
     feeAmount+=r.paymentFeeAmount||0;
-    clientCount+=1; // 1記録＝1人
+    clientCount+=1; // 1日報＝1人
     if(r.clientType==='新規') newClients+=1;
     else repeaterClients+=1;
     for(var j=0;j<r.products.length;j++){
@@ -3724,7 +3724,7 @@ function renderPnlReport(){
   for(var i=0;i<filtered.length;i++){
     var r=filtered[i];
     if(!staffSell[r.staff]) staffSell[r.staff]={menu:0,prod:0,clients:0};
-    staffSell[r.staff].clients+=1; // 1記録＝1人（来店は主担当に計上）
+    staffSell[r.staff].clients+=1; // 1日報＝1人（来店は主担当に計上）
     for(var mk=0;mk<(r.menus||[]).length;mk++){ var mm=r.menus[mk]; var ms=mm.menuStaff||r.staff; if(!staffSell[ms]) staffSell[ms]={menu:0,prod:0,clients:0}; staffSell[ms].menu+=menuLineInc(mm); }
     for(var j=0;j<r.products.length;j++){
       var pp=r.products[j];
@@ -3753,7 +3753,7 @@ function renderPnlReport(){
   for(var i=0;i<filtered.length;i++){
     var r=filtered[i];
     if(!mediaCount[r.media]) mediaCount[r.media]={c:0,s:0};
-    mediaCount[r.media].c+=1; // 1記録＝1人
+    mediaCount[r.media].c+=1; // 1日報＝1人
     mediaCount[r.media].s+=r.total||0;
   }
   var mediaEntries=[];
@@ -4153,8 +4153,8 @@ function renderDeletedHistory(){
   s+='<div onclick="toggleDeletedHistory()" style="padding:11px 14px;background:#FBF0F0;color:#1A4F47;font-weight:800;font-size:13px;cursor:pointer;display:flex;justify-content:space-between;align-items:center"><span>🗑 削除履歴・復元（'+hist.length+'件）</span><span>'+(state._delHistOpen?'▲':'▼')+'</span></div>';
   if(state._delHistOpen){
     s+='<div style="padding:12px">';
-    s+='<button onclick="recoverFromCloud()" style="width:100%;padding:11px;border:1.5px solid #2C7A6E;background:#fff;color:#2C7A6E;border-radius:8px;font-weight:700;cursor:pointer;margin-bottom:6px">🔄 クラウドから記録を取り戻す</button>';
-    s+='<div style="font-size:11px;color:#94a3b8;margin-bottom:12px">※履歴に無い「以前に削除した記録」も、クラウドに残っていれば復元します（今回の誤削除はこちら）。</div>';
+    s+='<button onclick="recoverFromCloud()" style="width:100%;padding:11px;border:1.5px solid #2C7A6E;background:#fff;color:#2C7A6E;border-radius:8px;font-weight:700;cursor:pointer;margin-bottom:6px">🔄 クラウドから日報を取り戻す</button>';
+    s+='<div style="font-size:11px;color:#94a3b8;margin-bottom:12px">※履歴に無い「以前に削除した日報」も、クラウドに残っていれば復元します（今回の誤削除はこちら）。</div>';
     if(!hist.length){ s+='<div style="text-align:center;color:#94a3b8;font-size:12px;padding:6px">この端末での削除履歴はありません</div>'; }
     hist.forEach(function(r,i){
       var d=new Date(r.time); var ds=(isNaN(d.getTime())?'':(d.getMonth()+1)+'/'+d.getDate());
@@ -4179,11 +4179,11 @@ function restoreDeleted(i){
   try{ saveLocal(); }catch(e){}
   if(state.cloudUrl&&state.cloudKey&&typeof callCloud==='function'){ try{ callCloud('addRecord',{record:clone},function(){}); }catch(e){} }
   if(typeof renderAll==='function') renderAll();
-  if(typeof showToast==='function') showToast('↩️ 記録を元に戻しました');
+  if(typeof showToast==='function') showToast('↩️ 日報を元に戻しました');
 }
 function clearDeletedHistory(){ if(!confirm('削除履歴を消しますか？（履歴からは元に戻せなくなります）')) return; state.deletedHistory=[]; try{ saveLocal(); }catch(e){} renderDeletedHistory(); if(typeof showToast==='function') showToast('履歴を消しました'); }
 function recoverFromCloud(){
-  if(!confirm('クラウドに残っている記録を取り戻します。\n（以前この端末で削除した記録も、クラウドに残っていれば復活します）\n\n実行しますか？')) return;
+  if(!confirm('クラウドに残っている日報を取り戻します。\n（以前この端末で削除した日報も、クラウドに残っていれば復活します）\n\n実行しますか？')) return;
   state.deletedIds=[];
   try{ saveLocal(); }catch(e){}
   if(typeof syncFromCloud==='function'){ if(typeof showToast==='function') showToast('🔄 クラウドから取得中...'); syncFromCloud(); }
@@ -4191,7 +4191,7 @@ function recoverFromCloud(){
 }
 
 function deleteRecord(id){
-  if(!confirm('この記録を削除しますか？\n（あとで「🗑 削除履歴」から元に戻せます）')) return;
+  if(!confirm('この日報を削除しますか？\n（あとで「🗑 削除履歴」から元に戻せます）')) return;
   // ローカルから削除（削除履歴へ退避）
   for(var i=0;i<state.records.length;i++){
     if(String(state.records[i].id) === String(id)){
@@ -4235,7 +4235,7 @@ function clearTodayRecords(){
     if(new Date(state.records[i].time).toDateString() === today) todayCount++;
   }
   if(todayCount === 0){
-    if(typeof showToast === 'function') showToast('⚠️ 本日の記録はありません');
+    if(typeof showToast === 'function') showToast('⚠️ 本日の日報はありません');
     return;
   }
   if(!confirm('本日の日報('+todayCount+'件)を全削除しますか？\nこの操作は取り消せません。')) return;
@@ -4343,7 +4343,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "11.9";
+var APP_VERSION = "12.0";
 
 function checkForUpdate(){
   try {
@@ -4544,7 +4544,7 @@ function renderCustomerList(){
   
   if(!filteredRecs.length){
     var emptyMsg = (state.todayStaffFilter && state.todayStaffFilter !== '全員') ? state.todayStaffFilter+'の' : '';
-    emptyMsg += getCustListPeriodLabel().replace('📅 ','')+'の記録はまだありません';
+    emptyMsg += getCustListPeriodLabel().replace('📅 ','')+'の日報はまだありません';
     custEl.innerHTML = '<div class="empty"><div class="empty-text">'+emptyMsg+'</div></div>';
     try{ renderDeletedHistory(); }catch(e){}
     return;
@@ -4603,13 +4603,13 @@ function renderCustomerList(){
 }
 
 
-/* ===== 記録カード内インライン編集（画面遷移なし・アコーディオン） ===== */
+/* ===== 日報カード内インライン編集（画面遷移なし・アコーディオン） ===== */
 function jsq(s){ return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
-// 編集開始：記録カードを編集モードに
+// 編集開始：日報カードを編集モードに
 function editRecord(id){
   var r=null;
   for(var i=0;i<state.records.length;i++){ if(String(state.records[i].id)===String(id)){ r=state.records[i]; break; } }
-  if(!r){ if(typeof showToast==='function') showToast('記録が見つかりません'); return; }
+  if(!r){ if(typeof showToast==='function') showToast('日報が見つかりません'); return; }
   state.editInlineId=r.id;
   state.editBuf=JSON.parse(JSON.stringify(r));
   state.editTab='menu';
@@ -4641,7 +4641,7 @@ function renderInlineEditor(){
   var t=computeTotals(b.menus,b.products);
   var tabBtn=function(key,label){ var a=tab===key; return '<button onclick="setEditTab(\''+key+'\')" style="flex:1;min-width:auto;padding:9px 4px;border:none;border-bottom:3px solid '+(a?'#2C7A6E':'transparent')+';background:'+(a?'#EAF5F3':'#fff')+';color:'+(a?'#2C7A6E':'#64748B')+';font-size:11px;font-weight:700;cursor:pointer">'+label+'</button>'; };
   var s='<div style="background:#fff;border:2px solid #2C7A6E;border-radius:12px;overflow:hidden;box-shadow:0 3px 12px rgba(44,122,110,.2)">';
-  s+='<div style="background:#2C7A6E;color:#fff;padding:10px 12px;font-size:14px;font-weight:800">✏️ '+h(b.customerName||'(名前なし)')+' 様の記録を編集</div>';
+  s+='<div style="background:#2C7A6E;color:#fff;padding:10px 12px;font-size:14px;font-weight:800">✏️ '+h(b.customerName||'(名前なし)')+' 様の日報を編集</div>';
   s+='<div style="display:flex;border-bottom:1px solid #E8EFEE">'+tabBtn('menu','💇メニュー')+tabBtn('product','🛍️物販')+tabBtn('customer','👤顧客')+tabBtn('pay','💰会計')+'</div>';
   s+='<div style="padding:12px">'+renderEditTab(tab,b)+'</div>';
   s+='<div style="padding:10px 12px;border-top:1px solid #E8EFEE;background:#F8FAFA;font-size:12px;color:#64748B;display:flex;justify-content:space-between"><span>合計（税込）</span><b style="color:#1A4F47;font-size:14px">¥'+num(t.total)+'</b></div>';
@@ -4769,7 +4769,7 @@ function saveInlineEdit(){
   try{ saveLocal(); }catch(e){}
   if(state.cloudUrl&&state.cloudKey&&typeof callCloud==='function'){ try{ callCloud('deleteRecord',{id:oldId},function(){ callCloud('addRecord',{record:rec},function(){}); }); }catch(e){} }
   if(typeof renderAll==='function') renderAll(); else if(typeof renderCustomerList==='function') renderCustomerList();
-  if(typeof showToast==='function') showToast('✅ 記録を更新しました');
+  if(typeof showToast==='function') showToast('✅ 日報を更新しました');
 }
 
 if(typeof window !== 'undefined'){
