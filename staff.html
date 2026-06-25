@@ -1235,7 +1235,7 @@ function pushAndSync(){
     if(pending===0){ finish(); return; }
     var done=0; function tick(){ done++; if(done>=pending) finish(); }
     for(var i=0;i<toPush.length;i++){ (function(r){ try{ callCloud('addRecord',{record:r},function(){ tick(); }); }catch(e){ tick(); } })(toPush[i]); }
-    for(var i=0;i<toDelete.length;i++){ (function(id){ try{ callCloud('deleteRecord',{recordId:id},function(){ tick(); }); }catch(e){ tick(); } })(toDelete[i]); }
+    for(var i=0;i<toDelete.length;i++){ (function(id){ try{ callCloud('deleteRecord',{id:id},function(){ tick(); }); }catch(e){ tick(); } })(toDelete[i]); }
   });
 }
 
@@ -2233,7 +2233,7 @@ function submitRecord(){
   else if(editId){ try{ state.custListMonth='date:'+recYMD(record); }catch(e){} }
   saveLocal();
   // クラウド：編集時は旧を削除してから追加
-  if(editId && state.cloudUrl && state.cloudKey && typeof callCloud==='function'){ try{ callCloud('deleteRecord',{recordId:editId},function(){}); }catch(e){} }
+  if(editId && state.cloudUrl && state.cloudKey && typeof callCloud==='function'){ try{ callCloud('deleteRecord',{id:editId},function(){}); }catch(e){} }
   callCloud('addRecord', {record:record}, function(res){
     var bd = backDated ? (function(){var p=backDated.split('-');return parseInt(p[1],10)+'月'+parseInt(p[2],10)+'日の';})() : '';
     if(res.ok){ showToast(editId?'✅ 記録を更新しました！':'✅ '+bd+'日報を登録＆クラウド保存しました！'); }
@@ -3081,7 +3081,7 @@ function pushDeletionsToCloud(){
   showToast('🧹 クラウドに反映中…('+ids.length+'件)');
   var done=0,total=ids.length;
   for(var i=0;i<ids.length;i++){ (function(id){
-    try{ callCloud('deleteRecord',{recordId:id},function(res){ done++; if(done>=total){ showToast('✅ 反映完了。最新に同期します'); setTimeout(function(){ syncFromCloud(); },700); } }); }
+    try{ callCloud('deleteRecord',{id:id},function(res){ done++; if(done>=total){ showToast('✅ 反映完了。最新に同期します'); setTimeout(function(){ syncFromCloud(); },700); } }); }
     catch(e){ done++; if(done>=total){ setTimeout(function(){ syncFromCloud(); },700); } }
   })(ids[i]); }
 }
@@ -4371,7 +4371,7 @@ function saveProductEdit(recId, prodIdx){
   if(typeof showToast==='function') showToast('✅ 保存しました。クラウドに反映中...');
   if(state.cloudUrl && state.cloudKey && typeof callCloud==='function'){
     try{
-      callCloud('deleteRecord',{recordId:oldId},function(){
+      callCloud('deleteRecord',{id:oldId},function(){
         callCloud('addRecord',{record:edited},function(res){
           if(typeof showToast==='function') showToast(res&&res.ok?'✅ クラウド反映完了':'⚠️ ローカルのみ保存（クラウド未対応）');
         });
@@ -4451,7 +4451,7 @@ function deleteRecord(id){
   // クラウドからも削除（並行）
   if(state.cloudUrl && state.cloudKey && typeof callCloud === 'function'){
     try {
-      callCloud('deleteRecord', {recordId:id}, function(res){
+      callCloud('deleteRecord', {id:id}, function(res){
         if(res && res.ok){
           if(typeof showToast === 'function') showToast('✅ 削除完了！');
         } else {
@@ -4496,7 +4496,7 @@ function clearTodayRecords(){
   // クラウドからも削除
   if(state.cloudUrl && state.cloudKey && typeof callCloud === 'function'){
     for(var k=0;k<deletedIds.length;k++){
-      try { callCloud('deleteRecord', {recordId:deletedIds[k]}, function(){}); } catch(e){}
+      try { callCloud('deleteRecord', {id:deletedIds[k]}, function(){}); } catch(e){}
     }
   }
   // 再描画
@@ -4551,7 +4551,7 @@ function clearAllRecords(){
         } else {
           // フォールバック：個別削除
           for(var k=0;k<deletedIds.length;k++){
-            try { callCloud('deleteRecord', {recordId:deletedIds[k]}, function(){}); } catch(e){}
+            try { callCloud('deleteRecord', {id:deletedIds[k]}, function(){}); } catch(e){}
           }
         }
       }); 
@@ -4694,7 +4694,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "11.7";
+var APP_VERSION = "11.8";
 
 function checkForUpdate(){
   try {
@@ -5205,7 +5205,7 @@ function saveInlineEdit(){
   state.records.push(rec);
   state.editInlineId=null; state.editBuf=null; state.editPicker=null;
   try{ saveLocal(); }catch(e){}
-  if(state.cloudUrl&&state.cloudKey&&typeof callCloud==='function'){ try{ callCloud('deleteRecord',{recordId:oldId},function(){ callCloud('addRecord',{record:rec},function(){}); }); }catch(e){} }
+  if(state.cloudUrl&&state.cloudKey&&typeof callCloud==='function'){ try{ callCloud('deleteRecord',{id:oldId},function(){ callCloud('addRecord',{record:rec},function(){}); }); }catch(e){} }
   if(typeof renderAll==='function') renderAll(); else if(typeof renderCustomerList==='function') renderCustomerList();
   if(typeof showToast==='function') showToast('✅ 記録を更新しました');
 }
