@@ -843,11 +843,13 @@
     <div class="sl-card">
       <div class="sl-filter">
         <select id="slGroupBy" onchange="state.salesGroupBy=this.value;renderSalesDaily()">
-          <option value="month">月別</option>
-          <option value="day">日別（今月）</option>
-          <option value="year">年別</option>
+          <option value="hour">時間別</option>
+          <option value="day">日別</option>
+          <option value="month" selected>月別</option>
+          <option value="year">年度別</option>
         </select>
         <select id="slYear" onchange="state.salesYear=parseInt(this.value);renderSalesDaily()"></select>
+        <select id="slMonth" onchange="state.salesMonth=parseInt(this.value);renderSalesDaily()"></select>
         <button class="sl-btn" onclick="renderSalesDaily()">表示する</button>
       </div>
     </div>
@@ -3050,12 +3052,13 @@ function makeSalesChart(id, which, config){
   }catch(e){}
 }
 function salesPopulateYears(){
-  var sel=document.getElementById('slYear'); if(!sel) return;
-  var now=new Date().getFullYear(); var yrs={}; yrs[now]=1;
-  (state.records||[]).forEach(function(r){ var d=new Date(r.time); if(!isNaN(d.getTime())) yrs[d.getFullYear()]=1; });
-  if(!state.salesYear) state.salesYear=now;
-  var arr=Object.keys(yrs).map(Number).sort(function(a,b){return b-a;});
-  sel.innerHTML=arr.map(function(y){ return '<option value="'+y+'"'+(y===state.salesYear?' selected':'')+'>'+y+'年度</option>'; }).join('');
+  var now=new Date();
+  if(!state.salesYear) state.salesYear=now.getFullYear();
+  if(!state.salesMonth) state.salesMonth=now.getMonth()+1;
+  var ysel=document.getElementById('slYear');
+  if(ysel){ var ys=''; for(var y=2026;y>=2017;y--) ys+='<option value="'+y+'"'+(y===state.salesYear?' selected':'')+'>'+y+'年</option>'; ysel.innerHTML=ys; }
+  var msel=document.getElementById('slMonth');
+  if(msel){ var ms=''; for(var mo=1;mo<=12;mo++) ms+='<option value="'+mo+'"'+(mo===state.salesMonth?' selected':'')+'>'+mo+'月</option>'; msel.innerHTML=ms; }
 }
 function renderSales(){
   if(!state.salesSub) state.salesSub='daily';
@@ -3072,12 +3075,18 @@ function renderSales(){
 }
 function switchSalesSub(t){ state.salesSub=t; renderSales(); }
 function renderSalesDaily(){
-  if(!state.salesYear) state.salesYear=new Date().getFullYear();
-  var groupBy=state.salesGroupBy||'month', year=state.salesYear, recs=state.records||[];
+  var nowD=new Date();
+  if(!state.salesYear) state.salesYear=nowD.getFullYear();
+  if(!state.salesMonth) state.salesMonth=nowD.getMonth()+1;
+  var groupBy=state.salesGroupBy||'month', year=state.salesYear, mon=state.salesMonth, recs=state.records||[];
   var buckets=[];
   function bk(label){ var b={label:label,tech:0,prod:0,clients:0}; buckets.push(b); return b; }
   var headLabel='月';
-  if(groupBy==='month'){
+  if(groupBy==='hour'){
+    headLabel='時間';
+    var bh=[]; for(var hh=0;hh<24;hh++) bh.push(bk(hh+'時'));
+    recs.forEach(function(r){ var d=new Date(r.time); if(isNaN(d.getTime())||d.getFullYear()!==year||(d.getMonth()+1)!==mon) return; var a=salesRec(r); var b=bh[d.getHours()]; b.tech+=a.tech;b.prod+=a.prod;b.clients+=a.client; });
+  } else if(groupBy==='month'){
     var bm=[]; for(var m=0;m<12;m++) bm.push(bk((m+1)+'月'));
     recs.forEach(function(r){ var d=new Date(r.time); if(isNaN(d.getTime())||d.getFullYear()!==year) return; var a=salesRec(r); var b=bm[d.getMonth()]; b.tech+=a.tech;b.prod+=a.prod;b.clients+=a.client; });
   } else if(groupBy==='year'){
@@ -3085,17 +3094,16 @@ function renderSalesDaily(){
     recs.forEach(function(r){ var d=new Date(r.time); if(isNaN(d.getTime()))return; var y=d.getFullYear(); if(!ym[y]) ym[y]=bk(y+'年'); var a=salesRec(r); ym[y].tech+=a.tech;ym[y].prod+=a.prod;ym[y].clients+=a.client; });
     buckets.sort(function(a,b){return a.label<b.label?-1:1;});
   } else {
-    headLabel='日'; var now=new Date(), yy=now.getFullYear(), mm=now.getMonth(), dim=new Date(yy,mm+1,0).getDate();
-    var bd=[]; for(var d=1;d<=dim;d++) bd.push(bk(d+'日'));
-    recs.forEach(function(r){ var dt=new Date(r.time); if(isNaN(dt.getTime())||dt.getFullYear()!==yy||dt.getMonth()!==mm) return; var a=salesRec(r); var b=bd[dt.getDate()-1]; b.tech+=a.tech;b.prod+=a.prod;b.clients+=a.client; });
+    headLabel='日'; var dim=new Date(year,mon,0).getDate();
+    var bd=[]; for(var dd=1;dd<=dim;dd++) bd.push(bk(dd+'日'));
+    recs.forEach(function(r){ var dt=new Date(r.time); if(isNaN(dt.getTime())||dt.getFullYear()!==year||(dt.getMonth()+1)!==mon) return; var a=salesRec(r); var b=bd[dt.getDate()-1]; b.tech+=a.tech;b.prod+=a.prod;b.clients+=a.client; });
   }
   var airMap={}, hasAir=false;
   if(SALES_ADMIN && state.airegi){
-    var nowA=new Date(), yyA=nowA.getFullYear(), mmA=nowA.getMonth();
     Object.keys(state.airegi).forEach(function(k){ var val=state.airegi[k]||0; if(!val) return; var pp=k.split('-'); var Y=+pp[0],M=+pp[1],D=+pp[2], lab=null;
       if(groupBy==='month'){ if(Y===year) lab=M+'月'; }
       else if(groupBy==='year'){ lab=Y+'年'; }
-      else { if(Y===yyA&&(M-1)===mmA) lab=D+'日'; }
+      else if(groupBy==='day'){ if(Y===year&&M===mon) lab=D+'日'; }
       if(lab!=null){ airMap[lab]=(airMap[lab]||0)+val; hasAir=true; }
     });
   }
@@ -4343,7 +4351,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "12.1";
+var APP_VERSION = "12.2";
 
 function checkForUpdate(){
   try {

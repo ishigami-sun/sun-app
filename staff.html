@@ -327,20 +327,18 @@
 
   <!-- 見る -->
   <div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:14px;margin-bottom:10px">
-    <div style="font-size:15px;color:#1A4F47;font-weight:800;margin-bottom:10px">① いつの分を見る？</div>
-    <div style="display:flex;gap:8px;margin-bottom:14px">
-      <button id="clBtn_today" onclick="setCustListMonth('today')" style="flex:1;padding:14px 4px;border:2px solid #2C7A6E;background:#2C7A6E;color:#fff;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer">今日</button>
-      <button id="clBtn_thisMonth" onclick="setCustListMonth('thisMonth')" style="flex:1;padding:14px 4px;border:2px solid #C8E0DC;background:#fff;color:#64748B;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer">今月</button>
-      <button id="clBtn_all" onclick="setCustListMonth('all')" style="flex:1;padding:14px 4px;border:2px solid #C8E0DC;background:#fff;color:#64748B;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer">ぜんぶ</button>
+    <div style="font-size:15px;color:#1A4F47;font-weight:800;margin-bottom:10px">いつの日報を見る？</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+      <select id="clGroupBy" onchange="clApply()" style="flex:1;min-width:88px;padding:11px;border:1.5px solid #C8E0DC;border-radius:8px;background:#fff;font-size:14px;font-weight:700;color:#1A4F47">
+        <option value="day">日別</option>
+        <option value="month" selected>月別</option>
+        <option value="year">年度別</option>
+      </select>
+      <select id="clYear" onchange="clApply()" style="flex:1;min-width:78px;padding:11px;border:1.5px solid #C8E0DC;border-radius:8px;background:#fff;font-size:14px;font-weight:700;color:#1A4F47"></select>
+      <select id="clMonth" onchange="clApply()" style="flex:1;min-width:68px;padding:11px;border:1.5px solid #C8E0DC;border-radius:8px;background:#fff;font-size:14px;font-weight:700;color:#1A4F47"></select>
+      <select id="clDay" onchange="clApply()" style="flex:1;min-width:68px;padding:11px;border:1.5px solid #C8E0DC;border-radius:8px;background:#fff;font-size:14px;font-weight:700;color:#1A4F47;display:none"></select>
     </div>
-    <div style="background:#EAF5F3;border-radius:10px;padding:12px;margin-bottom:12px">
-      <div style="font-size:14px;color:#1A4F47;font-weight:800;margin-bottom:6px">📅 ほかの日を見る</div>
-      <input type="date" id="custListDatePicker" onchange="viewByDate()" style="width:100%;padding:13px;border:2px solid #2C7A6E;border-radius:10px;background:#fff;font-size:17px;font-weight:700;color:#1A4F47">
-      <div style="font-size:12px;color:#3a6b62;margin-top:6px">👆 日にちをえらぶと、その日の分が出ます</div>
-    </div>
-    <select id="custListMonthPicker" onchange="setCustListMonth(this.value)" style="width:100%;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;background:#fff;font-size:13px;font-weight:600;color:#64748B;margin-bottom:12px">
-      <option value="">▼ 過去の月でまとめて見る</option>
-    </select>
+    <button onclick="clApply()" style="width:100%;padding:12px;background:#4DB8B2;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:800;cursor:pointer;margin-bottom:12px">表示する</button>
     <div style="font-size:13px;color:#64748B;font-weight:700;margin-bottom:6px">👤 担当でしぼる</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap" id="todayStaffFilter"></div>
     <div id="custListFilterDisplay" style="margin-top:12px;padding:11px;background:#FFF9E6;border:2px solid #F0D000;border-radius:10px;font-size:14px;color:#1A4F47;font-weight:800;text-align:center">
@@ -805,11 +803,13 @@
     <div class="sl-card">
       <div class="sl-filter">
         <select id="slGroupBy" onchange="state.salesGroupBy=this.value;renderSalesDaily()">
-          <option value="month">月別</option>
-          <option value="day">日別（今月）</option>
-          <option value="year">年別</option>
+          <option value="hour">時間別</option>
+          <option value="day">日別</option>
+          <option value="month" selected>月別</option>
+          <option value="year">年度別</option>
         </select>
         <select id="slYear" onchange="state.salesYear=parseInt(this.value);renderSalesDaily()"></select>
+        <select id="slMonth" onchange="state.salesMonth=parseInt(this.value);renderSalesDaily()"></select>
         <button class="sl-btn" onclick="renderSalesDaily()">表示する</button>
       </div>
     </div>
@@ -3142,12 +3142,13 @@ function makeSalesChart(id, which, config){
   }catch(e){}
 }
 function salesPopulateYears(){
-  var sel=document.getElementById('slYear'); if(!sel) return;
-  var now=new Date().getFullYear(); var yrs={}; yrs[now]=1;
-  (state.records||[]).forEach(function(r){ var d=new Date(r.time); if(!isNaN(d.getTime())) yrs[d.getFullYear()]=1; });
-  if(!state.salesYear) state.salesYear=now;
-  var arr=Object.keys(yrs).map(Number).sort(function(a,b){return b-a;});
-  sel.innerHTML=arr.map(function(y){ return '<option value="'+y+'"'+(y===state.salesYear?' selected':'')+'>'+y+'年度</option>'; }).join('');
+  var now=new Date();
+  if(!state.salesYear) state.salesYear=now.getFullYear();
+  if(!state.salesMonth) state.salesMonth=now.getMonth()+1;
+  var ysel=document.getElementById('slYear');
+  if(ysel){ var ys=''; for(var y=2026;y>=2017;y--) ys+='<option value="'+y+'"'+(y===state.salesYear?' selected':'')+'>'+y+'年</option>'; ysel.innerHTML=ys; }
+  var msel=document.getElementById('slMonth');
+  if(msel){ var ms=''; for(var mo=1;mo<=12;mo++) ms+='<option value="'+mo+'"'+(mo===state.salesMonth?' selected':'')+'>'+mo+'月</option>'; msel.innerHTML=ms; }
 }
 function renderSales(){
   if(!state.salesSub) state.salesSub='daily';
@@ -3164,12 +3165,18 @@ function renderSales(){
 }
 function switchSalesSub(t){ state.salesSub=t; renderSales(); }
 function renderSalesDaily(){
-  if(!state.salesYear) state.salesYear=new Date().getFullYear();
-  var groupBy=state.salesGroupBy||'month', year=state.salesYear, recs=state.records||[];
+  var nowD=new Date();
+  if(!state.salesYear) state.salesYear=nowD.getFullYear();
+  if(!state.salesMonth) state.salesMonth=nowD.getMonth()+1;
+  var groupBy=state.salesGroupBy||'month', year=state.salesYear, mon=state.salesMonth, recs=state.records||[];
   var buckets=[];
   function bk(label){ var b={label:label,tech:0,prod:0,clients:0}; buckets.push(b); return b; }
   var headLabel='月';
-  if(groupBy==='month'){
+  if(groupBy==='hour'){
+    headLabel='時間';
+    var bh=[]; for(var hh=0;hh<24;hh++) bh.push(bk(hh+'時'));
+    recs.forEach(function(r){ var d=new Date(r.time); if(isNaN(d.getTime())||d.getFullYear()!==year||(d.getMonth()+1)!==mon) return; var a=salesRec(r); var b=bh[d.getHours()]; b.tech+=a.tech;b.prod+=a.prod;b.clients+=a.client; });
+  } else if(groupBy==='month'){
     var bm=[]; for(var m=0;m<12;m++) bm.push(bk((m+1)+'月'));
     recs.forEach(function(r){ var d=new Date(r.time); if(isNaN(d.getTime())||d.getFullYear()!==year) return; var a=salesRec(r); var b=bm[d.getMonth()]; b.tech+=a.tech;b.prod+=a.prod;b.clients+=a.client; });
   } else if(groupBy==='year'){
@@ -3177,17 +3184,16 @@ function renderSalesDaily(){
     recs.forEach(function(r){ var d=new Date(r.time); if(isNaN(d.getTime()))return; var y=d.getFullYear(); if(!ym[y]) ym[y]=bk(y+'年'); var a=salesRec(r); ym[y].tech+=a.tech;ym[y].prod+=a.prod;ym[y].clients+=a.client; });
     buckets.sort(function(a,b){return a.label<b.label?-1:1;});
   } else {
-    headLabel='日'; var now=new Date(), yy=now.getFullYear(), mm=now.getMonth(), dim=new Date(yy,mm+1,0).getDate();
-    var bd=[]; for(var d=1;d<=dim;d++) bd.push(bk(d+'日'));
-    recs.forEach(function(r){ var dt=new Date(r.time); if(isNaN(dt.getTime())||dt.getFullYear()!==yy||dt.getMonth()!==mm) return; var a=salesRec(r); var b=bd[dt.getDate()-1]; b.tech+=a.tech;b.prod+=a.prod;b.clients+=a.client; });
+    headLabel='日'; var dim=new Date(year,mon,0).getDate();
+    var bd=[]; for(var dd=1;dd<=dim;dd++) bd.push(bk(dd+'日'));
+    recs.forEach(function(r){ var dt=new Date(r.time); if(isNaN(dt.getTime())||dt.getFullYear()!==year||(dt.getMonth()+1)!==mon) return; var a=salesRec(r); var b=bd[dt.getDate()-1]; b.tech+=a.tech;b.prod+=a.prod;b.clients+=a.client; });
   }
   var airMap={}, hasAir=false;
   if(SALES_ADMIN && state.airegi){
-    var nowA=new Date(), yyA=nowA.getFullYear(), mmA=nowA.getMonth();
     Object.keys(state.airegi).forEach(function(k){ var val=state.airegi[k]||0; if(!val) return; var pp=k.split('-'); var Y=+pp[0],M=+pp[1],D=+pp[2], lab=null;
       if(groupBy==='month'){ if(Y===year) lab=M+'月'; }
       else if(groupBy==='year'){ lab=Y+'年'; }
-      else { if(Y===yyA&&(M-1)===mmA) lab=D+'日'; }
+      else if(groupBy==='day'){ if(Y===year&&M===mon) lab=D+'日'; }
       if(lab!=null){ airMap[lab]=(airMap[lab]||0)+val; hasAir=true; }
     });
   }
@@ -4825,7 +4831,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "12.1";
+var APP_VERSION = "12.2";
 
 function checkForUpdate(){
   try {
@@ -4922,6 +4928,33 @@ function populateCustListMonths(){
   }
 }
 
+function clPopulate(){
+  var gb=document.getElementById('clGroupBy'); if(!gb) return;
+  var ys=document.getElementById('clYear'), ms=document.getElementById('clMonth'), ds=document.getElementById('clDay');
+  var now=new Date(), v=state.custListMonth||'';
+  var selY=now.getFullYear(), selM=now.getMonth()+1, selD=now.getDate(), mode='month';
+  if(v.indexOf('date:')===0){ var p=v.slice(5).split('-'); selY=+p[0]; selM=+p[1]; selD=+p[2]; mode='day'; }
+  else if(v.indexOf('year:')===0){ selY=+v.slice(5); mode='year'; }
+  else if(/^\d{4}-\d{2}$/.test(v)){ var p2=v.split('-'); selY=+p2[0]; selM=+p2[1]; mode='month'; }
+  else if(v==='today'){ mode='day'; }
+  else if(v==='thisMonth'){ mode='month'; }
+  gb.value=mode;
+  var yo=''; for(var y=2026;y>=2020;y--) yo+='<option value="'+y+'"'+(y===selY?' selected':'')+'>'+y+'年</option>'; ys.innerHTML=yo;
+  var mo=''; for(var m=1;m<=12;m++) mo+='<option value="'+m+'"'+(m===selM?' selected':'')+'>'+m+'月</option>'; ms.innerHTML=mo;
+  var dim=new Date(selY,selM,0).getDate(); var dd=''; for(var d=1;d<=dim;d++) dd+='<option value="'+d+'"'+(d===selD?' selected':'')+'>'+d+'日</option>'; ds.innerHTML=dd;
+  ms.style.display=(mode==='year')?'none':''; ds.style.display=(mode==='day')?'':'none';
+}
+function clApply(){
+  var gb=document.getElementById('clGroupBy'); if(!gb) return;
+  var ys=document.getElementById('clYear'), ms=document.getElementById('clMonth'), ds=document.getElementById('clDay');
+  var mode=gb.value, Y=parseInt(ys.value)||new Date().getFullYear(), M=parseInt(ms.value)||1, D=parseInt(ds.value)||1;
+  ms.style.display=(mode==='year')?'none':''; ds.style.display=(mode==='day')?'':'none';
+  if(mode==='day'){ var dim=new Date(Y,M,0).getDate(); if(D>dim) D=dim; state.custListMonth='date:'+Y+'-'+String(M).padStart(2,'0')+'-'+String(D).padStart(2,'0'); }
+  else if(mode==='year'){ state.custListMonth='year:'+Y; }
+  else { state.custListMonth=Y+'-'+String(M).padStart(2,'0'); }
+  try{ saveLocal(); }catch(e){}
+  if(typeof renderCustomerList==='function') renderCustomerList();
+}
 function setCustListMonth(val){
   state.custListMonth = val || 'today';
   try{ saveLocal(); }catch(e){}
@@ -5019,6 +5052,7 @@ function getCustListPeriodLabel(){
     return '📅 今月 ('+n.getFullYear()+'年'+(n.getMonth()+1)+'月)';
   }
   if(v === 'all') return '📅 全期間';
+  if(v.indexOf('year:')===0) return '📅 '+v.slice(5)+'年';
   if(v.indexOf('date:')===0){
     var dp = v.slice(5).split('-');
     return '📅 '+dp[0]+'年'+parseInt(dp[1])+'月'+parseInt(dp[2])+'日';
@@ -5033,6 +5067,7 @@ function getCustListPeriodLabel(){
 function renderCustomerList(){
   // 月選択を更新
   populateCustListMonths();
+  try{ clPopulate(); }catch(e){}
   
   if(!state.custListMonth) state.custListMonth = 'today';
   var period = state.custListMonth;
@@ -5055,6 +5090,8 @@ function renderCustomerList(){
       if(ymd.slice(0,7) !== curYM) continue;
     } else if(period === 'all'){
       // フィルタなし
+    } else if(period && period.indexOf('year:')===0){
+      if(ymd.slice(0,4) !== period.slice(5)) continue;
     } else if(period && period.indexOf('-') > 0){
       if(ymd.slice(0,7) !== period) continue;
     }
