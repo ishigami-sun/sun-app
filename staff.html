@@ -252,8 +252,8 @@
     <div class="form-group">
       <label class="form-label">客種</label>
       <div class="toggle-group">
-        <button class="toggle-btn active" onclick="selectType(this,'clientType','リピーター')">🔄 リピーター</button>
-        <button class="toggle-btn" onclick="selectType(this,'clientType','新規')">✨ 新規</button>
+        <button class="toggle-btn active" data-ct="リピーター" onclick="selectType(this,'clientType','リピーター')">🔄 リピーター</button>
+        <button class="toggle-btn" data-ct="新規" onclick="selectType(this,'clientType','新規')">✨ 新規</button>
       </div>
     </div>
     <div class="form-group" style="margin-bottom:0">
@@ -1555,7 +1555,7 @@ function recYMD(r){
 }
 
 function renderAll(){
-  renderStaffButtons(); renderMediaButtons(); renderPaymentButtons();
+  renderStaffButtons(); renderMediaButtons(); renderPaymentButtons(); renderClientType();
   renderTaxMode(); renderMenuList(); renderProductList();
   renderSelectedMenuEdit(); renderSelectedProductEdit();
   renderSummary(); renderRecords(); renderDashboard(); renderAdminLists();
@@ -1624,6 +1624,10 @@ function selectType(btn,field,val){
   for(var i=0;i<btns.length;i++) btns[i].classList.remove('active');
   btn.classList.add('active');
 }
+function renderClientType(){
+  var btns=document.querySelectorAll('[data-ct]');
+  for(var i=0;i<btns.length;i++){ btns[i].classList.toggle('active', btns[i].getAttribute('data-ct')===(state.clientType||'リピーター')); }
+}
 
 function setTaxMode(mode){ /* 税モード撤廃 */ }
 function renderTaxMode(){ /* 税モードUI撤廃により空 */ }
@@ -1664,7 +1668,6 @@ function selectCustomerName(name){
   document.getElementById('customerName').value=name;
   document.getElementById('nameSuggestions').style.display='none';
   state.clientType='リピーター';
-  var btns=document.querySelectorAll('.toggle-btn');
   renderAll();
 }
 
@@ -2257,6 +2260,7 @@ function submitRecord(){
   state.records.push(record);
   state.selectedMenus=[]; state.selectedProducts=[];
   document.getElementById('customerName').value='';
+  state.clientType='リピーター';
   state.entryDate=''; // 登録後は通常（本日）入力に戻す
   state.editingRecordId=null; state.editingOrigTime=null; state.editingCustomerName=null;
   try{ updateEntryDateBanner(); }catch(e){}
@@ -4831,7 +4835,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "12.2";
+var APP_VERSION = "12.3";
 
 function checkForUpdate(){
   try {
