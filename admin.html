@@ -356,6 +356,7 @@
     <select id="dashStaffSelect" onchange="setDashStaff(this.value)" style="flex:1;padding:11px 12px;border:2px solid #C8E0DC;border-radius:10px;background:#fff;font-size:13px;font-weight:700;color:#1A4F47"></select>
   </div>
   <div id="dashContent"></div>
+  <div id="prodMasterMgmt" style="margin-top:16px"></div>
 </div>
 
 <!-- ===== 損益計算書 P&L (代表専用) ===== -->
@@ -2887,6 +2888,7 @@ function renderDashboard(){
   html+=rankCard('👥 スタッフ別 物販利益（'+periodLabel+'）', staffRank.slice(0,8).map(function(x){ return {name:x.name, value:'¥'+num(x.profit)+(x.known?'':' ※'), sub:x.count+'件'}; }));
 
   var cont=document.getElementById('dashContent'); if(cont) cont.innerHTML=html;
+  if(typeof renderProdMasterMgmt==='function') renderProdMasterMgmt();
 }
 
 /* ADMIN */
@@ -3023,46 +3025,66 @@ function renderEduAdmin(){
   if(!vids.length){ el.innerHTML='<div style="font-size:12px;color:#94a3b8;text-align:center;padding:10px">登録済みの動画はありません</div>'; return; }
   var s='';
   for(var i=0;i<vids.length;i++){ var v=vids[i];
-    s+='<div data-eduid="'+v.id+'" draggable="true" ondragstart="eduDragStart(event,\''+v.id+'\')" ondragover="eduDragOver(event,\''+v.id+'\')" ondrop="eduDrop(event)" ondragend="eduDragEnd(event)" style="display:flex;align-items:center;gap:6px;border:1px solid #E8EFEE;border-radius:8px;padding:6px 9px;margin-bottom:6px;background:#fff">';
-    s+='<div ontouchstart="eduTouchStart(event,\''+v.id+'\')" title="ドラッグで並び替え" style="flex:0 0 auto;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:20px;cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none">&#9776;</div>';
+    s+='<div style="display:flex;align-items:center;gap:6px;border:1px solid #E8EFEE;border-radius:8px;padding:6px 9px;margin-bottom:6px;background:#fff">';
     s+='<div style="min-width:0;flex:1"><div style="font-size:13px;font-weight:700;color:#1A4F47;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+h(v.title)+'</div><div style="font-size:11px;color:#94a3b8">Phase '+v.phase+'</div></div>';
-    s+='<button onclick="deleteEduVideo(\''+v.id+'\')" style="flex:0 0 auto;padding:6px 11px;border:none;background:#E05555;color:#fff;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">削除</button>';
-    s+='</div>';
+    s+='<div style="display:flex;gap:4px;flex:0 0 auto;align-items:center">';
+    s+= (i>0) ? '<button onclick="eduMove(\''+v.id+'\',-1)" style="width:36px;height:36px;border:1px solid #C8E0DC;background:#fff;color:#2C7A6E;border-radius:7px;font-size:16px;font-weight:800;cursor:pointer">↑</button>' : '<span style="display:inline-block;width:36px"></span>';
+    s+= (i<vids.length-1) ? '<button onclick="eduMove(\''+v.id+'\',1)" style="width:36px;height:36px;border:1px solid #C8E0DC;background:#fff;color:#2C7A6E;border-radius:7px;font-size:16px;font-weight:800;cursor:pointer">↓</button>' : '<span style="display:inline-block;width:36px"></span>';
+    s+='<button onclick="deleteEduVideo(\''+v.id+'\')" style="height:36px;padding:0 11px;border:none;background:#E05555;color:#fff;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">削除</button>';
+    s+='</div></div>';
   }
   el.innerHTML=s;
 }
-var _eduDragId=null;
-function eduCardById(id){ return document.querySelector('[data-eduid="'+id+'"]'); }
-function eduMoveDom(dragId, overId, y){
-  var list=document.getElementById('eduAdminList'); if(!list) return;
-  var drag=eduCardById(dragId), over=eduCardById(overId); if(!drag||!over||drag===over) return;
-  var rect=over.getBoundingClientRect(); var before=(y < rect.top+rect.height/2);
-  if(before) list.insertBefore(drag, over); else list.insertBefore(drag, over.nextSibling);
-}
-function eduCommitOrder(){
-  var list=document.getElementById('eduAdminList'); if(!list) return;
-  var cards=list.querySelectorAll('[data-eduid]');
-  var ids=[]; for(var i=0;i<cards.length;i++) ids.push(cards[i].getAttribute('data-eduid'));
-  var byId={}; (state.eduVideos||[]).forEach(function(v){ byId[String(v.id)]=v; });
-  var arr=[]; for(var j=0;j<ids.length;j++){ var v=byId[ids[j]]; if(v){ v.order=j+1; arr.push(v); } }
-  (state.eduVideos||[]).forEach(function(v){ if(ids.indexOf(String(v.id))<0){ v.order=arr.length+1; arr.push(v); } });
-  state.eduVideos=arr;
+function eduMove(id, dir){
+  var vids=(state.eduVideos||[]).slice().sort(function(a,b){ return eduOrderKey(a)-eduOrderKey(b); });
+  var idx=-1; for(var i=0;i<vids.length;i++){ if(String(vids[i].id)===String(id)){ idx=i; break; } }
+  if(idx<0) return; var j=idx+dir; if(j<0||j>=vids.length) return;
+  var tmp=vids[idx]; vids[idx]=vids[j]; vids[j]=tmp;
+  for(var k=0;k<vids.length;k++){ vids[k].order=k+1; } // orderのみ更新（title/url/phase/createdAtは不変）
+  state.eduVideos=vids;
   if(typeof save==='function') save();
+  renderEduAdmin();
   if(typeof renderAcademyVideos==='function') renderAcademyVideos();
   if(typeof showToast==='function') showToast('✅ 並び順を保存しました');
 }
-function eduDragStart(e,id){ _eduDragId=id; try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',id); }catch(_){} var c=eduCardById(id); if(c){ c.style.opacity='0.5'; c.style.boxShadow='0 4px 14px rgba(0,0,0,0.25)'; } }
-function eduDragOver(e,overId){ e.preventDefault(); if(!_eduDragId||overId===_eduDragId) return; eduMoveDom(_eduDragId, overId, e.clientY); }
-function eduDrop(e){ if(e&&e.preventDefault) e.preventDefault(); }
-function eduDragEnd(e){ var c=eduCardById(_eduDragId); if(c){ c.style.opacity=''; c.style.boxShadow=''; } if(_eduDragId) eduCommitOrder(); _eduDragId=null; }
-function eduTouchStart(e,id){
-  _eduDragId=id; if(e&&e.preventDefault) e.preventDefault();
-  var c=eduCardById(id); if(c){ c.style.opacity='0.5'; c.style.boxShadow='0 4px 14px rgba(0,0,0,0.25)'; }
-  function move(ev){ if(ev.cancelable) ev.preventDefault(); var t=ev.touches&&ev.touches[0]; if(!t) return; var el=document.elementFromPoint(t.clientX,t.clientY); var card=(el&&el.closest)?el.closest('[data-eduid]'):null; if(card){ var oid=card.getAttribute('data-eduid'); if(oid!==_eduDragId) eduMoveDom(_eduDragId, oid, t.clientY); } }
-  function up(){ document.removeEventListener('touchmove',move,{passive:false}); document.removeEventListener('touchend',up); var cc=eduCardById(_eduDragId); if(cc){ cc.style.opacity=''; cc.style.boxShadow=''; } if(_eduDragId) eduCommitOrder(); _eduDragId=null; }
-  document.addEventListener('touchmove',move,{passive:false}); document.addEventListener('touchend',up);
+/* ===== 物販タブ 商品マスタ管理 ===== */
+function renderProdMasterMgmt(){
+  var el=document.getElementById('prodMasterMgmt'); if(!el) return;
+  var s='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:14px">';
+  s+='<div style="font-size:13px;font-weight:800;color:#1A4F47;margin-bottom:4px">🏷 商品マスタ管理</div>';
+  s+='<div style="font-size:11px;color:#94a3b8;margin-bottom:10px">仕入れ値・売値を変更すると、物販集計・P&L歩合に自動反映されます。</div>';
+  if(!(state.products||[]).length){ s+='<div style="font-size:12px;color:#94a3b8;text-align:center;padding:8px">商品がありません（管理タブで追加）</div></div>'; el.innerHTML=s; return; }
+  for(var i=0;i<state.products.length;i++){ var p=state.products[i];
+    var hp=(p.cost>0&&p.sell>0); var prt=hp?Math.round((p.sell-p.cost)/p.sell*100):0;
+    if(state.pmEditIdx===i){
+      s+='<div style="border:1.5px solid #2C7A6E;border-radius:8px;padding:10px;margin-bottom:6px">';
+      s+='<div style="font-size:13px;font-weight:700;color:#1A4F47;margin-bottom:6px">'+h(p.name)+'</div>';
+      s+='<div style="display:flex;gap:8px;margin-bottom:8px"><div style="flex:1"><label style="font-size:10px;color:#64748B">仕入れ値</label><input id="pmCost_'+i+'" type="number" value="'+(p.cost||0)+'" style="width:100%;box-sizing:border-box;padding:8px;border:1.5px solid #C8E0DC;border-radius:6px"></div><div style="flex:1"><label style="font-size:10px;color:#64748B">売値</label><input id="pmSell_'+i+'" type="number" value="'+(p.sell||0)+'" style="width:100%;box-sizing:border-box;padding:8px;border:1.5px solid #C8E0DC;border-radius:6px"></div></div>';
+      s+='<div style="display:flex;gap:6px"><button onclick="pmSaveProduct('+i+')" style="flex:1;padding:9px;background:#2C7A6E;color:#fff;border:none;border-radius:7px;font-weight:700;cursor:pointer">✅ 保存</button><button onclick="pmCancel()" style="flex:0 0 auto;padding:9px 14px;background:#fff;color:#64748B;border:1px solid #C8E0DC;border-radius:7px;cursor:pointer">取消</button></div>';
+      s+='</div>';
+    } else {
+      s+='<div style="display:flex;align-items:center;gap:8px;border:1px solid #E8EFEE;border-radius:8px;padding:8px 10px;margin-bottom:6px">';
+      s+='<div style="min-width:0;flex:1"><div style="font-size:13px;font-weight:700;color:#1A4F47;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+h(p.name)+'</div><div style="font-size:11px;color:#64748B">仕入¥'+num(p.cost||0)+' / 売¥'+num(p.sell||0)+(hp?' <span style="color:#27AE60;font-weight:700">利益率'+prt+'%</span>':' <span style="color:#D4A843">価格未設定</span>')+'</div></div>';
+      s+='<button onclick="pmEdit('+i+')" style="flex:0 0 auto;padding:7px 12px;background:#fff;color:#2C7A6E;border:1.5px solid #2C7A6E;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">編集</button>';
+      s+='</div>';
+    }
+  }
+  s+='</div>'; el.innerHTML=s;
 }
-
+function pmEdit(i){ state.pmEditIdx=i; renderProdMasterMgmt(); }
+function pmCancel(){ state.pmEditIdx=-1; renderProdMasterMgmt(); }
+function pmSaveProduct(i){
+  var p=state.products[i]; if(!p) return;
+  var ci=document.getElementById('pmCost_'+i), si=document.getElementById('pmSell_'+i);
+  if(ci) p.cost=parseInt(ci.value)||0;
+  if(si) p.sell=parseInt(si.value)||0;
+  p.updatedAt=Date.now();
+  state.pmEditIdx=-1;
+  if(typeof save==='function') save();
+  if(typeof renderDashboard==='function') renderDashboard();
+  if(typeof renderProdMasterMgmt==='function') renderProdMasterMgmt();
+  if(typeof showToast==='function') showToast('✅ 保存しました（集計・歩合に反映）');
+}
 function pushDeletionsToCloud(){
   if(!state.cloudUrl||!state.cloudKey){ showToast('⚠️ クラウド未設定'); return; }
   var ids=(state.deletedIds||[]).slice();
@@ -4401,7 +4423,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "12.6";
+var APP_VERSION = "12.7";
 
 function checkForUpdate(){
   try {
