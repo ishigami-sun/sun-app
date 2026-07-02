@@ -2158,7 +2158,7 @@ function updateProductSell(i,val){ if(state.selectedProducts[i]) state.selectedP
 function updateProductStaff(i,val){ if(state.selectedProducts[i]) state.selectedProducts[i].productStaff=val; renderStaffMiniGrids(); renderProductList(); }
 // 物販1行の売上（割引適用後・税込）と利益
 function prodLineSell(p){ if(!p) return 0; var base=((p.customSell!==undefined?p.customSell:p.sell)||0)*(p.qty||1); var d=(p.discountPct>0)?Math.round(base*p.discountPct/100):0; var v=base-d; return v<0?0:v; }
-function prodLineProfit(p){ if(!p) return 0; return prodLineSell(p)-(p.cost||0)*(p.qty||1); }
+function prodLineProfit(p){ if(!p) return 0; var c=resolveCost(p); return prodLineSell(p)-((c!=null?c:0))*(p.qty||1); }
 function setProductDiscount(i,val){ if(!state.selectedProducts[i]) return; var v=parseInt(val)||0; if(v<0)v=0; if(v>100)v=100; state.selectedProducts[i].discountPct=v; renderSelectedProductEdit(); renderSummary(); }
 
 /* SUMMARY */
@@ -2732,12 +2732,14 @@ function setDashStaff(val){
 }
 // 商品の卸値を解決：本人の値→マスタ→過去日報（同名）の順。無ければ null
 function resolveCost(p){
-  if(p && p.cost && p.cost>0) return p.cost;
-  var nm = p && p.name;
-  if(nm){
-    for(var i=0;i<state.products.length;i++){ if(state.products[i].name===nm && state.products[i].cost>0) return state.products[i].cost; }
-    for(var i=0;i<state.records.length;i++){ var pr=state.records[i].products||[]; for(var j=0;j<pr.length;j++){ if(pr[j].name===nm && pr[j].cost>0) return pr[j].cost; } }
-  }
+  if(!p) return null;
+  // 仕入れ値は商品マスタを最優先（ID→名前）。マスタ変更が全集計へ自動反映される
+  if(p.id!=null){ for(var i=0;i<state.products.length;i++){ if(String(state.products[i].id)===String(p.id) && state.products[i].cost>0) return state.products[i].cost; } }
+  var nm = p.name;
+  if(nm){ for(var i=0;i<state.products.length;i++){ if(state.products[i].name===nm && state.products[i].cost>0) return state.products[i].cost; } }
+  // フォールバック：レコード自身の仕入れ値 → 同名の過去日報
+  if(p.cost && p.cost>0) return p.cost;
+  if(nm){ for(var i=0;i<state.records.length;i++){ var pr=state.records[i].products||[]; for(var j=0;j<pr.length;j++){ if(pr[j].name===nm && pr[j].cost>0) return pr[j].cost; } } }
   return null;
 }
 function renderDashboard(){
@@ -2782,8 +2784,8 @@ function renderDashboard(){
   }
   lines.sort(function(a,b){ return new Date(b.time)-new Date(a.time); });
 
-  var units=0, sales=0, profitSum=0, hasUnknownCost=false, count=lines.length;
-  for(var i=0;i<lines.length;i++){ units+=lines[i].qty; sales+=lines[i].lineSell; if(lines[i].profit!=null) profitSum+=lines[i].profit; else hasUnknownCost=true; }
+  var units=0, sales=0, profitSum=0, costSum=0, hasUnknownCost=false, count=lines.length;
+  for(var i=0;i<lines.length;i++){ units+=lines[i].qty; sales+=lines[i].lineSell; if(lines[i].cost!=null) costSum+=lines[i].cost*lines[i].qty; if(lines[i].profit!=null) profitSum+=lines[i].profit; else hasUnknownCost=true; }
   var avgPerSale = count>0?Math.round(sales/count):0;
   var profitRate = sales>0?Math.round(profitSum/sales*1000)/10:0;
   var avgProfit = count>0?Math.round(profitSum/count):0;
@@ -2817,6 +2819,15 @@ function renderDashboard(){
   }
 
   var html='';
+  // 月間合計（点数・仕入れ値合計・売上合計・利益・利益率）
+  html+='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:14px;margin-bottom:14px">';
+  html+='<div style="font-size:13px;font-weight:800;color:#1A4F47;margin-bottom:8px">📦 月間合計（'+periodLabel+'）</div>';
+  html+='<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#64748B">点数</span><span style="font-weight:700">'+units+'点</span></div>';
+  html+='<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#64748B">仕入れ値合計</span><span style="font-weight:700;color:#E05555">−¥'+num(costSum)+'</span></div>';
+  html+='<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#64748B">売上合計</span><span style="font-weight:700">¥'+num(sales)+'</span></div>';
+  html+='<div style="display:flex;justify-content:space-between;font-size:14px;padding:7px 0 2px;border-top:1px solid #E8EFEE;margin-top:4px"><span style="font-weight:800;color:#1A4F47">利益</span><span style="font-weight:800;color:#27AE60">¥'+num(profitSum)+'（利益率 '+profitRate+'%）</span></div>';
+  if(hasUnknownCost) html+='<div style="font-size:10px;color:#D4A843;margin-top:4px">※仕入れ値未登録の商品があります（管理タブで設定）</div>';
+  html+='</div>';
   // サマリー 2x2
   html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">';
   html+=card('💰 物販利益', '¥'+num(profitSum), '利益率 '+profitRate+'%'+(hasUnknownCost?'（一部卸値未登録）':''), true);
@@ -3215,11 +3226,11 @@ function renderSalesProduct(){
     body.innerHTML=am.length?h1:'<div class="sl-empty">データがありません</div>';
   } else {
     var byp={};
-    recs.forEach(function(r){ (r.products||[]).forEach(function(p){ var st=p.productStaff||r.staff; if(me!=null&&st!==me)return; if(!byp[p.name]) byp[p.name]={c:0,s:0}; byp[p.name].c+=(p.qty||1); byp[p.name].s+=prodLineSell(p); }); });
+    recs.forEach(function(r){ (r.products||[]).forEach(function(p){ var st=p.productStaff||r.staff; if(me!=null&&st!==me)return; if(!byp[p.name]) byp[p.name]={c:0,s:0,cost:0,profit:0}; byp[p.name].c+=(p.qty||1); byp[p.name].s+=prodLineSell(p); var rc=resolveCost(p); byp[p.name].cost+=(rc!=null?rc:0)*(p.qty||1); byp[p.name].profit+=prodLineProfit(p); }); });
     var ap=Object.keys(byp).map(function(k){return [k,byp[k]];}).sort(function(a,b){return b[1].s-a[1].s;});
-    var t2={c:0,s:0}, h2='<table class="sl-tbl"><tr><th>商品名</th><th>点数</th><th>売上</th></tr>';
-    ap.forEach(function(e){ t2.c+=e[1].c;t2.s+=e[1].s; h2+='<tr><td>'+h(e[0])+'</td><td>'+num(e[1].c)+'点</td><td>¥'+num(e[1].s)+'</td></tr>'; });
-    h2+='<tr class="sl-total"><td>合計</td><td>'+num(t2.c)+'点</td><td>¥'+num(t2.s)+'</td></tr></table>';
+    var t2={c:0,s:0,cost:0,profit:0}, h2='<table class="sl-tbl"><tr><th>商品名</th><th>点数</th><th>仕入</th><th>売上</th><th>利益</th></tr>';
+    ap.forEach(function(e){ t2.c+=e[1].c;t2.s+=e[1].s;t2.cost+=e[1].cost;t2.profit+=e[1].profit; h2+='<tr><td>'+h(e[0])+'</td><td>'+num(e[1].c)+'点</td><td>¥'+num(e[1].cost)+'</td><td>¥'+num(e[1].s)+'</td><td>¥'+num(e[1].profit)+'</td></tr>'; });
+    h2+='<tr class="sl-total"><td>合計</td><td>'+num(t2.c)+'点</td><td>¥'+num(t2.cost)+'</td><td>¥'+num(t2.s)+'</td><td>¥'+num(t2.profit)+'</td></tr></table>';
     body.innerHTML=ap.length?h2:'<div class="sl-empty">データがありません</div>';
   }
 }
@@ -4390,7 +4401,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "12.5";
+var APP_VERSION = "12.6";
 
 function checkForUpdate(){
   try {
