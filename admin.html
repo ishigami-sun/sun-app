@@ -853,6 +853,7 @@
         <select id="slMonth" onchange="state.salesMonth=parseInt(this.value);renderSalesDaily()"></select>
         <button class="sl-btn" onclick="renderSalesDaily()">表示する</button>
       </div>
+      <select id="slStaff" onchange="state.salesStaff=this.value;renderSales()" style="width:100%;margin-top:8px;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;background:#fff;font-size:14px;font-weight:700;color:#1A4F47"></select>
     </div>
     <div class="sl-card">
       <div class="sl-chart-head"><span class="sl-ttl">売上推移</span>
@@ -3102,7 +3103,7 @@ function pushDeletionsToCloud(){
 /* ===== 売上タブ（日別・商品別・分析） ===== */
 var SALES_ADMIN = true; // admin=true / staff=false（自動置換）
 var _slSalesChart=null,_slStaffChart=null;
-function salesMe(){ if(SALES_ADMIN) return null; try{ var s=JSON.parse(localStorage.getItem('sun_session')||'null'); return (s&&s.staff)||''; }catch(e){ return ''; } }
+function salesMe(){ return (state.salesStaff && state.salesStaff.length) ? state.salesStaff : null; } // 売上タブの担当者フィルター（空=全員）
 // 1日報のスコープ別集計（admin=全体 / staff=自分の担当分）
 function salesRec(r){
   var me=salesMe(), tech=0,prod=0,items=0;
@@ -3130,6 +3131,8 @@ function salesPopulateYears(){
   if(ysel){ var ys=''; for(var y=2026;y>=2017;y--) ys+='<option value="'+y+'"'+(y===state.salesYear?' selected':'')+'>'+y+'年</option>'; ysel.innerHTML=ys; }
   var msel=document.getElementById('slMonth');
   if(msel){ var ms=''; for(var mo=1;mo<=12;mo++) ms+='<option value="'+mo+'"'+(mo===state.salesMonth?' selected':'')+'>'+mo+'月</option>'; msel.innerHTML=ms; }
+  var ssel=document.getElementById('slStaff');
+  if(ssel){ var so='<option value="">担当：全員</option>'; (state.staff||[]).forEach(function(nm){ so+='<option value="'+h(nm)+'"'+(nm===state.salesStaff?' selected':'')+'>'+h(nm)+'</option>'; }); ssel.innerHTML=so; }
 }
 function renderSales(){
   if(!state.salesSub) state.salesSub='daily';
@@ -4424,7 +4427,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "13.2";
+var APP_VERSION = "13.3";
 
 function checkForUpdate(){
   try {
