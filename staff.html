@@ -1242,7 +1242,7 @@ function processSyncQueue(){
 }
 
 // クラウドから全データを取得して同期
-function mergeMasterById(local, cloud){ local=Array.isArray(local)?local:[]; cloud=Array.isArray(cloud)?cloud:[]; var seen={},out=[]; local.concat(cloud).forEach(function(x){ if(!x||x.id==null) return; var k=String(x.id); if(!seen[k]){ seen[k]=1; out.push(x); } }); return out; }
+function mergeMasterById(local, cloud){ local=Array.isArray(local)?local:[]; cloud=Array.isArray(cloud)?cloud:[]; var map={},order=[]; function put(x){ if(!x||x.id==null) return; var k=String(x.id); if(!(k in map)){ map[k]=x; order.push(k); } else if((x.updatedAt||0)>(map[k].updatedAt||0)){ map[k]=x; } } local.forEach(put); cloud.forEach(put); return order.map(function(k){ return map[k]; }); }
 function mergeMasterUnique(local, cloud){ local=Array.isArray(local)?local:[]; cloud=Array.isArray(cloud)?cloud:[]; var seen={},out=[]; local.concat(cloud).forEach(function(x){ var k=String(x); if(!seen[k]){ seen[k]=1; out.push(x); } }); return out; }
 function pushAndSync(){
   if(!state.cloudUrl||!state.cloudKey){ showToast('⚠️ クラウド未設定'); return; }
@@ -2944,7 +2944,7 @@ function renderAdminLists(){
           pdl += '</select></div></div>';
           pdl += '<div style="display:flex;gap:8px"><div style="flex:1"><label style="font-size:10px;color:#64748B">仕入価格</label><input id="eCost_'+idx+'" type="number" class="form-input" value="'+p.cost+'"></div>';
           pdl += '<div style="flex:1"><label style="font-size:10px;color:#64748B">販売価格</label><input id="eSell_'+idx+'" type="number" class="form-input" value="'+p.sell+'"></div></div>';
-          pdl += '<div style="display:flex;gap:6px"><button class="add-btn" style="flex:1" onclick="saveProductEdit('+idx+')">✅ 保存</button>';
+          pdl += '<div style="display:flex;gap:6px"><button class="add-btn" style="flex:1" onclick="saveMasterProductEdit('+idx+')">✅ 保存</button>';
           pdl += '<button class="add-btn" style="flex:1;background:#94A3B8" onclick="cancelProductEdit()">キャンセル</button>';
           pdl += '<button class="item-row-del" onclick="if(confirm(\'削除？\')){removeProduct('+idx+');cancelProductEdit()}">🗑</button></div></div>';
         } else {
@@ -3865,6 +3865,7 @@ function saveMenuEdit(i){
   var priceI = document.getElementById('emPrice_'+i);
   if(nameI && nameI.value.trim()) m.name = nameI.value.trim();
   if(priceI) m.price = parseInt(priceI.value)||0;
+  m.updatedAt=Date.now();
   state.editingMenuIdx = -1;
   save();
   if(state.cloudUrl && state.cloudKey){
@@ -3890,7 +3891,7 @@ function cancelProductEdit(){
   state.editingProductIdx = -1;
   renderAdminLists();
 }
-function saveProductEdit(i){
+function saveMasterProductEdit(i){
   var p = state.products[i];
   var nameI = document.getElementById('eName_'+i);
   var costI = document.getElementById('eCost_'+i);
@@ -3900,6 +3901,7 @@ function saveProductEdit(i){
   if(nameI && nameI.value.trim()) p.name = nameI.value.trim();
   if(costI) p.cost = parseInt(costI.value)||0;
   if(sellI) p.sell = parseInt(sellI.value)||0;
+  p.updatedAt=Date.now();
   if(brandI && brandI.value) p.brand = brandI.value;
   if(catI && catI.value) p.subCategory = catI.value;
   state.editingProductIdx = -1;
@@ -4835,7 +4837,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "12.4";
+var APP_VERSION = "12.5";
 
 function checkForUpdate(){
   try {
