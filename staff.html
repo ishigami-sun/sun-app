@@ -2838,7 +2838,7 @@ function renderDashboard(){
     html+='</tbody><tfoot><tr style="background:#E8F5F3">';
     html+='<td colspan="3" style="padding:11px 8px;font-weight:800;color:#1A4F47;border-top:2px solid #2C7A6E">月間合計</td>';
     html+='<td style="padding:11px 8px;text-align:right;font-weight:800;border-top:2px solid #2C7A6E">'+units+'</td>';
-    html+='<td style="border-top:2px solid #2C7A6E"></td>';
+    html+='<td style="padding:11px 8px;text-align:right;font-weight:800;color:#E05555;border-top:2px solid #2C7A6E">−¥'+num(costSum)+'</td>';
     html+='<td style="padding:11px 8px;text-align:right;font-weight:800;border-top:2px solid #2C7A6E">¥'+num(sales)+'</td>';
     html+='<td style="padding:11px 8px;text-align:right;font-weight:800;color:#059669;border-top:2px solid #2C7A6E">¥'+num(profitSum)+'</td>';
     html+='<td style="border-top:2px solid #2C7A6E"></td>';
@@ -4905,7 +4905,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "13.0";
+var APP_VERSION = "13.1";
 
 function checkForUpdate(){
   try {
