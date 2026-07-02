@@ -1559,6 +1559,7 @@ function renderAll(){
   renderTaxMode(); renderMenuList(); renderProductList();
   renderSelectedMenuEdit(); renderSelectedProductEdit();
   renderSummary(); renderRecords(); renderDashboard(); renderAdminLists();
+  try{ var _sp=document.getElementById('page-sales'); if(_sp && _sp.classList.contains('active') && typeof renderSales==='function') renderSales(); }catch(e){}
   try{ updateEntryDateBanner(); }catch(e){}
 }
 
@@ -4848,7 +4849,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "12.7";
+var APP_VERSION = "12.8";
 
 function checkForUpdate(){
   try {
