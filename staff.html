@@ -3193,7 +3193,7 @@ function pushDeletionsToCloud(){
 /* ===== 売上タブ（日別・商品別・分析） ===== */
 var SALES_ADMIN = false; // admin=true / staff=false（自動置換）
 var _slSalesChart=null,_slStaffChart=null;
-function salesMe(){ if(SALES_ADMIN) return null; try{ var s=JSON.parse(localStorage.getItem('sun_session')||'null'); return (s&&s.staff)||''; }catch(e){ return ''; } }
+function salesMe(){ return null; } // 売上タブは店舗全体を表示（本人スコープ撤廃）
 // 1日報のスコープ別集計（admin=全体 / staff=自分の担当分）
 function salesRec(r){
   var me=salesMe(), tech=0,prod=0,items=0;
@@ -4905,7 +4905,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "13.1";
+var APP_VERSION = "13.2";
 
 function checkForUpdate(){
   try {
