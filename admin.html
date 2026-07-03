@@ -3173,7 +3173,7 @@ function renderSalesDaily(){
     recs.forEach(function(r){ var dt=new Date(r.time); if(isNaN(dt.getTime())||dt.getFullYear()!==year||(dt.getMonth()+1)!==mon) return; var a=salesRec(r); var b=bd[dt.getDate()-1]; b.tech+=a.tech;b.prod+=a.prod;b.clients+=a.client; });
   }
   var airMap={}, hasAir=false;
-  if(SALES_ADMIN && state.airegi){
+  if(SALES_ADMIN && state.airegi && !(state.salesStaff && state.salesStaff.length)){
     Object.keys(state.airegi).forEach(function(k){ var val=state.airegi[k]||0; if(!val) return; var pp=k.split('-'); var Y=+pp[0],M=+pp[1],D=+pp[2], lab=null;
       if(groupBy==='month'){ if(Y===year) lab=M+'月'; }
       else if(groupBy==='year'){ lab=Y+'年'; }
@@ -4427,7 +4427,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "13.3";
+var APP_VERSION = "13.4";
 
 function checkForUpdate(){
   try {
