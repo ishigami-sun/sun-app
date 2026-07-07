@@ -3422,7 +3422,11 @@ function rcRenderResult(){
 var ATT_ADMIN = true; // admin=true / staff=false
 var ATT_STATUSES = ['出勤','公休','有給','早退','遅刻','欠勤'];
 var ATT_WD = ['日','月','火','水','木','金','土'];
-function attSession(){ try{ var s=JSON.parse(localStorage.getItem('sun_session')||'null'); return (s&&s.staff)||''; }catch(e){ return ''; } }
+function attSession(){
+  try{ var s=JSON.parse(localStorage.getItem('sun_session')||'null'); if(s&&s.staff) return s.staff; }catch(e){}
+  try{ if(typeof state!=='undefined' && state && state.selectedStaff) return state.selectedStaff; }catch(e){}
+  return '';
+}
 function attMerge(local, cloud){
   local=local||{}; cloud=cloud||{}; var out={};
   function add(src){ for(var st in src){ if(!out[st]) out[st]={}; for(var dt in src[st]){ var e=src[st][dt]; var cur=out[st][dt]; if(!cur||((e&&e.updatedAt)||0)>=((cur&&cur.updatedAt)||0)) out[st][dt]=e; } } }
@@ -3528,8 +3532,11 @@ function renderAttendance(){
     if(ssel) ssel.style.display=allv?'none':'';
     body.innerHTML = allv ? attRenderAll() : attRenderCalendar(state.attStaff);
   } else {
-    var me=attSession();
-    if(!me){ body.innerHTML='<div style="padding:20px;text-align:center;color:#94a3b8">ログイン情報が取得できません</div>'; return; }
+    var me=attSession() || state.attStaff || '';
+    if(!me){
+      body.innerHTML='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:10px;padding:14px"><div style="font-size:13px;font-weight:700;color:#1A4F47;margin-bottom:8px">あなたのお名前を選んでください</div><select onchange="state.attStaff=this.value;renderAttendance()" style="width:100%;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;font-weight:700"><option value="">選択…</option>'+(state.staff||[]).map(function(st){return '<option'+(st===state.attStaff?' selected':'')+'>'+h(st)+'</option>';}).join('')+'</select></div>';
+      return;
+    }
     body.innerHTML=attRenderCalendar(me);
   }
 }
@@ -4559,7 +4566,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "13.5";
+var APP_VERSION = "13.6";
 
 function checkForUpdate(){
   try {
