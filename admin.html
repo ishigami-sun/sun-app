@@ -3420,7 +3420,7 @@ function rcRenderResult(){
 
 /* ===== 出勤簿 ===== */
 var ATT_ADMIN = true; // admin=true / staff=false
-var ATT_STATUSES = ['出勤','公休','有給','早退','遅刻','欠勤'];
+var ATT_STATUSES = ['出勤','定休','公休','有給','早退','遅刻','欠勤'];
 var ATT_WD = ['日','月','火','水','木','金','土'];
 function attSession(){
   try{ var s=JSON.parse(localStorage.getItem('sun_session')||'null'); if(s&&s.staff) return s.staff; }catch(e){}
@@ -3434,7 +3434,7 @@ function attMerge(local, cloud){
 }
 function attDefault(dateStr){
   var d=new Date(dateStr+'T00:00:00'); var wd=d.getDay();
-  if(wd===1) return {status:'公休', start:'', end:'', brk:0, note:''};      // 月曜=定休
+  if(wd===1) return {status:'定休', start:'', end:'', brk:0, note:''};      // 月曜=完全定休日
   var weekend=(wd===0||wd===6);
   return {status:'出勤', start:weekend?'10:00':'11:00', end:weekend?'19:00':'20:00', brk:60, note:''};
 }
@@ -3451,7 +3451,7 @@ function attSet(staff, ds, patch){
   if(typeof save==='function') save();
 }
 function attWorkMin(rec){
-  if(!rec || rec.status==='公休'||rec.status==='有給'||rec.status==='欠勤') return 0;
+  if(!rec || rec.status==='定休'||rec.status==='公休'||rec.status==='有給'||rec.status==='欠勤') return 0;
   if(!rec.start||!rec.end) return 0;
   function toMin(t){ var p=String(t).split(':'); return (parseInt(p[0])||0)*60+(parseInt(p[1])||0); }
   var w=toMin(rec.end)-toMin(rec.start)-(parseInt(rec.brk)||0);
@@ -3466,6 +3466,7 @@ function attPunch(staff, ds, which){
   if(typeof showToast==='function') showToast((which==='in'?'🟢 出勤':'🔴 退勤')+'打刻 '+t);
 }
 function attBg(wd, status){
+  if(status==='定休') return '#ececec';
   if(status==='公休'||status==='有給') return '#eafaf0';
   if(status==='欠勤') return '#fdecea';
   if(wd===1) return '#f1f1f1';
@@ -3476,13 +3477,13 @@ function attRenderCalendar(staff){
   if(!staff) return '<div style="padding:20px;text-align:center;color:#94a3b8">スタッフを選択してください</div>';
   var ym=state.attMonth; var p=ym.split('-'); var Y=+p[0],M=+p[1]; var dim=new Date(Y,M,0).getDate();
   var today=attTodayYMD();
-  var sum={出勤:0,公休:0,有給:0,欠勤:0,worked:0};
+  var sum={出勤:0,定休:0,公休:0,有給:0,欠勤:0,worked:0};
   var s='';
   for(var d=1;d<=dim;d++){
     var ds=ym+'-'+String(d).padStart(2,'0'); var wd=new Date(ds+'T00:00:00').getDay();
     var rec=attGet(staff,ds); var wmin=attWorkMin(rec);
     if(rec.status==='出勤'||rec.status==='早退'||rec.status==='遅刻') sum.出勤++;
-    else if(rec.status==='公休') sum.公休++; else if(rec.status==='有給') sum.有給++; else if(rec.status==='欠勤') sum.欠勤++;
+    else if(rec.status==='定休') sum.定休++; else if(rec.status==='公休') sum.公休++; else if(rec.status==='有給') sum.有給++; else if(rec.status==='欠勤') sum.欠勤++;
     sum.worked+=wmin;
     var key="'"+staff.replace(/'/g,"\\'")+"','"+ds+"'";
     s+='<div style="background:'+attBg(wd,rec.status)+';border:1px solid #E8EFEE;border-radius:8px;padding:8px 10px;margin-bottom:6px">';
@@ -3500,7 +3501,7 @@ function attRenderCalendar(staff){
     s+='<input type="text" value="'+h(rec.note||'')+'" onchange="attSet('+key+',{note:this.value})" placeholder="備考" style="width:100%;box-sizing:border-box;margin-top:6px;padding:6px 8px;border:1px solid #E8EFEE;border-radius:6px;font-size:12px">';
     s+='</div>';
   }
-  var head='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:10px;padding:12px 14px;margin-bottom:10px"><div style="font-size:13px;font-weight:800;color:#1A4F47;margin-bottom:6px">📊 月間集計（'+staff+'）</div><div style="font-size:13px;color:#374151;line-height:1.9">出勤 <b>'+sum.出勤+'</b>日 ／ 公休 <b>'+sum.公休+'</b> ／ 有給 <b>'+sum.有給+'</b> ／ 欠勤 <b>'+sum.欠勤+'</b><br>総実働 <b style="color:#2C7A6E;font-size:15px">'+attHours(sum.worked)+'</b> 時間</div></div>';
+  var head='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:10px;padding:12px 14px;margin-bottom:10px"><div style="font-size:13px;font-weight:800;color:#1A4F47;margin-bottom:6px">📊 月間集計（'+staff+'）</div><div style="font-size:13px;color:#374151;line-height:1.9">出勤 <b>'+sum.出勤+'</b>日 ／ 定休 <b>'+sum.定休+'</b> ／ 公休 <b>'+sum.公休+'</b> ／ 有給 <b>'+sum.有給+'</b> ／ 欠勤 <b>'+sum.欠勤+'</b><br>総実働 <b style="color:#2C7A6E;font-size:15px">'+attHours(sum.worked)+'</b> 時間</div></div>';
   return head + s;
 }
 function attRenderAll(){
@@ -4566,7 +4567,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "13.6";
+var APP_VERSION = "13.7";
 
 function checkForUpdate(){
   try {
