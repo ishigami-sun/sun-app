@@ -223,6 +223,7 @@
     <button class="tab-btn" onclick="switchTab('admin')">⚙️ 管理</button>
     <button class="tab-btn" onclick="switchTab('manual')">📖 マニュアル</button>
     <button class="tab-btn" onclick="switchTab('academy')">🎓 アカデミー</button>
+    <button class="tab-btn" onclick="switchTab('attend')">🕐 出勤簿</button>
   </nav>
   <div id="cloudStatus" style="margin-top:8px;padding:6px 10px;border-radius:8px;font-size:11px;text-align:center;background:rgba(255,255,255,0.15);color:#fff;display:none">
     <span id="cloudStatusText">🔄 接続中...</span>
@@ -863,6 +864,18 @@
 
 </div>
 
+<div class="page" id="page-attend">
+  <div class="section-title">🕐 出勤簿</div>
+  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+    <select id="attMonthSel" onchange="state.attMonth=this.value;renderAttendance()" style="flex:1;min-width:120px;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;font-weight:700;color:#1A4F47;background:#fff"></select>
+    <select id="attStaffSel" onchange="state.attStaff=this.value;renderAttendance()" style="flex:1;min-width:120px;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;font-weight:700;color:#1A4F47;background:#fff;display:none"></select>
+  </div>
+  <div id="attViewToggle" style="display:none;gap:6px;margin-bottom:10px">
+    <button id="attView_ind" onclick="state.attView='ind';renderAttendance()" style="flex:1;padding:9px;border:1.5px solid #4DB8B2;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;background:#4DB8B2;color:#fff">👤 個別</button>
+    <button id="attView_all" onclick="state.attView='all';renderAttendance()" style="flex:1;padding:9px;border:1.5px solid #4DB8B2;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;background:#fff;color:#64748B">👥 全員一覧</button>
+  </div>
+  <div id="attBody"></div>
+</div>
 <div class="page" id="page-academy">
   <div class="section-title">🎓 SUN ACADEMY</div>
   <div style="font-size:12px;color:#64748B;margin-bottom:12px;line-height:1.7">入社からカットデビューまでの教育の流れです。各ステップを確認し、できたら「成長チェックシート」に記録しよう。<b style="color:#2C7A6E">Simple is the best.</b></div>
@@ -1152,7 +1165,7 @@ function cloudCall(action, payload, callback){
 
 
 var state = {
-  staff:[], mediaList:[], payments:[], paymentMaster:[], menus:[], products:[], records:[], eduVideos:[], airegi:{},
+  staff:[], mediaList:[], payments:[], paymentMaster:[], menus:[], products:[], records:[], eduVideos:[], airegi:{}, attendance:{},
   selectedStaff:'', clientType:'リピーター', mediaType:'',
   selectedPayment:'', taxMode:'inc',
   selectedMenus:[], selectedProducts:[],
@@ -1300,6 +1313,7 @@ function syncFromCloud(silent){
         if(res.masters.productBrands) state.productBrands = mergeMasterUnique(state.productBrands, res.masters.productBrands);
         if(res.masters.eduVideos && res.masters.eduVideos.length >= (state.eduVideos||[]).length){ state.eduVideos = res.masters.eduVideos; }
         if(res.masters.airegi){ state.airegi = Object.assign({}, res.masters.airegi, state.airegi||{}); }
+        if(res.masters.attendance){ state.attendance = attMerge(state.attendance, res.masters.attendance); }
         if(typeof renderAcademyVideos==='function'){ try{ renderAcademyVideos(); if(typeof renderEduAdmin==='function') renderEduAdmin(); }catch(e){} }
       }
       saveLocal();
@@ -1365,7 +1379,8 @@ function saveMastersToCloud(){
       goals: state.goals || {},
       tickets: state.tickets || {},
       eduVideos: state.eduVideos || [],
-      airegi: state.airegi || {}
+      airegi: state.airegi || {},
+      attendance: state.attendance || {}
     }}, function(){});
   } catch(e){}
 }
@@ -3495,19 +3510,136 @@ function rcRenderResult(){
 }
 
 
+/* ===== 出勤簿 ===== */
+var ATT_ADMIN = false; // admin=true / staff=false
+var ATT_STATUSES = ['出勤','公休','有給','早退','遅刻','欠勤'];
+var ATT_WD = ['日','月','火','水','木','金','土'];
+function attSession(){ try{ var s=JSON.parse(localStorage.getItem('sun_session')||'null'); return (s&&s.staff)||''; }catch(e){ return ''; } }
+function attMerge(local, cloud){
+  local=local||{}; cloud=cloud||{}; var out={};
+  function add(src){ for(var st in src){ if(!out[st]) out[st]={}; for(var dt in src[st]){ var e=src[st][dt]; var cur=out[st][dt]; if(!cur||((e&&e.updatedAt)||0)>=((cur&&cur.updatedAt)||0)) out[st][dt]=e; } } }
+  add(local); add(cloud); return out;
+}
+function attDefault(dateStr){
+  var d=new Date(dateStr+'T00:00:00'); var wd=d.getDay();
+  if(wd===1) return {status:'公休', start:'', end:'', brk:0, note:''};      // 月曜=定休
+  var weekend=(wd===0||wd===6);
+  return {status:'出勤', start:weekend?'10:00':'11:00', end:weekend?'19:00':'20:00', brk:60, note:''};
+}
+function attHas(staff, ds){ return !!(state.attendance&&state.attendance[staff]&&state.attendance[staff][ds]); }
+function attGet(staff, ds){ var a=(state.attendance&&state.attendance[staff]&&state.attendance[staff][ds]); return a?a:attDefault(ds); }
+function attSet(staff, ds, patch){
+  if(!state.attendance) state.attendance={};
+  if(!state.attendance[staff]) state.attendance[staff]={};
+  var cur=state.attendance[staff][ds]||attDefault(ds);
+  var rec={status:cur.status,start:cur.start,end:cur.end,brk:cur.brk,note:cur.note||''};
+  for(var k in patch) rec[k]=patch[k];
+  rec.updatedAt=Date.now();
+  state.attendance[staff][ds]=rec;
+  if(typeof save==='function') save();
+}
+function attWorkMin(rec){
+  if(!rec || rec.status==='公休'||rec.status==='有給'||rec.status==='欠勤') return 0;
+  if(!rec.start||!rec.end) return 0;
+  function toMin(t){ var p=String(t).split(':'); return (parseInt(p[0])||0)*60+(parseInt(p[1])||0); }
+  var w=toMin(rec.end)-toMin(rec.start)-(parseInt(rec.brk)||0);
+  return w>0?w:0;
+}
+function attHours(min){ return Math.round(min/60*10)/10; }
+function attTodayYMD(){ var n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); }
+function attPunch(staff, ds, which){
+  var n=new Date(); var t=String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');
+  attSet(staff, ds, which==='in'?{start:t,status:'出勤'}:{end:t});
+  renderAttendance();
+  if(typeof showToast==='function') showToast((which==='in'?'🟢 出勤':'🔴 退勤')+'打刻 '+t);
+}
+function attBg(wd, status){
+  if(status==='公休'||status==='有給') return '#eafaf0';
+  if(status==='欠勤') return '#fdecea';
+  if(wd===1) return '#f1f1f1';
+  if(wd===0||wd===6) return '#eef4fb';
+  return '#fff';
+}
+function attRenderCalendar(staff){
+  if(!staff) return '<div style="padding:20px;text-align:center;color:#94a3b8">スタッフを選択してください</div>';
+  var ym=state.attMonth; var p=ym.split('-'); var Y=+p[0],M=+p[1]; var dim=new Date(Y,M,0).getDate();
+  var today=attTodayYMD();
+  var sum={出勤:0,公休:0,有給:0,欠勤:0,worked:0};
+  var s='';
+  for(var d=1;d<=dim;d++){
+    var ds=ym+'-'+String(d).padStart(2,'0'); var wd=new Date(ds+'T00:00:00').getDay();
+    var rec=attGet(staff,ds); var wmin=attWorkMin(rec);
+    if(rec.status==='出勤'||rec.status==='早退'||rec.status==='遅刻') sum.出勤++;
+    else if(rec.status==='公休') sum.公休++; else if(rec.status==='有給') sum.有給++; else if(rec.status==='欠勤') sum.欠勤++;
+    sum.worked+=wmin;
+    var key="'"+staff.replace(/'/g,"\\'")+"','"+ds+"'";
+    s+='<div style="background:'+attBg(wd,rec.status)+';border:1px solid #E8EFEE;border-radius:8px;padding:8px 10px;margin-bottom:6px">';
+    s+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-weight:800;color:#1A4F47;font-size:13px">'+M+'/'+d+'（'+ATT_WD[wd]+'）'+(ds===today?' <span style="color:#4DB8B2;font-size:11px">●今日</span>':'')+'</span>';
+    s+='<select onchange="attSet('+key+',{status:this.value});renderAttendance()" style="padding:5px 8px;border:1.5px solid #C8E0DC;border-radius:6px;font-size:12px;font-weight:700;background:#fff">'+ATT_STATUSES.map(function(st){return '<option'+(st===rec.status?' selected':'')+'>'+st+'</option>';}).join('')+'</select></div>';
+    s+='<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:12px;color:#64748B">';
+    s+='<input type="time" value="'+(rec.start||'')+'" onchange="attSet('+key+',{start:this.value});renderAttendance()" style="padding:5px;border:1px solid #C8E0DC;border-radius:6px;font-size:12px">';
+    s+='<span>〜</span>';
+    s+='<input type="time" value="'+(rec.end||'')+'" onchange="attSet('+key+',{end:this.value});renderAttendance()" style="padding:5px;border:1px solid #C8E0DC;border-radius:6px;font-size:12px">';
+    s+='<span>休憩</span><input type="number" value="'+(rec.brk||0)+'" onchange="attSet('+key+',{brk:parseInt(this.value)||0});renderAttendance()" style="width:46px;padding:5px;border:1px solid #C8E0DC;border-radius:6px;font-size:12px;text-align:right">分';
+    s+='<span style="margin-left:auto;font-weight:700;color:#2C7A6E">実働 '+attHours(wmin)+'h</span></div>';
+    if(ds===today){
+      s+='<div style="display:flex;gap:6px;margin-top:6px"><button onclick="attPunch('+key+',\'in\')" style="flex:1;padding:8px;background:#e8f8f3;border:1px solid #27AE60;color:#1e8f56;border-radius:7px;font-size:12px;font-weight:800;cursor:pointer">🟢 出勤打刻</button><button onclick="attPunch('+key+',\'out\')" style="flex:1;padding:8px;background:#fdeeee;border:1px solid #E05555;color:#c23b3b;border-radius:7px;font-size:12px;font-weight:800;cursor:pointer">🔴 退勤打刻</button></div>';
+    }
+    s+='<input type="text" value="'+h(rec.note||'')+'" onchange="attSet('+key+',{note:this.value})" placeholder="備考" style="width:100%;box-sizing:border-box;margin-top:6px;padding:6px 8px;border:1px solid #E8EFEE;border-radius:6px;font-size:12px">';
+    s+='</div>';
+  }
+  var head='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:10px;padding:12px 14px;margin-bottom:10px"><div style="font-size:13px;font-weight:800;color:#1A4F47;margin-bottom:6px">📊 月間集計（'+staff+'）</div><div style="font-size:13px;color:#374151;line-height:1.9">出勤 <b>'+sum.出勤+'</b>日 ／ 公休 <b>'+sum.公休+'</b> ／ 有給 <b>'+sum.有給+'</b> ／ 欠勤 <b>'+sum.欠勤+'</b><br>総実働 <b style="color:#2C7A6E;font-size:15px">'+attHours(sum.worked)+'</b> 時間</div></div>';
+  return head + s;
+}
+function attRenderAll(){
+  var ym=state.attMonth; var p=ym.split('-'); var Y=+p[0],M=+p[1]; var dim=new Date(Y,M,0).getDate();
+  var s='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:10px;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:400px"><thead><tr style="background:#2C7A6E;color:#fff"><th style="padding:9px;text-align:left">スタッフ</th><th style="padding:9px;text-align:right">出勤</th><th style="padding:9px;text-align:right">公休</th><th style="padding:9px;text-align:right">有給</th><th style="padding:9px;text-align:right">総実働</th></tr></thead><tbody>';
+  (state.staff||[]).forEach(function(st){
+    var o={出勤:0,公休:0,有給:0,worked:0};
+    for(var d=1;d<=dim;d++){ var ds=ym+'-'+String(d).padStart(2,'0'); var rec=attGet(st,ds);
+      if(rec.status==='出勤'||rec.status==='早退'||rec.status==='遅刻') o.出勤++;
+      else if(rec.status==='公休') o.公休++; else if(rec.status==='有給') o.有給++;
+      o.worked+=attWorkMin(rec); }
+    s+='<tr style="border-bottom:1px solid #F0F4F3"><td style="padding:9px;font-weight:700;color:#1A4F47">'+h(st)+'</td><td style="padding:9px;text-align:right">'+o.出勤+'</td><td style="padding:9px;text-align:right">'+o.公休+'</td><td style="padding:9px;text-align:right">'+o.有給+'</td><td style="padding:9px;text-align:right;font-weight:700;color:#2C7A6E">'+attHours(o.worked)+'h</td></tr>';
+  });
+  s+='</tbody></table></div>';
+  return s;
+}
+function renderAttendance(){
+  if(!state.attMonth){ var n0=new Date(); state.attMonth=n0.getFullYear()+'-'+String(n0.getMonth()+1).padStart(2,'0'); }
+  var msel=document.getElementById('attMonthSel');
+  if(msel){ var opts='',n=new Date(); for(var i=0;i<12;i++){ var d=new Date(n.getFullYear(),n.getMonth()-i,1); var ym=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); opts+='<option value="'+ym+'"'+(ym===state.attMonth?' selected':'')+'>'+d.getFullYear()+'年'+(d.getMonth()+1)+'月</option>'; } msel.innerHTML=opts; }
+  var body=document.getElementById('attBody'); if(!body) return;
+  if(ATT_ADMIN){
+    var ssel=document.getElementById('attStaffSel');
+    if(ssel){ ssel.style.display=''; if(!state.attStaff) state.attStaff=(state.staff&&state.staff[0])||''; ssel.innerHTML=(state.staff||[]).map(function(st){return '<option'+(st===state.attStaff?' selected':'')+'>'+h(st)+'</option>';}).join(''); }
+    var vt=document.getElementById('attViewToggle'); if(vt) vt.style.display='flex';
+    var bi=document.getElementById('attView_ind'), ba=document.getElementById('attView_all'); var allv=(state.attView==='all');
+    function sty(btn,on){ if(!btn)return; btn.style.background=on?'#4DB8B2':'#fff'; btn.style.color=on?'#fff':'#64748B'; }
+    sty(bi,!allv); sty(ba,allv);
+    if(ssel) ssel.style.display=allv?'none':'';
+    body.innerHTML = allv ? attRenderAll() : attRenderCalendar(state.attStaff);
+  } else {
+    var me=attSession();
+    if(!me){ body.innerHTML='<div style="padding:20px;text-align:center;color:#94a3b8">ログイン情報が取得できません</div>'; return; }
+    body.innerHTML=attRenderCalendar(me);
+  }
+}
+
 function switchTab(tab){
   var pages=document.querySelectorAll('.page');
   for(var i=0;i<pages.length;i++) pages[i].classList.remove('active');
   var tabs=document.querySelectorAll('.tab-btn');
   for(var i=0;i<tabs.length;i++) tabs[i].classList.remove('active');
   document.getElementById('page-'+tab).classList.add('active');
-  var idx=['input','records','dashboard','sales','goals','admin','manual','academy'].indexOf(tab);
+  var idx=['input','records','dashboard','sales','goals','admin','manual','academy','attend'].indexOf(tab);
   if(idx>=0) tabs[idx].classList.add('active');
   if(tab==='admin') updateSessionInfo();
   if(tab==='records') renderRecords();
   if(tab==='dashboard') renderDashboard();
   if(tab==='sales'){ if(typeof renderSales==='function') renderSales(); }
   if(tab==='academy'){ if(typeof renderAcademyVideos==='function') renderAcademyVideos(); if(typeof renderEduAdmin==='function') renderEduAdmin(); }
+  if(tab==='attend'){ if(typeof renderAttendance==='function') renderAttendance(); }
   if(tab==='pnl') renderPnl();
   if(tab==='goals' && typeof renderGoals === 'function') renderGoals();
 }
@@ -4908,7 +5040,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "13.4";
+var APP_VERSION = "13.5";
 
 function checkForUpdate(){
   try {
