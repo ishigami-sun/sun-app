@@ -3616,10 +3616,12 @@ function attRowXml(cells){ return '<Row>'+cells.join('')+'</Row>'; }
 function attExportExcel(){
   var ym=state.attMonth; if(!ym){ var n0=new Date(); ym=n0.getFullYear()+'-'+String(n0.getMonth()+1).padStart(2,'0'); }
   var p=ym.split('-'); var Y=+p[0],M=+p[1]; var dim=new Date(Y,M,0).getDate();
-  var staff=state.staff||[];
+  var dsel=document.getElementById('attDlStaff'); var only=dsel?dsel.value:'__all__';
+  var staff=(only&&only!=='__all__')?[only]:(state.staff||[]);
+  var scopeLabel=(only&&only!=='__all__')?only:'全員';
   // 集計シート
   var sumRows=[];
-  sumRows.push(attRowXml([attCell(Y+'年'+M+'月 出勤簿 集計')]));
+  sumRows.push(attRowXml([attCell(Y+'年'+M+'月 出勤簿 集計（'+scopeLabel+'）')]));
   sumRows.push(attRowXml([]));
   sumRows.push(attRowXml(['スタッフ','出勤','定休','公休','有給','欠勤','総実働(h)'].map(function(x){return attCell(x);})));
   staff.forEach(function(st){
@@ -3645,7 +3647,7 @@ function attExportExcel(){
     +'</Workbook>';
   var blob=new Blob([xml],{type:'application/vnd.ms-excel'});
   var url=URL.createObjectURL(blob); var a=document.createElement('a');
-  a.href=url; a.download='出勤簿_'+Y+'年'+M+'月.xls'; document.body.appendChild(a); a.click();
+  a.href=url; a.download='出勤簿_'+Y+'年'+M+'月_'+scopeLabel+'.xls'; document.body.appendChild(a); a.click();
   document.body.removeChild(a); setTimeout(function(){URL.revokeObjectURL(url);},1000);
   if(typeof showToast==='function') showToast('📊 Excelをダウンロードしました');
 }
@@ -5087,7 +5089,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "13.8";
+var APP_VERSION = "13.9";
 
 function checkForUpdate(){
   try {
