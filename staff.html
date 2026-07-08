@@ -3666,12 +3666,9 @@ function renderAttendance(){
     if(ssel) ssel.style.display=allv?'none':'';
     body.innerHTML = allv ? attRenderAll() : attRenderCalendar(state.attStaff);
   } else {
-    var me=attSession() || state.attStaff || '';
-    if(!me){
-      body.innerHTML='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:10px;padding:14px"><div style="font-size:13px;font-weight:700;color:#1A4F47;margin-bottom:8px">あなたのお名前を選んでください</div><select onchange="state.attStaff=this.value;renderAttendance()" style="width:100%;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;font-weight:700"><option value="">選択…</option>'+(state.staff||[]).map(function(st){return '<option'+(st===state.attStaff?' selected':'')+'>'+h(st)+'</option>';}).join('')+'</select></div>';
-      return;
-    }
-    body.innerHTML=attRenderCalendar(me);
+    var me=state.attStaff || attSession() || '';
+    var picker='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:10px;padding:10px 12px;margin-bottom:10px"><div style="font-size:12px;font-weight:700;color:#64748B;margin-bottom:6px">お名前を選んで入力してください</div><select onchange="state.attStaff=this.value;renderAttendance()" style="width:100%;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;font-weight:700;color:#1A4F47;background:#fff"><option value="">選択…</option>'+(state.staff||[]).map(function(st){return '<option'+(st===me?' selected':'')+'>'+h(st)+'</option>';}).join('')+'</select></div>';
+    body.innerHTML = picker + (me ? attRenderCalendar(me) : '<div style="padding:20px;text-align:center;color:#94a3b8">お名前を選んでください</div>');
   }
 }
 
@@ -5089,7 +5086,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "13.9";
+var APP_VERSION = "14.0";
 
 function checkForUpdate(){
   try {
