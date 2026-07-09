@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>SUN 日報（クラウド版・代表）</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap');
@@ -21,12 +21,20 @@
   .app-logo{font-family:'DM Sans',sans-serif;font-size:22px;font-weight:700;color:#fff;letter-spacing:2px;}
   .app-logo span{color:var(--gold-light);}
   .header-date{font-size:12px;color:rgba(255,255,255,0.75);text-align:right;}
-  .tab-nav{display:flex;gap:6px;background:rgba(255,255,255,0.15);border-radius:12px;padding:4px;}
-  .tab-btn{flex:1;padding:8px 2px;border:none;border-radius:9px;background:transparent;color:rgba(255,255,255,0.7);font-size:10px;font-family:'Noto Sans JP',sans-serif;font-weight:500;cursor:pointer;transition:all 0.2s;}
+  .tab-nav{display:flex;gap:6px;background:rgba(255,255,255,0.15);border-radius:12px;padding:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .tab-btn{flex:1 0 auto;min-width:46px;white-space:nowrap;padding:9px 4px;border:none;border-radius:9px;background:transparent;color:rgba(255,255,255,0.7);font-size:10px;font-family:'Noto Sans JP',sans-serif;font-weight:500;cursor:pointer;transition:all 0.2s;}
   .tab-btn.active{background:#fff;color:var(--teal);font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.1);}
   .filter-btn{padding:6px 12px;border:1.5px solid var(--border);border-radius:20px;background:#fff;color:var(--text-light);font-size:11px;font-weight:600;cursor:pointer;font-family:'Noto Sans JP',sans-serif;transition:all 0.18s;}
   .filter-btn.active{border-color:var(--teal);background:var(--teal);color:#fff;font-weight:700;}
   .month-picker{padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'Noto Sans JP',sans-serif;background:#fff;color:var(--text);outline:none;}
+  /* スマホ最適化 */
+  @media (max-width:380px){
+    .app-header{padding:16px 14px 22px;}
+    .tab-btn{font-size:9px;min-width:42px;}
+  }
+  @media (min-width:768px){
+    .tab-btn{font-size:12px;}
+  }
   /* P&L */
   .pnl-section{background:#fff;border-radius:var(--radius);padding:16px;margin-bottom:12px;box-shadow:var(--shadow);}
   .pnl-section-title{font-size:12px;font-weight:700;color:var(--teal);margin-bottom:10px;letter-spacing:1px;text-transform:uppercase;}
@@ -66,9 +74,9 @@
   .menu-name{font-size:14px;font-weight:500;}
   .menu-price-sub{font-size:11px;color:var(--text-light);margin-top:1px;}
   .menu-price-display{font-size:14px;font-weight:700;color:var(--teal);white-space:nowrap;}
-  .menu-add-btn{width:34px;height:34px;border-radius:50%;border:none;background:var(--teal);color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(44,122,110,0.3);flex-shrink:0;}
+  .menu-add-btn{width:38px;height:38px;border-radius:50%;border:none;background:var(--teal);color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(44,122,110,0.3);flex-shrink:0;}
   .menu-qty{display:flex;align-items:center;gap:6px;background:var(--bg);border-radius:8px;padding:3px 8px;}
-  .qty-btn{width:26px;height:26px;border-radius:50%;border:none;background:var(--teal);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .qty-btn{width:30px;height:30px;border-radius:50%;border:none;background:var(--teal);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
   .qty-num{font-size:14px;font-weight:700;min-width:18px;text-align:center;}
 
   /* SELECTED MENU */
@@ -79,7 +87,7 @@
   .price-edit-label{font-size:11px;color:var(--text-light);}
   .price-edit-input{width:88px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-weight:700;color:var(--teal);text-align:right;background:#fff;font-family:'Noto Sans JP',sans-serif;}
   .price-edit-input:focus{border-color:var(--teal-light);outline:none;}
-  .remove-btn{width:24px;height:24px;border-radius:50%;border:none;background:var(--red);color:#fff;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .remove-btn{width:30px;height:30px;border-radius:50%;border:none;background:var(--red);color:#fff;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
   .price-up-btn{padding:4px 10px;border:1.5px solid var(--gold);border-radius:20px;background:#FFFBEB;color:var(--gold);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:'Noto Sans JP',sans-serif;}
   .price-up-btn.reset{border-color:var(--red);color:var(--red);background:#FFF5F5;}
   .discount-btn{padding:4px 10px;border:1.5px solid #E91E8C;border-radius:20px;background:#FFF0F9;color:#C2185B;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:'Noto Sans JP',sans-serif;transition:all 0.2s;}
@@ -105,7 +113,7 @@
   .product-card-prices{font-size:10px;color:var(--text-light);}
   .product-card-qty-wrap{display:flex;align-items:center;justify-content:space-between;margin-top:6px;}
   .product-mini-qty{display:flex;align-items:center;gap:5px;}
-  .mini-btn{width:22px;height:22px;border-radius:50%;border:none;background:var(--teal);color:#fff;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .mini-btn{width:28px;height:28px;border-radius:50%;border:none;background:var(--teal);color:#fff;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
   .mini-num{font-size:13px;font-weight:700;min-width:16px;text-align:center;}
 
   /* PRODUCT SELECTED - 担当者ごとカード */
@@ -184,7 +192,7 @@
   .item-row{display:flex;align-items:center;background:var(--bg);border-radius:var(--radius-sm);padding:9px 12px;gap:8px;}
   .item-row-name{flex:1;font-size:13px;font-weight:500;}
   .item-row-price{font-size:12px;font-weight:700;color:var(--teal);}
-  .item-row-del{width:26px;height:26px;border-radius:50%;border:none;background:#FEE2E2;color:var(--red);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .item-row-del{width:30px;height:30px;border-radius:50%;border:none;background:#FEE2E2;color:var(--red);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
 
   .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--teal-dark);color:#fff;padding:11px 22px;border-radius:30px;font-size:13px;font-weight:600;opacity:0;transition:all 0.3s;z-index:999;pointer-events:none;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,0.2);}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
@@ -229,7 +237,7 @@
   </div>
 </header>
 
-<div id="pendingSaveBar" style="display:none;background:#FFF3E0;border-top:2px solid #FF9800;padding:10px 16px;align-items:center;gap:10px;position:sticky;top:140px;z-index:99;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+<div id="pendingSaveBar" style="display:none;background:#FFF3E0;border-top:2px solid #FF9800;padding:10px 16px;align-items:center;gap:10px;position:sticky;top:0;z-index:99;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
   <div style="flex:1;font-size:12px;color:#E65100;font-weight:700">📝 未保存の変更があります</div>
   <button onclick="discardPending()" style="padding:6px 12px;background:#fff;border:1.5px solid #E05555;border-radius:6px;color:#E05555;font-size:11px;font-weight:700;cursor:pointer">破棄</button>
   <button id="savePendingBtn" onclick="savePending()" style="padding:6px 14px;background:#FF9800;border:none;border-radius:6px;color:#fff;font-size:12px;font-weight:700;cursor:pointer">💾 保存して全員に共有</button>
@@ -4107,7 +4115,12 @@ function ensureProductMasters(){
 function markPending(){ state.pendingChanges = true; updatePendingBar(); }
 function updatePendingBar(){
   var bar = document.getElementById('pendingSaveBar');
-  if(bar) bar.style.display = state.pendingChanges ? 'flex' : 'none';
+  if(!bar) return;
+  if(state.pendingChanges){
+    var hdr=document.querySelector('.app-header');
+    if(hdr) bar.style.top=hdr.offsetHeight+'px';  // 可変ヘッダー高に追従（top:140px固定を廃止）
+    bar.style.display='flex';
+  } else { bar.style.display='none'; }
 }
 function savePending(){
   if(!state.cloudUrl || !state.cloudKey){ showToast('⚠️ クラウド設定がありません'); return; }
@@ -4685,7 +4698,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "14.3";
+var APP_VERSION = "14.4";
 
 function checkForUpdate(){
   try {
