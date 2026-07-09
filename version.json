@@ -1,5 +1,5 @@
 {
-  "version": "14.2",
-  "releaseDate": "2026-07-09",
-  "notes": "物販データの編集モーダルに「🗑️ 削除」ボタンを追加（キャンセルの左・赤#e74c3c）。確認ダイアログ「本当に削除しますか？」でOKなら該当の物販ラインを削除（レコードが空になる場合は日報ごと削除して削除履歴へ退避）、クラウドにも反映。"
+  "version": "14.3",
+  "releaseDate": "2026-07-10",
+  "notes": "重大バグ修正: ①admin: recYMD/parseYMD未定義参照を解消(前月比等の例外防止) ②admin: メニュー税抜集計がtaxModeを無視しHP税込メニューで税抜/消費税が過大→menuExcで是正 ③editRecord二重定義を解消(旧入力フォーム版を改名) ④admin: applyTodayStaffFilter未定義を追加 ⑤admin: 日報タブで月ピッカー/担当フィルタ/削除履歴/期間対応の顧客リストを初期描画(renderCustomerList呼出漏れ修正)。"
 }

@@ -5084,7 +5084,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "14.2";
+var APP_VERSION = "14.3";
 
 function checkForUpdate(){
   try {
@@ -5263,7 +5263,7 @@ function updateEntryDateBanner(){
   }
 }
 // 日報をタップ→入力フォームに読み込んで編集
-function editRecord(id){
+function editRecord_legacyInput(id){ // 旧・入力フォーム編集（未使用: インライン編集版が後勝ち。二重定義解消のため改名）
   var r=null;
   for(var i=0;i<state.records.length;i++){ if(String(state.records[i].id)===String(id)){ r=state.records[i]; break; } }
   if(!r){ if(typeof showToast==='function') showToast('日報が見つかりません'); return; }
