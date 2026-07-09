@@ -1607,6 +1607,17 @@ function num(n){ return Number(n||0).toLocaleString('ja-JP'); }
 function toTaxInc(price){ return Math.round(price * 1.1); }  // 税抜→税込変換
 function menuInc(m){ var p=m.inputPrice||0; return (m.taxMode==='inc') ? Math.round(p) : Math.round(p*1.1); } // taxMode尊重
 function menuExc(m){ var p=m.inputPrice||0; return (m.taxMode==='inc') ? Math.round(p/1.1) : Math.round(p); }
+function parseYMD(s){ var p=String(s||'').split('-'); return new Date(parseInt(p[0],10), parseInt(p[1],10)-1, parseInt(p[2],10), 12, 0, 0); }
+// レコードの年月日を 'YYYY-MM-DD'(ローカル) で返す。time形式の揺れ(ISO/スラッシュ/クラウド由来)に強い
+function recYMD(r){
+  var t=(r&&(r.time||r.date||r.datetime))||'';
+  var d=new Date(t);
+  if(isNaN(d.getTime())){
+    var m=String(t).replace(/\//g,'-').match(/(\d{4})-(\d{2})-(\d{2})/);
+    return m ? (m[1]+'-'+m[2]+'-'+m[3]) : '';
+  }
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
 function defaultTaxMode(n){ return /HOT|ホットペッパー/i.test(n||'') ? 'inc' : 'exc'; } // HOT=税込 / その他=税抜（自動判定）
 
 function renderAll(){
@@ -2201,11 +2212,11 @@ function renderSummary(){
   var menuExcTotal=0;
   for(var i=0;i<state.selectedMenus.length;i++){
     var m = state.selectedMenus[i];
-    var incPrice = menuInc(m);
-    menuExcTotal += m.inputPrice * m.qty;  // 入力が税抜なのでそのまま
+    var excPrice = menuExc(m);  // 行の入力モードに応じた税抜額（taxMode尊重）
+    menuExcTotal += excPrice * m.qty;
     // 割引%を引く（税抜ベース）
     if(m.discountPct > 0){
-      menuExcTotal -= Math.round(m.inputPrice * m.discountPct / 100) * m.qty;
+      menuExcTotal -= Math.round(excPrice * m.discountPct / 100) * m.qty;
     }
     // ポイント割引を引く（税込→税抜換算）
     if(m.pointDiscount) menuExcTotal -= Math.round(m.pointDiscount/1.1);
@@ -2285,11 +2296,11 @@ function submitRecord(){
   var menuExcTotal=0;
   for(var i=0;i<state.selectedMenus.length;i++){
     var m = state.selectedMenus[i];
-    var incPrice = menuInc(m);
-    menuExcTotal += m.inputPrice * m.qty;  // 入力が税抜なのでそのまま
+    var excPrice = menuExc(m);  // 行の入力モードに応じた税抜額（taxMode尊重）
+    menuExcTotal += excPrice * m.qty;
     // 割引%を引く（税抜ベース）
     if(m.discountPct > 0){
-      menuExcTotal -= Math.round(m.inputPrice * m.discountPct / 100) * m.qty;
+      menuExcTotal -= Math.round(excPrice * m.discountPct / 100) * m.qty;
     }
     // ポイント割引を引く（税込→税抜換算）
     if(m.pointDiscount) menuExcTotal -= Math.round(m.pointDiscount/1.1);
@@ -2350,7 +2361,7 @@ function updateEditBanner(){
     b.style.display='flex';
   } else { b.style.display='none'; }
 }
-function editRecord(id){
+function editRecord_legacyInput(id){ // 旧・入力フォーム編集（未使用: インライン編集版が後勝ち。二重定義解消のため改名）
   var r=null;
   for(var i=0;i<state.records.length;i++){ if(String(state.records[i].id)===String(id)){ r=state.records[i]; break; } }
   if(!r){ if(typeof showToast==='function') showToast('日報が見つかりません'); return; }
@@ -2602,6 +2613,8 @@ function renderRecords(){
     
     el.innerHTML=rhtml;
   }
+  // 月ピッカー・担当フィルタ・削除履歴・期間対応の顧客リストを初期描画（staffと同挙動）
+  if(typeof renderCustomerList==='function') renderCustomerList();
 }
 
 /* FILTER HELPERS */
@@ -4672,7 +4685,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "14.2";
+var APP_VERSION = "14.3";
 
 function checkForUpdate(){
   try {
@@ -4797,6 +4810,7 @@ function getCustListPeriodLabel(){
   return '📅 今日';
 }
 
+function applyTodayStaffFilter(){ if(typeof renderCustomerList==='function'){ renderCustomerList(); return; } if(typeof renderRecords==='function') renderRecords(); }
 function renderCustomerList(){
   // 月選択を更新
   populateCustListMonths();
