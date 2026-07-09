@@ -868,11 +868,6 @@
   <div class="section-title">🕐 出勤簿</div>
   <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
     <select id="attMonthSel" onchange="state.attMonth=this.value;renderAttendance()" style="flex:1;min-width:120px;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;font-weight:700;color:#1A4F47;background:#fff"></select>
-    <select id="attStaffSel" onchange="state.attStaff=this.value;renderAttendance()" style="flex:1;min-width:120px;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;font-weight:700;color:#1A4F47;background:#fff;display:none"></select>
-  </div>
-  <div id="attViewToggle" style="display:none;gap:6px;margin-bottom:10px">
-    <button id="attView_ind" onclick="state.attView='ind';renderAttendance()" style="flex:1;padding:9px;border:1.5px solid #4DB8B2;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;background:#4DB8B2;color:#fff">👤 個別</button>
-    <button id="attView_all" onclick="state.attView='all';renderAttendance()" style="flex:1;padding:9px;border:1.5px solid #4DB8B2;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;background:#fff;color:#64748B">👥 全員一覧</button>
   </div>
   <div id="attBody"></div>
 </div>
@@ -3610,66 +3605,15 @@ function attRenderAll(){
   s+='</tbody></table></div>';
   return s;
 }
-function attXmlEsc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function attCell(v,type){ type=type||'String'; return '<Cell><Data ss:Type="'+type+'">'+attXmlEsc(v)+'</Data></Cell>'; }
-function attRowXml(cells){ return '<Row>'+cells.join('')+'</Row>'; }
-function attExportExcel(){
-  var ym=state.attMonth; if(!ym){ var n0=new Date(); ym=n0.getFullYear()+'-'+String(n0.getMonth()+1).padStart(2,'0'); }
-  var p=ym.split('-'); var Y=+p[0],M=+p[1]; var dim=new Date(Y,M,0).getDate();
-  var dsel=document.getElementById('attDlStaff'); var only=dsel?dsel.value:'__all__';
-  var staff=(only&&only!=='__all__')?[only]:(state.staff||[]);
-  var scopeLabel=(only&&only!=='__all__')?only:'全員';
-  // 集計シート
-  var sumRows=[];
-  sumRows.push(attRowXml([attCell(Y+'年'+M+'月 出勤簿 集計（'+scopeLabel+'）')]));
-  sumRows.push(attRowXml([]));
-  sumRows.push(attRowXml(['スタッフ','出勤','定休','公休','有給','欠勤','総実働(h)'].map(function(x){return attCell(x);})));
-  staff.forEach(function(st){
-    var o={出勤:0,定休:0,公休:0,有給:0,欠勤:0,worked:0};
-    for(var d=1;d<=dim;d++){ var ds=ym+'-'+String(d).padStart(2,'0'); var rec=attGet(st,ds);
-      if(rec.status==='出勤'||rec.status==='早退'||rec.status==='遅刻') o.出勤++;
-      else if(rec.status==='定休') o.定休++; else if(rec.status==='公休') o.公休++; else if(rec.status==='有給') o.有給++; else if(rec.status==='欠勤') o.欠勤++;
-      o.worked+=attWorkMin(rec); }
-    sumRows.push(attRowXml([attCell(st), attCell(o.出勤,'Number'), attCell(o.定休,'Number'), attCell(o.公休,'Number'), attCell(o.有給,'Number'), attCell(o.欠勤,'Number'), attCell(attHours(o.worked),'Number')]));
-  });
-  // 明細シート
-  var detRows=[];
-  detRows.push(attRowXml(['日付','曜日','スタッフ','区分','出勤','退勤','休憩(分)','実働(h)','備考'].map(function(x){return attCell(x);})));
-  staff.forEach(function(st){
-    for(var d=1;d<=dim;d++){ var ds=ym+'-'+String(d).padStart(2,'0'); var wd=new Date(ds+'T00:00:00').getDay(); var rec=attGet(st,ds);
-      detRows.push(attRowXml([attCell(ds), attCell(ATT_WD[wd]), attCell(st), attCell(rec.status), attCell(rec.start||''), attCell(rec.end||''), attCell(rec.brk||0,'Number'), attCell(attHours(attWorkMin(rec)),'Number'), attCell(rec.note||'')]));
-    }
-  });
-  var xml='<?xml version="1.0"?>\n<?mso-application progid="Excel.Sheet"?>\n'
-    +'<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'
-    +'<Worksheet ss:Name="集計"><Table>'+sumRows.join('')+'</Table></Worksheet>'
-    +'<Worksheet ss:Name="明細"><Table>'+detRows.join('')+'</Table></Worksheet>'
-    +'</Workbook>';
-  var blob=new Blob([xml],{type:'application/vnd.ms-excel'});
-  var url=URL.createObjectURL(blob); var a=document.createElement('a');
-  a.href=url; a.download='出勤簿_'+Y+'年'+M+'月_'+scopeLabel+'.xls'; document.body.appendChild(a); a.click();
-  document.body.removeChild(a); setTimeout(function(){URL.revokeObjectURL(url);},1000);
-  if(typeof showToast==='function') showToast('📊 Excelをダウンロードしました');
-}
 function renderAttendance(){
   if(!state.attMonth){ var n0=new Date(); state.attMonth=n0.getFullYear()+'-'+String(n0.getMonth()+1).padStart(2,'0'); }
   var msel=document.getElementById('attMonthSel');
   if(msel){ var opts='',n=new Date(); for(var i=0;i<12;i++){ var d=new Date(n.getFullYear(),n.getMonth()-i,1); var ym=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); opts+='<option value="'+ym+'"'+(ym===state.attMonth?' selected':'')+'>'+d.getFullYear()+'年'+(d.getMonth()+1)+'月</option>'; } msel.innerHTML=opts; }
   var body=document.getElementById('attBody'); if(!body) return;
-  if(ATT_ADMIN){
-    var ssel=document.getElementById('attStaffSel');
-    if(ssel){ ssel.style.display=''; if(!state.attStaff) state.attStaff=(state.staff&&state.staff[0])||''; ssel.innerHTML=(state.staff||[]).map(function(st){return '<option'+(st===state.attStaff?' selected':'')+'>'+h(st)+'</option>';}).join(''); }
-    var vt=document.getElementById('attViewToggle'); if(vt) vt.style.display='flex';
-    var bi=document.getElementById('attView_ind'), ba=document.getElementById('attView_all'); var allv=(state.attView==='all');
-    function sty(btn,on){ if(!btn)return; btn.style.background=on?'#4DB8B2':'#fff'; btn.style.color=on?'#fff':'#64748B'; }
-    sty(bi,!allv); sty(ba,allv);
-    if(ssel) ssel.style.display=allv?'none':'';
-    body.innerHTML = allv ? attRenderAll() : attRenderCalendar(state.attStaff);
-  } else {
-    var me=state.attStaff || attSession() || '';
-    var picker='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:10px;padding:10px 12px;margin-bottom:10px"><div style="font-size:12px;font-weight:700;color:#64748B;margin-bottom:6px">お名前を選んで入力してください</div><select onchange="state.attStaff=this.value;renderAttendance()" style="width:100%;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;font-weight:700;color:#1A4F47;background:#fff"><option value="">選択…</option>'+(state.staff||[]).map(function(st){return '<option'+(st===me?' selected':'')+'>'+h(st)+'</option>';}).join('')+'</select></div>';
-    body.innerHTML = picker + (me ? attRenderCalendar(me) : '<div style="padding:20px;text-align:center;color:#94a3b8">お名前を選んでください</div>');
-  }
+  // スタッフ版は入力のみ（集計・Excelは代表版のみ）
+  var me=state.attStaff || attSession() || '';
+  var picker='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:10px;padding:10px 12px;margin-bottom:10px"><div style="font-size:12px;font-weight:700;color:#64748B;margin-bottom:6px">お名前を選んで入力してください</div><select onchange="state.attStaff=this.value;renderAttendance()" style="width:100%;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;font-weight:700;color:#1A4F47;background:#fff"><option value="">選択…</option>'+(state.staff||[]).map(function(st){return '<option'+(st===me?' selected':'')+'>'+h(st)+'</option>';}).join('')+'</select></div>';
+  body.innerHTML = picker + (me ? attRenderCalendar(me) : '<div style="padding:20px;text-align:center;color:#94a3b8">お名前を選んでください</div>');
 }
 
 function switchTab(tab){
@@ -5086,7 +5030,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "14.0";
+var APP_VERSION = "14.1";
 
 function checkForUpdate(){
   try {
