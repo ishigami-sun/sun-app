@@ -4659,15 +4659,69 @@ function openProductEdit(recId, prodIdx){
     +'<label style="'+lab+'">卸値（税抜）</label><input id="peCost" type="number" min="0" value="'+curCost+'" placeholder="未登録" style="'+inp+'">'
     +'<label style="'+lab+'">売値（税込）</label><input id="peSell" type="number" min="0" value="'+curSell+'" style="'+inp+'">'
     +'<label style="'+lab+'">割引（%）</label><input id="peDisc" type="number" min="0" max="100" value="'+(p.discountPct||0)+'" style="'+inp+'">'
-    +'<div style="display:flex;gap:8px;margin-top:6px"><button id="peCancel" style="flex:1;padding:13px;border:2px solid #C8E0DC;background:#fff;color:#64748B;border-radius:10px;font-weight:700;cursor:pointer">キャンセル</button>'
+    +'<div style="display:flex;gap:8px;margin-top:6px"><button id="peDelete" style="flex:1;padding:13px;border:none;background:#e74c3c;color:#fff;border-radius:10px;font-weight:800;cursor:pointer">🗑️ 削除</button><button id="peCancel" style="flex:1;padding:13px;border:2px solid #C8E0DC;background:#fff;color:#64748B;border-radius:10px;font-weight:700;cursor:pointer">キャンセル</button>'
     +'<button id="peSave" style="flex:1;padding:13px;border:none;background:#2C7A6E;color:#fff;border-radius:10px;font-weight:800;cursor:pointer">保存</button></div>'
     +'</div>';
   document.body.appendChild(ov);
   ov.addEventListener('click',function(e){ if(e.target===ov) closeProductEdit(); });
   document.getElementById('peCancel').onclick=closeProductEdit;
   document.getElementById('peSave').onclick=function(){ saveProductEdit(recId, prodIdx); };
+  document.getElementById('peDelete').onclick=function(){ deleteProductEdit(recId, prodIdx); };
 }
 function closeProductEdit(){ var ov=document.getElementById('prodEditOverlay'); if(ov) ov.remove(); }
+function deleteProductEdit(recId, prodIdx){
+  if(!confirm('本当に削除しますか？')) return;
+  var oldIdx=-1, rec=null;
+  for(var i=0;i<state.records.length;i++){ if(String(state.records[i].id)===String(recId)){ rec=state.records[i]; oldIdx=i; break; } }
+  if(!rec){ closeProductEdit(); return; }
+  var oldId=rec.id;
+  var edited=JSON.parse(JSON.stringify(rec));
+  if(edited.products && prodIdx>=0 && prodIdx<edited.products.length) edited.products.splice(prodIdx,1);
+  if(!state.deletedIds) state.deletedIds=[];
+  var wholeDelete=((!edited.products||edited.products.length===0) && (edited.menuAmount||0)===0);
+  if(wholeDelete){
+    try{ if(!state.deletedHistory) state.deletedHistory=[]; var _d=JSON.parse(JSON.stringify(rec)); _d._deletedAt=Date.now(); state.deletedHistory.unshift(_d); if(state.deletedHistory.length>50) state.deletedHistory=state.deletedHistory.slice(0,50); }catch(e){}
+    state.records.splice(oldIdx,1);
+    if(state.deletedIds.indexOf(oldId)<0) state.deletedIds.push(oldId);
+    try{ saveLocal(); }catch(e){}
+    try{ save(); }catch(e){}
+    closeProductEdit();
+    if(typeof renderDashboard==='function') renderDashboard();
+    if(typeof renderRecords==='function') renderRecords();
+    if(typeof showToast==='function') showToast('🗑️ 削除しました。クラウドに反映中...');
+    if(state.cloudUrl && state.cloudKey && typeof callCloud==='function'){
+      try{ callCloud('deleteRecord',{id:oldId},function(res){ if(typeof showToast==='function') showToast(res&&res.ok?'✅ 削除完了！':'⚠️ ローカルのみ削除'); }); }catch(e){}
+    }
+    return;
+  }
+  edited.id=Date.now();
+  var prodSell=0, prodProfit=0;
+  for(var j=0;j<edited.products.length;j++){ var pp=edited.products[j]; prodSell+=prodLineSell(pp); prodProfit+=prodLineProfit(pp); }
+  var menuInc=edited.menuAmount||0;
+  var oldProdSell=rec.productSell||0;
+  var menuExcOld=(rec.totalExc||0)-Math.round(oldProdSell/1.1);
+  edited.productSell=prodSell; edited.productProfit=prodProfit;
+  edited.total=menuInc+prodSell;
+  edited.totalExc=menuExcOld+Math.round(prodSell/1.1);
+  edited.taxAmount=edited.total-edited.totalExc;
+  state.records.splice(oldIdx,1);
+  state.records.push(edited);
+  if(state.deletedIds.indexOf(oldId)<0) state.deletedIds.push(oldId);
+  try{ saveLocal(); }catch(e){}
+  closeProductEdit();
+  if(typeof renderDashboard==='function') renderDashboard();
+  if(typeof renderRecords==='function') renderRecords();
+  if(typeof showToast==='function') showToast('🗑️ 削除しました。クラウドに反映中...');
+  if(state.cloudUrl && state.cloudKey && typeof callCloud==='function'){
+    try{
+      callCloud('deleteRecord',{id:oldId},function(){
+        callCloud('addRecord',{record:edited},function(res){
+          if(typeof showToast==='function') showToast(res&&res.ok?'✅ クラウド反映完了':'⚠️ ローカルのみ保存');
+        });
+      });
+    }catch(e){}
+  }
+}
 function saveProductEdit(recId, prodIdx){
   var oldIdx=-1, rec=null;
   for(var i=0;i<state.records.length;i++){ if(String(state.records[i].id)===String(recId)){ rec=state.records[i]; oldIdx=i; break; } }
@@ -5030,7 +5084,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "14.1";
+var APP_VERSION = "14.2";
 
 function checkForUpdate(){
   try {
