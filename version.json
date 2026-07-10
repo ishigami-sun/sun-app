@@ -1,5 +1,5 @@
 {
-  "version": "14.4",
+  "version": "14.5",
   "releaseDate": "2026-07-10",
-  "notes": "スマホ/UI改善(第1弾): ①ピンチズーム禁止(maximum-scale)を解除しviewport-fit=cover追加 ②9タブが小型iPhoneで潰れないよう横スクロール化+min-width ③メディアクエリ導入(≤380px/≥768px) ④タップ領域拡大(qty/mini/remove/削除/追加ボタン) ⑤保存バーのtop:140px固定を廃止しヘッダー実高に追従。"
+  "notes": "UI統一(第2弾・色): 同一意図で表記が割れていた色を標準トークンへ統合(#e74c3c/#c23b3b→--red, #1e8f56→--green, #2E9d96→--teal)。削除・ダウンロード等のボタン色がアプリ標準と一致。意図的に別色のマゼンタ(#C2185B)・売上タブ(#4DB8B2)・赤グラデ・グラフ系列色は温存。Chart.jsのcanvas色を壊すためhex→var()一括化は不採用、hex→hexで安全に統合。"
 }
