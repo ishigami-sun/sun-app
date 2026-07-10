@@ -1373,7 +1373,7 @@ function migrateToCloud(){
 }
 
 // ローカル保存（即時）
-function saveLocal(){try{localStorage.setItem('sun_cloud_staff',JSON.stringify(state));}catch(e){} _costCache={};}
+function saveLocal(){try{ if(state.deletedIds && state.deletedIds.length>2000){ state.deletedIds=state.deletedIds.slice(-1000); } localStorage.setItem('sun_cloud_staff',JSON.stringify(state));}catch(e){} _costCache={};}
 // 保存 = ローカル即時保存
 function save(){ saveLocal(); saveMastersToCloud(); }
 // 入力中の保存をまとめる（表示は即時、localStorage書込み＋マスタのクラウド送信を400msに集約）
@@ -5117,7 +5117,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "15.0";
+var APP_VERSION = "15.1";
 
 function checkForUpdate(){
   try {
