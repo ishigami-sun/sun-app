@@ -1303,7 +1303,17 @@ function syncFromCloud(silent){
       if(state.deletedIds){
         for(var di=0;di<state.deletedIds.length;di++) deletedSet[state.deletedIds[di]] = true;
       }
-      state.records = allRecs.filter(function(r){ return !deletedSet[r.id]; });
+      // クラウドの日報は全採用（削除済み除外）
+      var _cloudRecs = allRecs.filter(function(r){ return !deletedSet[r.id]; });
+      var _cloudIds = {};
+      for(var _ci=0;_ci<_cloudRecs.length;_ci++) _cloudIds[String(_cloudRecs[_ci].id)] = true;
+      // 「今セッションで送信失敗してキュー待ち」の日報IDだけを対象に、ローカル未送信分を保持
+      // （他端末で削除されただけの日報を“未送信”と誤認して復活させないための限定）
+      var _pendingIds = {};
+      for(var _qi=0;_qi<(typeof syncQueue!=='undefined'?syncQueue.length:0);_qi++){ var _it=syncQueue[_qi]; if(_it && _it.action==='addRecord' && _it.payload && _it.payload.record && _it.payload.record.id!=null) _pendingIds[String(_it.payload.record.id)] = true; }
+      var _localOnly = [];
+      for(var _li=0;_li<(state.records||[]).length;_li++){ var _lr=state.records[_li]; if(_lr && !_cloudIds[String(_lr.id)] && !deletedSet[_lr.id] && _pendingIds[String(_lr.id)]) _localOnly.push(_lr); }
+      state.records = _cloudRecs.concat(_localOnly);
       // マスタも同期（ローカルが多い場合は上書きしない）
       if(res.masters){
         // staff: ローカルとクラウドをマージ（重複排除）
@@ -5092,7 +5102,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "14.5";
+var APP_VERSION = "14.6";
 
 function checkForUpdate(){
   try {
