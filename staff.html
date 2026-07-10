@@ -358,10 +358,11 @@
   <div id="todayCustomerList" class="customer-list"></div>
   <div id="deletedHistory" style="margin-top:14px"></div>
 
-  <!-- 追加（上で選んだ日付をそのまま使う） -->
+  <!-- 追加（この場で日付をえらんで過去日付入力へ） -->
   <div style="background:#FFF8F0;border:2px solid #FFB74D;border-radius:12px;padding:16px;margin:18px 0">
     <div style="font-size:16px;font-weight:800;color:#E65100;margin-bottom:8px">✏️ あとから日報を入れる</div>
-    <div style="font-size:13px;color:#8a6d4a;margin-bottom:14px;line-height:1.8">入れわすれた日も、ここから入れられます。<br>上の <b>「📅 ほかの日を見る」</b> で<b>入れたい日</b>をえらんでから、<br>下のボタンをおしてね。あとはいつも通り！</div>
+    <div style="font-size:13px;color:#8a6d4a;margin-bottom:12px;line-height:1.8">入れわすれた日も、ここから入れられます。<br><b>入れたい日</b>をえらんで、下のボタンをおしてね。あとはいつも通り！</div>
+    <input type="date" id="custListDatePicker" style="width:100%;padding:12px;border:1.5px solid #FFB74D;border-radius:10px;font-size:16px;font-weight:700;color:#1A4F47;background:#fff;margin-bottom:12px">
     <button onclick="addForDate()" style="width:100%;padding:17px;border:none;background:linear-gradient(135deg,#FF9800,#F57C00);color:#fff;border-radius:12px;font-size:17px;font-weight:800;cursor:pointer;box-shadow:0 3px 8px rgba(245,124,0,0.3)">えらんだ日で入力する →</button>
   </div>
 
@@ -5111,7 +5112,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "14.7";
+var APP_VERSION = "14.8";
 
 function checkForUpdate(){
   try {
@@ -5254,7 +5255,7 @@ function viewByDate(){
 function addForDate(){
   var picker=document.getElementById('custListDatePicker');
   var v=picker?picker.value:'';
-  if(!v){ if(typeof showToast==='function') showToast('⚠️ まず上の「📅 ほかの日を見る」で日にちをえらんでください'); return; }
+  if(!v){ if(typeof showToast==='function') showToast('⚠️ まず日にちをえらんでください'); return; }
   state.entryDate=v;
   try{ saveLocal(); }catch(e){}
   updateEntryDateBanner();
