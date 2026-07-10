@@ -784,7 +784,7 @@
   #page-sales .sl-mval{font-size:21px;font-weight:800;color:#333}
   #page-sales .sl-diff{font-size:11px;margin-top:5px}
   #page-sales .sl-diff.up{color:#2680eb}
-  #page-sales .sl-diff.down{color:#e74c3c}
+  #page-sales .sl-diff.down{color:#E05555}
   #page-sales .rc-upload{border:2px dashed #4DB8B2;border-radius:10px;padding:22px 12px;text-align:center;cursor:pointer;background:#f0fafa}
   #page-sales .rc-cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
   #page-sales .rc-card{background:#fff;border-radius:10px;padding:12px 6px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,0.08)}
@@ -797,8 +797,8 @@
   #page-sales .rc-ftab{padding:6px 12px;border:1px solid #ddd;border-radius:20px;font-size:12px;white-space:nowrap;cursor:pointer;background:#fff;color:#555}
   #page-sales .rc-ftab.active{background:#4DB8B2;color:#fff;border-color:#4DB8B2}
   #page-sales .rc-badge{font-size:11px;font-weight:700;padding:2px 7px;border-radius:10px;white-space:nowrap}
-  #page-sales .rc-badge.ok{background:#e8f8f7;color:#2E9d96}
-  #page-sales .rc-badge.ng{background:#fef0f0;color:#e74c3c}
+  #page-sales .rc-badge.ok{background:#e8f8f7;color:#2C7A6E}
+  #page-sales .rc-badge.ng{background:#fef0f0;color:#E05555}
   #page-sales .rc-badge.wn{background:#fff8e1;color:#d4960b}
   #page-sales .rc-tbl td{font-size:12px}
   </style>
@@ -3293,7 +3293,7 @@ function renderSalesDaily(){
   var keep=function(b){ return groupBy==='month'?true:((b.tech+b.prod+b.clients)>0||(airMap[b.label]||0)>0); };
   var tot={tech:0,prod:0,clients:0,air:0};
   var html;
-  function _dcell(diff){ return diff>0?'<span style="color:#2680eb;font-weight:700">▲¥'+num(diff)+'</span>':(diff<0?'<span style="color:#e74c3c;font-weight:700">▼¥'+num(-diff)+'</span>':'<span style="color:#27AE60">¥0</span>'); }
+  function _dcell(diff){ return diff>0?'<span style="color:#2680eb;font-weight:700">▲¥'+num(diff)+'</span>':(diff<0?'<span style="color:#E05555;font-weight:700">▼¥'+num(-diff)+'</span>':'<span style="color:#27AE60">¥0</span>'); }
   if(hasAir){
     html='<table class="sl-tbl"><tr><th>'+headLabel+'</th><th>客数</th><th>sun-app</th><th>エアレジ</th><th>差</th></tr>';
     buckets.forEach(function(b){ if(!keep(b)) return; var sun=b.tech+b.prod, air=airMap[b.label]||0, diff=sun-air;
@@ -3502,7 +3502,7 @@ function rcRenderResult(){
   if(!shown.length){ html+='<tr><td colspan="5" style="text-align:center;color:#aaa;padding:16px">該当なし</td></tr>'; }
   shown.forEach(function(r){
     var bg=r.status==='diff'?'background:#fff5f5':(r.status==='missing'?'background:#fffdf0':'');
-    var dstr=r.status==='missing'?'―':(r.diff>0?'<span style="color:#2680eb;font-weight:700">▲¥'+num(r.diff)+'</span>':(r.diff<0?'<span style="color:#e74c3c;font-weight:700">▼¥'+num(Math.abs(r.diff))+'</span>':'<span style="color:#27AE60">¥0</span>'));
+    var dstr=r.status==='missing'?'―':(r.diff>0?'<span style="color:#2680eb;font-weight:700">▲¥'+num(r.diff)+'</span>':(r.diff<0?'<span style="color:#E05555;font-weight:700">▼¥'+num(Math.abs(r.diff))+'</span>':'<span style="color:#27AE60">¥0</span>'));
     var badge=r.status==='match'?'<span class="rc-badge ok">✅ 一致</span>':(r.status==='diff'?'<span class="rc-badge ng">❌ 差異</span>':'<span class="rc-badge wn">⚠️ 未入力</span>');
     var sunCell=r.sun===0?'<span style="color:#ccc">未入力</span>':'¥'+num(r.sun);
     var md=r.date.slice(5).replace('-','/');
@@ -3591,7 +3591,7 @@ function attRenderCalendar(staff){
     s+='<span>休憩</span><input type="number" value="'+(rec.brk||0)+'" onchange="attSet('+key+',{brk:parseInt(this.value)||0});renderAttendance()" style="width:46px;padding:5px;border:1px solid #C8E0DC;border-radius:6px;font-size:12px;text-align:right">分';
     s+='<span style="margin-left:auto;font-weight:700;color:#2C7A6E">実働 '+attHours(wmin)+'h</span></div>';
     if(ds===today){
-      s+='<div style="display:flex;gap:6px;margin-top:6px"><button onclick="attPunch('+key+',\'in\')" style="flex:1;padding:8px;background:#e8f8f3;border:1px solid #27AE60;color:#1e8f56;border-radius:7px;font-size:12px;font-weight:800;cursor:pointer">🟢 出勤打刻</button><button onclick="attPunch('+key+',\'out\')" style="flex:1;padding:8px;background:#fdeeee;border:1px solid #E05555;color:#c23b3b;border-radius:7px;font-size:12px;font-weight:800;cursor:pointer">🔴 退勤打刻</button></div>';
+      s+='<div style="display:flex;gap:6px;margin-top:6px"><button onclick="attPunch('+key+',\'in\')" style="flex:1;padding:8px;background:#e8f8f3;border:1px solid #27AE60;color:#27AE60;border-radius:7px;font-size:12px;font-weight:800;cursor:pointer">🟢 出勤打刻</button><button onclick="attPunch('+key+',\'out\')" style="flex:1;padding:8px;background:#fdeeee;border:1px solid #E05555;color:#E05555;border-radius:7px;font-size:12px;font-weight:800;cursor:pointer">🔴 退勤打刻</button></div>';
     }
     s+='<input type="text" value="'+h(rec.note||'')+'" onchange="attSet('+key+',{note:this.value})" placeholder="備考" style="width:100%;box-sizing:border-box;margin-top:6px;padding:6px 8px;border:1px solid #E8EFEE;border-radius:6px;font-size:12px">';
     s+='</div>';
@@ -4667,7 +4667,7 @@ function openProductEdit(recId, prodIdx){
     +'<label style="'+lab+'">卸値（税抜）</label><input id="peCost" type="number" min="0" value="'+curCost+'" placeholder="未登録" style="'+inp+'">'
     +'<label style="'+lab+'">売値（税込）</label><input id="peSell" type="number" min="0" value="'+curSell+'" style="'+inp+'">'
     +'<label style="'+lab+'">割引（%）</label><input id="peDisc" type="number" min="0" max="100" value="'+(p.discountPct||0)+'" style="'+inp+'">'
-    +'<div style="display:flex;gap:8px;margin-top:6px"><button id="peDelete" style="flex:1;padding:13px;border:none;background:#e74c3c;color:#fff;border-radius:10px;font-weight:800;cursor:pointer">🗑️ 削除</button><button id="peCancel" style="flex:1;padding:13px;border:2px solid #C8E0DC;background:#fff;color:#64748B;border-radius:10px;font-weight:700;cursor:pointer">キャンセル</button>'
+    +'<div style="display:flex;gap:8px;margin-top:6px"><button id="peDelete" style="flex:1;padding:13px;border:none;background:#E05555;color:#fff;border-radius:10px;font-weight:800;cursor:pointer">🗑️ 削除</button><button id="peCancel" style="flex:1;padding:13px;border:2px solid #C8E0DC;background:#fff;color:#64748B;border-radius:10px;font-weight:700;cursor:pointer">キャンセル</button>'
     +'<button id="peSave" style="flex:1;padding:13px;border:none;background:#2C7A6E;color:#fff;border-radius:10px;font-weight:800;cursor:pointer">保存</button></div>'
     +'</div>';
   document.body.appendChild(ov);
@@ -5092,7 +5092,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "14.4";
+var APP_VERSION = "14.5";
 
 function checkForUpdate(){
   try {
