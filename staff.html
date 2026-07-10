@@ -1376,6 +1376,11 @@ function migrateToCloud(){
 function saveLocal(){try{localStorage.setItem('sun_cloud_staff',JSON.stringify(state));}catch(e){} _costCache={};}
 // 保存 = ローカル即時保存
 function save(){ saveLocal(); saveMastersToCloud(); }
+// 入力中の保存をまとめる（表示は即時、localStorage書込み＋マスタのクラウド送信を400msに集約）
+var _saveDebTimer=null;
+function saveDebounced(){ if(_saveDebTimer) clearTimeout(_saveDebTimer); _saveDebTimer=setTimeout(function(){ _saveDebTimer=null; try{ save(); }catch(e){} }, 400); }
+function flushSave(){ if(_saveDebTimer){ clearTimeout(_saveDebTimer); _saveDebTimer=null; try{ save(); }catch(e){} } }
+if(typeof window!=='undefined'){ try{ window.addEventListener('pagehide', flushSave); document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='hidden') flushSave(); }); }catch(e){} }
 
 // マスタをクラウドに保存する共通関数
 function saveMastersToCloud(){
@@ -1885,7 +1890,7 @@ function setPointDiscount(i,val){
   var v = parseInt(val) || 0;
   if(v < 0) v = 0;
   state.selectedMenus[i].pointDiscount = v;
-  try{ save(); }catch(e){}
+  saveDebounced();
   updateFinalAmount(i);
   renderSummary();
   // ポイント割引欄だけ更新（入力中のフォーカスを失わないため）
@@ -1959,7 +1964,7 @@ function setCustomDiscount(i,val){
   if(v < 0) v = 0;
   if(v > 100) v = 100;
   state.selectedMenus[i].discountPct = v;
-  try{ save(); }catch(e){}
+  saveDebounced();
   // renderSelectedMenuEditは呼ばない（フォーカスが外れて連続入力できなくなるため）
   updateFinalAmount(i);
   renderSummary();
@@ -5112,7 +5117,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "14.9";
+var APP_VERSION = "15.0";
 
 function checkForUpdate(){
   try {
