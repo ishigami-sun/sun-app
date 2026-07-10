@@ -1445,7 +1445,7 @@ function migrateToCloud(){
 }
 
 // ローカル保存（即時）
-function saveLocal(){try{localStorage.setItem('sun_cloud_admin',JSON.stringify(state));}catch(e){}}
+function saveLocal(){try{localStorage.setItem('sun_cloud_admin',JSON.stringify(state));}catch(e){} _costCache={};}
 // 保存 = ローカル即時保存
 function save(){ saveLocal(); saveMastersToCloud(); }
 
@@ -2785,7 +2785,16 @@ function setDashStaff(val){
   renderDashboard();
 }
 // 商品の卸値を解決：本人の値→マスタ→過去日報（同名）の順。無ければ null
+var _costCache = {};  // resolveCostのメモ化（saveLocalで破棄。結果は非メモ版と完全一致）
 function resolveCost(p){
+  if(!p) return null;
+  var _ck=(p.id==null?'':p.id)+'|'+(p.name||'')+'|'+(p.cost||0);
+  if(_costCache.hasOwnProperty(_ck)) return _costCache[_ck];
+  var _v=_resolveCostRaw(p);
+  _costCache[_ck]=_v;
+  return _v;
+}
+function _resolveCostRaw(p){
   if(!p) return null;
   // 仕入れ値は商品マスタを最優先（ID→名前）。マスタ変更が全集計へ自動反映される
   if(p.id!=null){ for(var i=0;i<state.products.length;i++){ if(String(state.products[i].id)===String(p.id) && state.products[i].cost>0) return state.products[i].cost; } }
@@ -4708,7 +4717,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "14.6";
+var APP_VERSION = "14.7";
 
 function checkForUpdate(){
   try {
