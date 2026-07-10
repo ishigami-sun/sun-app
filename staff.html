@@ -5112,7 +5112,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "14.8";
+var APP_VERSION = "14.9";
 
 function checkForUpdate(){
   try {
@@ -5346,6 +5346,8 @@ function getCustListPeriodLabel(){
 }
 
 function renderCustomerList(){
+  // 「あとから日報を入れる」の日付欄は既定で今日を入れておく（iOSで空のまま押せてしまう問題を防ぐ）
+  try{ var _dp=document.getElementById('custListDatePicker'); if(_dp && !_dp.value){ var _n=new Date(); _dp.value=_n.getFullYear()+'-'+String(_n.getMonth()+1).padStart(2,'0')+'-'+String(_n.getDate()).padStart(2,'0'); } }catch(e){}
   // 月選択を更新
   populateCustListMonths();
   try{ clPopulate(); }catch(e){}
