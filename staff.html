@@ -888,6 +888,7 @@
     <button onclick="invSyncFromMaster()" style="flex:1;min-width:150px;padding:11px;border:1.5px solid #2C7A6E;background:#fff;color:#2C7A6E;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">🔄 商品マスタから取り込み</button>
     <button onclick="invAddCategory()" style="flex:1;min-width:130px;padding:11px;border:1.5px solid #4DB8B2;background:#fff;color:#2C7A6E;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">📁 フォルダを追加</button>
   </div>
+  <input id="invSearch" type="text" oninput="invSetSearch(this.value)" placeholder="🔍 商品名で検索" style="width:100%;padding:11px 12px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;margin-bottom:12px;box-sizing:border-box">
   <div id="invBody"></div>
   <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
     <button onclick="invSave()" style="flex:2;min-width:170px;padding:14px;border:none;background:#27AE60;color:#fff;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 3px 8px rgba(39,174,96,0.3)">💾 保存（全端末に共有）</button>
@@ -3721,6 +3722,15 @@ function invSetQtyDirect(id,val){ var i=invFindIdx(id); if(i<0)return; var v=par
 function invChangeQty(id,delta){ var i=invFindIdx(id); if(i<0)return; var v=(parseInt(state.inventory[i].qty)||0)+delta; if(v<0)v=0; state.inventory[i].qty=v; invRecalc(state.inventory[i]); state.inventory[i].updatedAt=Date.now(); try{ saveLocal(); }catch(e){} renderInventory(); }
 function invSetAmount(id,val){ var i=invFindIdx(id); if(i<0)return; var v=parseInt(val); if(isNaN(v)){ state.inventory[i].amountManual=false; invRecalc(state.inventory[i]); } else { state.inventory[i].amount=v; state.inventory[i].amountManual=true; } state.inventory[i].updatedAt=Date.now(); try{ saveLocal(); }catch(e){} renderInventory(); }
 function invToggleCat(ci){ invEnsure(); var cat=invCats()[ci]; if(cat==null)return; state.invCollapsed[cat]=!state.invCollapsed[cat]; try{ saveLocal(); }catch(e){} renderInventory(); }
+function invSetSearch(v){ state.invSearch=String(v||''); renderInventory(); }
+function invJumpCat(ci){
+  invEnsure(); var cat=invCats()[ci]; if(cat==null) return;
+  invCats().forEach(function(c){ state.invCollapsed[c]=true; });
+  state.invCollapsed[cat]=false;
+  try{ saveLocal(); }catch(e){}
+  renderInventory();
+  try{ var el=document.getElementById('invFolder_'+ci); if(el && el.scrollIntoView) el.scrollIntoView({behavior:'smooth',block:'start'}); }catch(e){}
+}
 function invAddCategory(){
   invEnsure();
   var name=prompt('追加するフォルダ名を入力してください（例：ヘアケア、店販オイル）');
@@ -3769,31 +3779,44 @@ function invRow(it){
 function renderInventory(){
   invEnsure();
   var el=document.getElementById('invBody'); if(!el) return;
+  var sb=document.getElementById('invSearch'); if(sb && sb.value!==(state.invSearch||'')) sb.value=(state.invSearch||'');
+  var query=(state.invSearch||'').trim().toLowerCase();
   var thead='<thead><tr style="background:#2C7A6E;color:#fff"><th style="padding:8px;text-align:left">商品名</th><th style="padding:8px">分類</th><th style="padding:8px;text-align:right">仕入値</th><th style="padding:8px;text-align:center">在庫数</th><th style="padding:8px;text-align:right">在庫金額</th><th style="padding:8px"></th></tr></thead>';
   var s='';
+  // 上部フォルダ・クイックナビ（タップでそのフォルダへジャンプ）
+  s+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">';
+  invCats().forEach(function(cat, ci){
+    s+='<button onclick="invJumpCat('+ci+')" style="padding:6px 11px;border:1.5px solid #C8E0DC;border-radius:20px;background:#fff;color:#2C7A6E;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">📁 '+h(cat)+' <span style="color:#94a3b8">'+invCatItems(cat).length+'</span></button>';
+  });
+  s+='</div>';
+  var matchedAny=false;
   invCats().forEach(function(cat, ci){
     var items=invCatItems(cat);
-    var collapsed=!!state.invCollapsed[cat];
-    s+='<div style="border:1px solid #C8E0DC;border-radius:10px;margin-bottom:10px;overflow:hidden;background:#fff">';
+    var shown = query ? items.filter(function(it){ return String(it.name||'').toLowerCase().indexOf(query)>=0; }) : items;
+    if(query && shown.length===0) return; // 検索中は該当なしフォルダを隠す
+    matchedAny=true;
+    var collapsed = query ? false : !!state.invCollapsed[cat]; // 検索中は展開表示
+    s+='<div id="invFolder_'+ci+'" style="border:1px solid #C8E0DC;border-radius:10px;margin-bottom:10px;overflow:hidden;background:#fff">';
     s+='<div onclick="invToggleCat('+ci+')" style="display:flex;align-items:center;gap:8px;padding:11px 12px;background:#F0F7F6;cursor:pointer">'
       +'<span style="font-weight:800;color:#1A4F47;font-size:14px">'+(collapsed?'▶':'▼')+' 📁 '+h(cat)+'</span>'
-      +'<span style="font-size:12px;color:#64748B">'+items.length+'点</span>'
+      +'<span style="font-size:12px;color:#64748B">'+(query?(shown.length+'/'+items.length):items.length)+'点</span>'
       +'<span style="margin-left:auto;font-weight:800;color:#2C7A6E">¥'+num(invCatTotal(cat))+'</span>'
       +'<button onclick="event.stopPropagation();invDeleteCategory('+ci+')" title="このフォルダを削除" style="border:none;background:transparent;color:#C2185B;cursor:pointer;font-size:14px;padding:2px 4px;margin-left:4px">🗑</button></div>';
     if(!collapsed){
-      if(items.length){
+      if(shown.length){
         s+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:600px">'+thead+'<tbody>';
-        items.forEach(function(it){ s+=invRow(it); });
+        shown.forEach(function(it){ s+=invRow(it); });
         s+='</tbody></table></div>';
       } else {
         s+='<div style="padding:12px;text-align:center;color:#94a3b8;font-size:12px">商品なし</div>';
       }
-      s+='<div style="padding:8px 12px"><button onclick="invAddRow('+ci+')" style="padding:8px 12px;border:1.5px dashed #4DB8B2;background:#fff;color:#2C7A6E;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">＋ '+h(cat)+'に商品を追加</button></div>';
+      if(!query) s+='<div style="padding:8px 12px"><button onclick="invAddRow('+ci+')" style="padding:8px 12px;border:1.5px dashed #4DB8B2;background:#fff;color:#2C7A6E;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">＋ '+h(cat)+'に商品を追加</button></div>';
     }
     s+='</div>';
   });
-  s+='<div style="background:#2C7A6E;color:#fff;border-radius:10px;padding:13px 14px;font-weight:800;font-size:15px;display:flex;justify-content:space-between;align-items:center"><span>合計 在庫金額</span><span>¥'+num(invTotal())+'</span></div>';
-  s+='<div style="font-size:11px;color:#64748B;margin-top:8px;line-height:1.7">※フォルダ見出しをタップで開閉。見出しの🗑でフォルダ削除（中の商品は先頭フォルダへ移動）。在庫金額は「仕入値×在庫数」で自動計算、直接入力で手動上書き（オレンジ）、空で自動へ戻ります。</div>';
+  if(query && !matchedAny){ s+='<div style="padding:20px;text-align:center;color:#94a3b8">「'+h(state.invSearch)+'」に一致する商品はありません</div>'; }
+  s+='<div style="background:#2C7A6E;color:#fff;border-radius:10px;padding:13px 14px;font-weight:800;font-size:15px;display:flex;justify-content:space-between;align-items:center"><span>合計 在庫金額'+(query?'（全体）':'')+'</span><span>¥'+num(invTotal())+'</span></div>';
+  s+='<div style="font-size:11px;color:#64748B;margin-top:8px;line-height:1.7">※上のフォルダ名タップでそのフォルダへジャンプ。検索は商品名で絞り込み。見出しの🗑でフォルダ削除（中の商品は先頭フォルダへ移動）。在庫金額は自動計算、直接入力で手動上書き、空で自動へ戻ります。</div>';
   el.innerHTML=s;
 }
 function invSave(){
@@ -5303,7 +5326,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "15.4";
+var APP_VERSION = "15.5";
 
 function checkForUpdate(){
   try {
