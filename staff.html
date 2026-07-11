@@ -232,6 +232,7 @@
     <button class="tab-btn" onclick="switchTab('manual')">📖 マニュアル</button>
     <button class="tab-btn" onclick="switchTab('academy')">🎓 アカデミー</button>
     <button class="tab-btn" onclick="switchTab('attend')">🕐 出勤簿</button>
+    <button class="tab-btn" onclick="switchTab('inventory')">📦 在庫</button>
   </nav>
   <div id="cloudStatus" style="margin-top:8px;padding:6px 10px;border-radius:8px;font-size:11px;text-align:center;background:rgba(255,255,255,0.15);color:#fff;display:none">
     <span id="cloudStatusText">🔄 接続中...</span>
@@ -880,7 +881,19 @@
   </div>
   <div id="attBody"></div>
 </div>
-<div class="page" id="page-academy">
+<div class="page" id="page-inventory">
+  <div class="section-title">📦 在庫管理</div>
+  <div style="font-size:12px;color:#64748B;margin-bottom:10px;line-height:1.7">物販商品の棚卸し。商品名・仕入値・在庫数・在庫金額を編集できます。<b style="color:#2C7A6E">保存で全端末に共有</b>、PDF出力で棚卸し表を印刷できます。</div>
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+    <button onclick="invSyncFromMaster()" style="flex:1;min-width:150px;padding:11px;border:1.5px solid #2C7A6E;background:#fff;color:#2C7A6E;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">🔄 商品マスタから取り込み</button>
+    <button onclick="invAddRow()" style="flex:1;min-width:120px;padding:11px;border:1.5px solid #4DB8B2;background:#fff;color:#2C7A6E;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">＋ 商品を追加</button>
+  </div>
+  <div id="invBody"></div>
+  <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+    <button onclick="invSave()" style="flex:2;min-width:170px;padding:14px;border:none;background:#27AE60;color:#fff;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 3px 8px rgba(39,174,96,0.3)">💾 保存（全端末に共有）</button>
+    <button onclick="invPrintPDF()" style="flex:1;min-width:120px;padding:14px;border:1.5px solid #1A4F47;background:#fff;color:#1A4F47;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer">🖨 PDF出力</button>
+  </div>
+</div><div class="page" id="page-academy">
   <div class="section-title">🎓 SUN ACADEMY</div>
   <div style="font-size:12px;color:#64748B;margin-bottom:12px;line-height:1.7">入社からカットデビューまでの教育の流れです。各ステップを確認し、できたら「成長チェックシート」に記録しよう。<b style="color:#2C7A6E">Simple is the best.</b></div>
   <div style="display:flex;gap:4px;align-items:stretch;margin-bottom:16px"><div style="flex:1;text-align:center;background:#fff;border:1px solid #C8E0DC;border-radius:10px;padding:8px 4px;font-size:11px;font-weight:800;color:#2C7A6E">P1<br><span style="font-weight:600;color:#64748B">1〜3ヶ月</span></div><div style="align-self:center;color:#9BC9C2;font-weight:800">›</div><div style="flex:1;text-align:center;background:#fff;border:1px solid #C8E0DC;border-radius:10px;padding:8px 4px;font-size:11px;font-weight:800;color:#2C7A6E">P2<br><span style="font-weight:600;color:#64748B">4〜9ヶ月</span></div><div style="align-self:center;color:#9BC9C2;font-weight:800">›</div><div style="flex:1;text-align:center;background:#fff;border:1px solid #C8E0DC;border-radius:10px;padding:8px 4px;font-size:11px;font-weight:800;color:#2C7A6E">P3<br><span style="font-weight:600;color:#64748B">10〜18ヶ月</span></div><div style="align-self:center;color:#9BC9C2;font-weight:800">›</div><div style="flex:1;text-align:center;background:#fff;border:1px solid #C8E0DC;border-radius:10px;padding:8px 4px;font-size:11px;font-weight:800;color:#C98A2B">P4<br><span style="font-weight:600;color:#64748B">19〜24ヶ月</span></div></div>
@@ -1169,7 +1182,7 @@ function cloudCall(action, payload, callback){
 
 
 var state = {
-  staff:[], mediaList:[], payments:[], paymentMaster:[], menus:[], products:[], records:[], eduVideos:[], airegi:{}, attendance:{},
+  staff:[], mediaList:[], payments:[], paymentMaster:[], menus:[], products:[], records:[], eduVideos:[], airegi:{}, attendance:{}, inventory:[],
   selectedStaff:'', clientType:'リピーター', mediaType:'',
   selectedPayment:'', taxMode:'inc',
   selectedMenus:[], selectedProducts:[],
@@ -1328,6 +1341,7 @@ function syncFromCloud(silent){
         if(res.masters.eduVideos && res.masters.eduVideos.length >= (state.eduVideos||[]).length){ state.eduVideos = res.masters.eduVideos; }
         if(res.masters.airegi){ state.airegi = Object.assign({}, res.masters.airegi, state.airegi||{}); }
         if(res.masters.attendance){ state.attendance = attMerge(state.attendance, res.masters.attendance); }
+        if(res.masters.inventory){ state.inventory = mergeMasterById(state.inventory||[], res.masters.inventory); }
         if(typeof renderAcademyVideos==='function'){ try{ renderAcademyVideos(); if(typeof renderEduAdmin==='function') renderEduAdmin(); }catch(e){} }
       }
       saveLocal();
@@ -1383,7 +1397,7 @@ function flushSave(){ if(_saveDebTimer){ clearTimeout(_saveDebTimer); _saveDebTi
 if(typeof window!=='undefined'){ try{ window.addEventListener('pagehide', flushSave); document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='hidden') flushSave(); }); }catch(e){} }
 
 // マスタをクラウドに保存する共通関数
-function saveMastersToCloud(){
+function saveMastersToCloud(cb){
   if(!state.cloudUrl || !state.cloudKey || typeof callCloud !== 'function') return;
   try {
     callCloud('saveMasters', {masters:{
@@ -1399,8 +1413,9 @@ function saveMastersToCloud(){
       tickets: state.tickets || {},
       eduVideos: state.eduVideos || [],
       airegi: state.airegi || {},
-      attendance: state.attendance || {}
-    }}, function(){});
+      attendance: state.attendance || {},
+      inventory: state.inventory || []
+    }}, cb||function(){});
   } catch(e){}
 }
 
@@ -3649,13 +3664,112 @@ function renderAttendance(){
   body.innerHTML = picker + (me ? attRenderCalendar(me) : '<div style="padding:20px;text-align:center;color:#94a3b8">お名前を選んでください</div>');
 }
 
+/* ===== 在庫管理 ===== */
+function invEnsure(){
+  if(!Array.isArray(state.inventory)) state.inventory=[];
+  if(state.inventory.length===0 && state.products && state.products.length){
+    state.inventory = state.products.map(function(p){
+      return {id:p.id, name:p.name, cost:(p.cost||0), qty:0, amount:0, amountManual:false, updatedAt:Date.now()};
+    });
+    try{ saveLocal(); }catch(e){}
+  }
+}
+function invRecalc(it){ if(!it.amountManual) it.amount=(parseInt(it.cost)||0)*(parseInt(it.qty)||0); }
+function invFindIdx(id){ for(var i=0;i<state.inventory.length;i++){ if(String(state.inventory[i].id)===String(id)) return i; } return -1; }
+function invNewId(){ var mx=0; (state.inventory||[]).forEach(function(it){ var n=parseInt(it.id)||0; if(n>mx)mx=n; }); return Math.max(mx+1, Date.now()); }
+function invSyncFromMaster(){
+  invEnsure();
+  var added=0;
+  (state.products||[]).forEach(function(p){
+    var exists=false;
+    for(var i=0;i<state.inventory.length;i++){ if(String(state.inventory[i].id)===String(p.id) || state.inventory[i].name===p.name){ exists=true; break; } }
+    if(!exists){ state.inventory.push({id:p.id, name:p.name, cost:(p.cost||0), qty:0, amount:0, amountManual:false, updatedAt:Date.now()}); added++; }
+  });
+  try{ saveLocal(); }catch(e){}
+  renderInventory();
+  if(typeof showToast==='function') showToast(added>0?('➕ '+added+'件を取り込みました'):'取り込む新商品はありません');
+}
+function invAddRow(){
+  invEnsure();
+  state.inventory.push({id:invNewId(), name:'', cost:0, qty:0, amount:0, amountManual:false, updatedAt:Date.now()});
+  try{ saveLocal(); }catch(e){}
+  renderInventory();
+}
+function invDeleteRow(id){
+  var i=invFindIdx(id); if(i<0) return;
+  if(!confirm('この商品を在庫リストから削除しますか？')) return;
+  state.inventory.splice(i,1);
+  try{ saveLocal(); }catch(e){}
+  renderInventory();
+}
+function invSetName(id,val){ var i=invFindIdx(id); if(i<0)return; state.inventory[i].name=val; state.inventory[i].updatedAt=Date.now(); try{ saveLocal(); }catch(e){} }
+function invSetCost(id,val){ var i=invFindIdx(id); if(i<0)return; state.inventory[i].cost=parseInt(val)||0; invRecalc(state.inventory[i]); state.inventory[i].updatedAt=Date.now(); try{ saveLocal(); }catch(e){} renderInventory(); }
+function invSetQtyDirect(id,val){ var i=invFindIdx(id); if(i<0)return; var v=parseInt(val); if(isNaN(v))v=0; if(v<0)v=0; state.inventory[i].qty=v; invRecalc(state.inventory[i]); state.inventory[i].updatedAt=Date.now(); try{ saveLocal(); }catch(e){} renderInventory(); }
+function invChangeQty(id,delta){ var i=invFindIdx(id); if(i<0)return; var v=(parseInt(state.inventory[i].qty)||0)+delta; if(v<0)v=0; state.inventory[i].qty=v; invRecalc(state.inventory[i]); state.inventory[i].updatedAt=Date.now(); try{ saveLocal(); }catch(e){} renderInventory(); }
+function invSetAmount(id,val){ var i=invFindIdx(id); if(i<0)return; var v=parseInt(val); if(isNaN(v)){ state.inventory[i].amountManual=false; invRecalc(state.inventory[i]); } else { state.inventory[i].amount=v; state.inventory[i].amountManual=true; } state.inventory[i].updatedAt=Date.now(); try{ saveLocal(); }catch(e){} renderInventory(); }
+function invTotal(){ var t=0; (state.inventory||[]).forEach(function(it){ t+=(parseInt(it.amount)||0); }); return t; }
+function renderInventory(){
+  invEnsure();
+  var el=document.getElementById('invBody'); if(!el) return;
+  var inv=state.inventory;
+  if(!inv.length){ el.innerHTML='<div style="padding:20px;text-align:center;color:#94a3b8">商品がありません。「🔄 商品マスタから取り込み」または「＋ 商品を追加」してください</div>'; return; }
+  var s='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:10px;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:520px"><thead><tr style="background:#2C7A6E;color:#fff">'
+    +'<th style="padding:9px;text-align:left">商品名</th><th style="padding:9px;text-align:right">仕入値</th><th style="padding:9px;text-align:center">在庫数</th><th style="padding:9px;text-align:right">在庫金額</th><th style="padding:9px"></th></tr></thead><tbody>';
+  inv.forEach(function(it){
+    var k="'"+String(it.id).replace(/'/g,"\\'")+"'";
+    s+='<tr style="border-bottom:1px solid #F0F4F3">';
+    s+='<td style="padding:6px"><input type="text" value="'+h(it.name||'')+'" onchange="invSetName('+k+',this.value)" style="width:100%;min-width:110px;padding:7px;border:1px solid #C8E0DC;border-radius:6px;font-size:13px"></td>';
+    s+='<td style="padding:6px;text-align:right"><input type="number" inputmode="numeric" value="'+(it.cost||0)+'" onchange="invSetCost('+k+',this.value)" style="width:78px;padding:7px;border:1px solid #C8E0DC;border-radius:6px;font-size:13px;text-align:right"></td>';
+    s+='<td style="padding:6px"><div style="display:flex;align-items:center;gap:4px;justify-content:center">'
+      +'<button onclick="invChangeQty('+k+',-1)" class="qty-btn" style="background:#94A3B8">−</button>'
+      +'<input type="number" inputmode="numeric" value="'+(it.qty||0)+'" onchange="invSetQtyDirect('+k+',this.value)" style="width:52px;padding:7px;border:1px solid #C8E0DC;border-radius:6px;font-size:13px;text-align:center">'
+      +'<button onclick="invChangeQty('+k+',1)" class="qty-btn">＋</button></div></td>';
+    s+='<td style="padding:6px;text-align:right"><input type="number" inputmode="numeric" value="'+(it.amount||0)+'" onchange="invSetAmount('+k+',this.value)" style="width:92px;padding:7px;border:1px solid '+(it.amountManual?'#D4A843':'#C8E0DC')+';border-radius:6px;font-size:13px;text-align:right;color:'+(it.amountManual?'#E65100':'#1A4F47')+'" title="'+(it.amountManual?'手動上書き中（空にすると自動計算に戻る）':'自動計算（仕入値×在庫数）')+'"></td>';
+    s+='<td style="padding:6px;text-align:center"><button onclick="invDeleteRow('+k+')" class="item-row-del">🗑</button></td>';
+    s+='</tr>';
+  });
+  s+='</tbody><tfoot><tr style="background:#F0F7F6;font-weight:800;color:#1A4F47"><td style="padding:9px" colspan="3">合計 在庫金額</td><td style="padding:9px;text-align:right">¥'+num(invTotal())+'</td><td></td></tr></tfoot></table></div>';
+  s+='<div style="font-size:11px;color:#64748B;margin-top:6px;line-height:1.7">※在庫金額は「仕入値×在庫数」で自動計算。金額を直接入力すると手動上書き（オレンジ表示）、空にすると自動計算に戻ります。</div>';
+  el.innerHTML=s;
+}
+function invSave(){
+  invEnsure();
+  try{ saveLocal(); }catch(e){}
+  if(!state.cloudUrl || !state.cloudKey){ if(typeof showToast==='function') showToast('✅ 端末に保存しました（クラウド未設定）'); return; }
+  if(typeof showToast==='function') showToast('💾 保存中...');
+  if(typeof saveMastersToCloud==='function'){
+    saveMastersToCloud(function(res){ if(typeof showToast==='function') showToast(res&&res.ok?'✅ クラウドに保存しました（在庫管理）':'⚠️ ローカルのみ保存'); });
+  }
+}
+function invPrintPDF(){
+  invEnsure();
+  var now=new Date();
+  var ds=now.getFullYear()+'年'+(now.getMonth()+1)+'月'+now.getDate()+'日';
+  var rows='';
+  (state.inventory||[]).forEach(function(it){
+    rows+='<tr><td>'+h(it.name||'')+'</td><td class="r">¥'+num(it.cost||0)+'</td><td class="c">'+(it.qty||0)+'</td><td class="r">¥'+num(it.amount||0)+'</td></tr>';
+  });
+  var html='<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>在庫棚卸し表</title>'
+    +'<style>body{font-family:-apple-system,sans-serif;padding:24px;color:#111}h1{font-size:20px;margin:0 0 4px}.date{font-size:13px;color:#555;margin-bottom:16px}'
+    +'table{width:100%;border-collapse:collapse;font-size:13px}th,td{border:1px solid #999;padding:7px 9px}th{background:#eee}.r{text-align:right}.c{text-align:center}'
+    +'tfoot td{font-weight:bold;background:#f5f5f5}@media print{.noprint{display:none}}</style></head><body>'
+    +'<h1>株式会社SUN 在庫棚卸し表</h1><div class="date">作成日：'+ds+'</div>'
+    +'<table><thead><tr><th style="text-align:left">商品名</th><th>仕入値</th><th>在庫数</th><th>在庫金額</th></tr></thead><tbody>'+rows+'</tbody>'
+    +'<tfoot><tr><td colspan="3" style="text-align:right">合計 在庫金額</td><td class="r">¥'+num(invTotal())+'</td></tr></tfoot></table>'
+    +'<div class="noprint" style="margin-top:20px"><button onclick="window.print()" style="padding:10px 20px;font-size:14px;cursor:pointer">🖨 印刷 / PDF保存</button></div>'
+    +'<scr'+'ipt>window.onload=function(){setTimeout(function(){window.print();},350);};</scr'+'ipt>'
+    +'</body></html>';
+  var w=window.open('','_blank');
+  if(!w){ if(typeof showToast==='function') showToast('⚠️ ポップアップがブロックされました。許可してください'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
 function switchTab(tab){
   var pages=document.querySelectorAll('.page');
   for(var i=0;i<pages.length;i++) pages[i].classList.remove('active');
   var tabs=document.querySelectorAll('.tab-btn');
   for(var i=0;i<tabs.length;i++) tabs[i].classList.remove('active');
   document.getElementById('page-'+tab).classList.add('active');
-  var idx=['input','records','dashboard','sales','goals','admin','manual','academy','attend'].indexOf(tab);
+  var idx=['input','records','dashboard','sales','goals','admin','manual','academy','attend','inventory'].indexOf(tab);
   if(idx>=0) tabs[idx].classList.add('active');
   if(tab==='admin') updateSessionInfo();
   if(tab==='records') renderRecords();
@@ -3663,6 +3777,7 @@ function switchTab(tab){
   if(tab==='sales'){ if(typeof renderSales==='function') renderSales(); }
   if(tab==='academy'){ if(typeof renderAcademyVideos==='function') renderAcademyVideos(); if(typeof renderEduAdmin==='function') renderEduAdmin(); }
   if(tab==='attend'){ if(typeof renderAttendance==='function') renderAttendance(); }
+  if(tab==='inventory'){ if(typeof renderInventory==='function') renderInventory(); }
   if(tab==='pnl') renderPnl();
   if(tab==='goals' && typeof renderGoals === 'function') renderGoals();
 }
@@ -5117,7 +5232,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "15.1";
+var APP_VERSION = "15.2";
 
 function checkForUpdate(){
   try {
