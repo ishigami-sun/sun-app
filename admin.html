@@ -936,6 +936,7 @@
   <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
     <button onclick="invSyncFromMaster()" style="flex:1;min-width:150px;padding:11px;border:1.5px solid #2C7A6E;background:#fff;color:#2C7A6E;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">🔄 商品マスタから取り込み</button>
     <button onclick="invAddCategory()" style="flex:1;min-width:130px;padding:11px;border:1.5px solid #4DB8B2;background:#fff;color:#2C7A6E;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">📁 フォルダを追加</button>
+    <button onclick="invAutoSort()" style="flex:1;min-width:150px;padding:11px;border:none;background:#4DB8B2;color:#fff;border-radius:8px;font-size:13px;font-weight:800;cursor:pointer">🎯 名前で自動振り分け</button>
   </div>
   <input id="invSearch" type="text" oninput="invSetSearch(this.value)" placeholder="🔍 商品名で検索" style="width:100%;padding:11px 12px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;margin-bottom:12px;box-sizing:border-box">
   <div id="invBody"></div>
@@ -3689,6 +3690,30 @@ function invSyncFromMaster(){
   renderInventory();
   if(typeof showToast==='function') showToast(added>0?('➕ '+added+'件を取り込みました（'+def+'フォルダ）'):'取り込む新商品はありません');
 }
+
+function invClassify(name){
+  var n=String(name||'');
+  function has(){ for(var i=0;i<arguments.length;i++){ if(n.indexOf(arguments[i])>=0) return true; } return false; }
+  if(has('refa','ReFa','アイロン','ドライヤー','ブロウ','ブロー')) return '物販';
+  if(has('カラー')) return 'カラー剤';
+  if(has('パーマ','ロッド')) return 'パーマ剤';
+  if(has('シャンプー','シャン')) return 'シャンプー';
+  if(has('トリートメント','マスク')) return 'トリートメント';
+  if(has('スタイリング','ワックス','スプレー','バーム','ジェル','ホイップ','ミルク','ベース','オイル','THE OIL','EMULSION','エマルジョン')) return 'スタイリング剤';
+  return '物販';
+}
+function invAutoSort(){
+  invEnsure();
+  var def=invCats()[0], moved=0;
+  (state.inventory||[]).forEach(function(it){
+    if(invCat(it)!==def) return; // 物販(既定)に入っているものだけ対象。手動で分けた分は保護
+    var target=invClassify(it.name);
+    if(target!==def && invCats().indexOf(target)>=0){ it.category=target; it.updatedAt=Date.now(); moved++; }
+  });
+  try{ saveLocal(); }catch(e){}
+  renderInventory();
+  if(typeof showToast==='function') showToast(moved>0?('🎯 '+moved+'件を自動で振り分けました（物販に残った分は手動で調整可）'):'振り分け対象がありませんでした');
+}
 function invAddRow(ci){
   invEnsure();
   var cat=invCats()[ci]||invCats()[0];
@@ -4931,7 +4956,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "15.5";
+var APP_VERSION = "15.6";
 
 function checkForUpdate(){
   try {
