@@ -3957,15 +3957,30 @@ var PNL_POST_MANAGER=100000, PNL_POST_SUB=50000;
 var PNL_AXA=30000;   // アクサ積立（損金不算入：参考のみ）
 var PNL_OFFICER_PAY=1600000; // 石上（代表）役員報酬
 var PNL_EXP=[
-  {k:'家賃', def:726000, note:'本館605,000＋別館374,000−転貸253,000'},
-  {k:'水道光熱費', def:89130, note:'年1,069,558の月割'},
-  {k:'材料費', def:904389, note:'年10,852,666の月割'},
+  {k:'家賃（本館）', def:352000, note:'本館605,000−転貸253,000'},
+  {k:'家賃（別邸）', def:374000, note:'別館'},
+  {k:'水道光熱費（本館）', def:89130, note:'年1,069,558の月割'},
+  {k:'水道光熱費（別邸）', def:0, note:'別邸分（入力）'},
+  {k:'材料費（本館）', def:904389, note:'年10,852,666の月割'},
+  {k:'材料費（別邸）', def:0, note:'別邸分（入力）'},
   {k:'消耗品費', def:201680, note:'年2,420,165の月割'},
   {k:'減価償却費', def:163156, note:'年1,957,866の月割'},
   {k:'業務委託費', def:0, manual:true, note:'ネイリスト等／請求書到着後に入力'},
   {k:'広告費', def:0, manual:true, note:'HotPepper等（手入力）'},
   {k:'その他経費', def:0, manual:true, note:'自由入力'}
 ];
+// 旧データ(分割前の 家賃/水道光熱費/材料費)を本館側へ自動移行（別邸=0、合計は保持）。冪等。
+function pnlMigrateExpenses(){
+  var ex=state.expenses; if(!ex||typeof ex!=='object') return;
+  var map={'家賃':'家賃（本館）','水道光熱費':'水道光熱費（本館）','材料費':'材料費（本館）'};
+  var changed=false;
+  for(var mk in ex){ var e=ex[mk]; if(!e||typeof e!=='object') continue;
+    for(var oldk in map){ var honkan=map[oldk], bettei=honkan.replace('本館','別邸');
+      if(e[oldk]!=null && e[honkan]==null){ e[honkan]=e[oldk]; if(e[bettei]==null) e[bettei]=0; delete e[oldk]; changed=true; }
+    }
+  }
+  if(changed){ try{ if(typeof saveLocal==='function') saveLocal(); }catch(x){} }
+}
 var PNL_SPA_KW=['トリートメント','ヘッドスパ','炭酸']; // アシスタント特例メニュー
 function isSpaMenu(name){ name=name||''; for(var i=0;i<PNL_SPA_KW.length;i++){ if(name.indexOf(PNL_SPA_KW[i])>=0) return true; } return false; }
 function staffPostAllowance(name){ name=name||''; if(name.indexOf('副店長')>=0) return PNL_POST_SUB; if(name.indexOf('店長')>=0) return PNL_POST_MANAGER; return 0; }
@@ -4176,6 +4191,7 @@ function pnlExtraHtml(filtered,totalSell,prodCost,feeAmount){
 }
 
 function renderPnlReport(){
+  pnlMigrateExpenses();
   var period=state.pnlPeriod, customMonth=state.pnlCustomMonth;
   var filtered=getFilteredRecords(period, customMonth, '');
   var periodLabel=getPeriodLabel(period, customMonth);
@@ -4956,7 +4972,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "15.6";
+var APP_VERSION = "15.7";
 
 function checkForUpdate(){
   try {
