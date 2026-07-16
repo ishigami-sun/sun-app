@@ -1264,7 +1264,7 @@ var state = {
   pnlPassword:'sun2026', pnlAuthenticated:false,
   // 固定費（P&L用）
   fixedCosts:{},
-  expenses:{}, staffTypes:{},
+  expenses:{}, staffTypes:{}, payroll:{},
   // クラウド設定
   cloudUrl:'https://script.google.com/macros/s/AKfycbytWfE31hbXzNNdPbx2NkwgIMudBCslNWJIP7LIfcvMt8hfg-FvB3VUZD73VHsKFHYi/exec', cloudKey:'sun-secret-2026-ishigami-abc', lastSync:0,
 };
@@ -1417,6 +1417,7 @@ function syncFromCloud(silent){
         if(res.masters.invCategories){ state.invCategories = mergeMasterUnique(state.invCategories||[], res.masters.invCategories); }
         if(typeof renderAcademyVideos==='function'){ try{ renderAcademyVideos(); if(typeof renderEduAdmin==='function') renderEduAdmin(); }catch(e){} }
         if(res.masters.expenses){ state.expenses = Object.assign({}, res.masters.expenses, state.expenses||{}); }
+        if(res.masters.payroll){ state.payroll = Object.assign({}, res.masters.payroll, state.payroll||{}); }
         if(res.masters.staffTypes){ state.staffTypes = Object.assign({}, res.masters.staffTypes, state.staffTypes||{}); }
       }
       saveLocal();
@@ -1491,7 +1492,8 @@ function saveMastersToCloud(cb){
       airegi: state.airegi || {},
       attendance: state.attendance || {},
       inventory: state.inventory || [],
-      invCategories: state.invCategories || []
+      invCategories: state.invCategories || [],
+      payroll: state.payroll || {}
     }}, cb||function(){});
   } catch(e){}
 }
@@ -4006,13 +4008,13 @@ function prodComm(p){ if(p<=0) return 0; var r=p>=80000?0.40:(p>=50000?0.35:(p>=
 // 期間内のスタッフ別売上集計（技術売上税込・特例メニュー税込・物販利益）
 function pnlStaffAgg(filtered){
   var per={};
-  function ens(n){ if(!per[n]) per[n]={tech:0,spa:0,prof:0}; return per[n]; }
+  function ens(n){ if(!per[n]) per[n]={tech:0,spa:0,prof:0,prodSell:0}; return per[n]; }
   for(var i=0;i<filtered.length;i++){
     var r=filtered[i];
     var ms=r.menus||[];
     for(var j=0;j<ms.length;j++){ var m=ms[j]; var st=m.menuStaff||r.staff; var inc=menuLineInc(m); ens(st).tech+=inc; if(isSpaMenu(m.name)) ens(st).spa+=inc; }
     var ps=r.products||[];
-    for(var k=0;k<ps.length;k++){ var p=ps[k]; var pst=p.productStaff||r.staff; ens(pst).prof+=prodLineProfit(p); }
+    for(var k=0;k<ps.length;k++){ var p=ps[k]; var pst=p.productStaff||r.staff; ens(pst).prof+=prodLineProfit(p); ens(pst).prodSell+=prodLineSell(p); }
   }
   return per;
 }
@@ -4083,6 +4085,74 @@ function copyLastMonthExpenses(monthKey){
   pnlLiveTotal();
   showToast('📋 '+prev+' の経費をコピー（保存を押してください）');
 }
+// ===== 給与還元率（総支給額 手入力式）=====
+function prReturnColor(rate){ if(rate<=40) return '#27AE60'; if(rate<=50) return '#D4A843'; return '#E05555'; }
+function prGetGross(monthKey,name){ var m=(state.payroll||{})[monthKey]; if(m && m[name]!=null && m[name]!=='') return Number(m[name])||0; return null; }
+function prLiveTotal(){
+  var roster=state.staff||[]; var gTotal=0;
+  for(var i=0;i<roster.length;i++){ var el=document.getElementById('prGross_'+i); if(!el) continue; var g=Number(el.value||0)||0; gTotal+=g;
+    var sell=Number(el.getAttribute('data-sell'))||0; var rc=document.getElementById('prRate_'+i);
+    if(rc){ if(sell>0 && el.value!=='' && el.value!=null){ var rate=g/sell*100; rc.textContent=(Math.round(rate*10)/10)+'%'; rc.style.color=prReturnColor(rate); } else { rc.textContent='―'; rc.style.color='#94a3b8'; } }
+  }
+  var gt=document.getElementById('prGrossTotalLive'); if(gt) gt.textContent='¥'+num(gTotal);
+  var st=Number((document.getElementById('prSellTotalHidden')||{}).value)||0;
+  var rt=document.getElementById('prRateTotalLive'); if(rt){ if(st>0 && gTotal>0){ var tr=gTotal/st*100; rt.textContent=(Math.round(tr*10)/10)+'%'; rt.style.color=prReturnColor(tr); } else { rt.textContent='―'; rt.style.color='#94a3b8'; } }
+}
+function savePayroll(monthKey){
+  if(!state.payroll) state.payroll={};
+  var roster=state.staff||[]; var obj={};
+  for(var i=0;i<roster.length;i++){ var el=document.getElementById('prGross_'+i); if(!el) continue; var v=el.value; obj[roster[i]]=(v===''||v==null)?'':Math.max(0,Math.round(Number(v||0))); }
+  obj.updatedAt=new Date().toISOString();
+  state.payroll[monthKey]=obj;
+  if(typeof save==='function') save();
+  renderPnlReport();
+  showToast('💾 '+monthKey+' の総支給額を保存しました');
+}
+function prReturnHtml(filtered){
+  var mk=pnlMonthKeys(); var single=mk.single && mk.keys.length===1;
+  var agg=pnlStaffAgg(filtered); var roster=state.staff||[];
+  var html='<div class="pnl-section">';
+  html+='<div class="pnl-section-title">💹 給与還元率（総支給額 手入力）</div>';
+  html+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:420px">';
+  html+='<thead><tr style="background:#2C7A6E;color:#fff"><th style="padding:7px 8px;text-align:left">スタッフ</th><th style="padding:7px 8px;text-align:right">売上（自動）</th><th style="padding:7px 8px;text-align:right">総支給額</th><th style="padding:7px 8px;text-align:right">還元率</th></tr></thead><tbody>';
+  var sellTotal=0, grossTotal=0, monthKey=single?mk.keys[0]:null;
+  for(var i=0;i<roster.length;i++){
+    var name=roster[i]; var a=agg[name]||{tech:0,prodSell:0};
+    var sell=Math.round((a.tech||0)+(a.prodSell||0)); sellTotal+=sell;
+    var gross = single ? prGetGross(monthKey,name) : (function(){ var t=0,any=false; for(var q=0;q<mk.keys.length;q++){ var g=prGetGross(mk.keys[q],name); if(g!=null){ t+=g; any=true; } } return any?t:null; })();
+    if(gross!=null) grossTotal+=gross;
+    var rateCell='<span style="color:#94a3b8">―</span>';
+    if(sell>0 && gross!=null){ var rate=gross/sell*100; rateCell='<span style="font-weight:800;color:'+prReturnColor(rate)+'">'+(Math.round(rate*10)/10)+'%</span>'; }
+    html+='<tr style="border-bottom:1px solid #F0F4F3">';
+    html+='<td style="padding:6px 8px;font-weight:700;color:#1A4F47">'+staffBadge(name)+'</td>';
+    html+='<td style="padding:6px 8px;text-align:right;font-family:DM Sans,sans-serif">¥'+num(sell)+'</td>';
+    if(single){
+      html+='<td style="padding:6px 8px;text-align:right"><div style="display:flex;align-items:center;gap:2px;justify-content:flex-end">¥<input type="number" inputmode="numeric" id="prGross_'+i+'" data-sell="'+sell+'" value="'+(gross!=null?gross:'')+'" placeholder="0" oninput="prLiveTotal()" style="width:90px;padding:5px 7px;border:1.5px solid #C8E0DC;border-radius:7px;font-size:12px;text-align:right;font-family:DM Sans,sans-serif"></div></td>';
+      html+='<td style="padding:6px 8px;text-align:right"><span id="prRate_'+i+'">'+(sell>0&&gross!=null?'<span style="font-weight:800;color:'+prReturnColor(gross/sell*100)+'">'+(Math.round(gross/sell*1000)/10)+'%</span>':'<span style="color:#94a3b8">―</span>')+'</span></td>';
+    } else {
+      html+='<td style="padding:6px 8px;text-align:right;font-family:DM Sans,sans-serif;color:#64748B">'+(gross!=null?'¥'+num(gross):'―')+'</td>';
+      html+='<td style="padding:6px 8px;text-align:right">'+rateCell+'</td>';
+    }
+    html+='</tr>';
+  }
+  var totRate=(sellTotal>0 && grossTotal>0)?(grossTotal/sellTotal*100):null;
+  html+='</tbody><tfoot><tr style="background:#F0F7F6;font-weight:800;color:#1A4F47">';
+  html+='<td style="padding:8px">全体合計</td>';
+  html+='<td style="padding:8px;text-align:right;font-family:DM Sans,sans-serif">¥'+num(sellTotal)+'</td>';
+  html+='<td style="padding:8px;text-align:right;font-family:DM Sans,sans-serif"><span id="prGrossTotalLive">¥'+num(grossTotal)+'</span></td>';
+  html+='<td style="padding:8px;text-align:right"><span id="prRateTotalLive" style="color:'+(totRate!=null?prReturnColor(totRate):'#94a3b8')+'">'+(totRate!=null?(Math.round(totRate*10)/10)+'%':'―')+'</span></td>';
+  html+='</tr></tfoot></table></div>';
+  html+='<input type="hidden" id="prSellTotalHidden" value="'+sellTotal+'">';
+  if(single){
+    html+='<div style="display:flex;gap:8px;margin-top:12px"><button class="add-btn" style="flex:1" onclick="savePayroll(\''+monthKey+'\')">💾 保存</button></div>';
+    html+='<div style="font-size:10px;color:#94a3b8;margin-top:8px;line-height:1.6">税理士の給与明細の総支給額を入力。還元率＝総支給額÷売上×100（緑≤40% / 黄40〜50% / 赤50%超）。売上＝技術売上＋物販売上（自動）。売上0または未入力は「―」。</div>';
+  } else {
+    html+='<div style="font-size:11px;color:#94a3b8;margin-top:8px">複数月の合計表示。編集するには「今月／先月」または月を1つ選んでください。</div>';
+  }
+  html+='</div>';
+  return html;
+}
+
 // 人件費＋経費＋損益サマリー＋ビジュアル のHTML
 function pnlExtraHtml(filtered,totalSell,prodCost,feeAmount){
   var html='';
@@ -4121,6 +4191,9 @@ function pnlExtraHtml(filtered,totalSell,prodCost,feeAmount){
   html+='<div class="pnl-row total"><div class="pnl-label">人件費合計</div><div class="pnl-value">¥'+num(laborTotal)+'</div></div>';
   html+='<div class="pnl-row"><div class="pnl-label pnl-sub">　人件費率</div><div class="pnl-value pnl-sub">'+(Math.round(laborRate*10)/10)+'%</div></div>';
   html+='</div>';
+
+  // 給与還元率（総支給額 手入力式）
+  html+=prReturnHtml(filtered);
 
   // その他経費
   var mk=pnlMonthKeys();
@@ -4972,7 +5045,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "15.7";
+var APP_VERSION = "15.8";
 
 function checkForUpdate(){
   try {
