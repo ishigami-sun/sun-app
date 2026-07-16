@@ -4164,12 +4164,63 @@ function prReturnHtml(filtered){
   return html;
 }
 
+// 人件費率アラート（表示のみ）。給与還元率セクションの手入力(総支給額/売上)があればそれを優先。
+function prLaborAlertHtml(autoLaborTotal, autoTotalSell){
+  var mk=pnlMonthKeys();
+  // 手入力(総支給額=人件費, 売上)を月合算。1つでもあれば手入力優先
+  var manLabor=0, manSell=0, hasManLabor=false, hasManSell=false;
+  var roster=state.staff||[];
+  for(var q=0;q<mk.keys.length;q++){
+    for(var i=0;i<roster.length;i++){
+      var g=prGetGross(mk.keys[q],roster[i]); if(g!=null){ manLabor+=g; hasManLabor=true; }
+      var s=prGetSell(mk.keys[q],roster[i]);  if(s!=null){ manSell+=s; hasManSell=true; }
+    }
+  }
+  var laborTotal = hasManLabor ? manLabor : autoLaborTotal;
+  var totalSell  = hasManSell  ? manSell  : autoTotalSell;
+  var usingManual = hasManLabor || hasManSell;
+  var rate = totalSell>0 ? (laborTotal/totalSell*100) : null;
+  var status, color, bg, icon, msg;
+  if(rate==null){ status='データなし'; color='#94a3b8'; bg='#F1F5F9'; icon='⚪'; msg='売上が0のため計算できません'; }
+  else if(rate<50){ status='健全'; color='#27AE60'; bg='#EAF7EF'; icon='🟢'; msg='人件費率は健全な水準です'; }
+  else if(rate<=55){ status='注意'; color='#D4A843'; bg='#FBF5E6'; icon='🟡'; msg='人件費率が上昇しています'; }
+  else { status='警告'; color='#E05555'; bg='#FDECEC'; icon='🔴'; msg='人件費率が高くなっています。売上または経費を確認してください'; }
+  var rateStr = rate!=null ? (Math.round(rate*10)/10)+'%' : '―';
+  // プログレスバー 0〜60%、55%に赤い目盛り
+  var pct = rate!=null ? Math.max(0,Math.min(100, rate/60*100)) : 0;
+  var mark55 = 55/60*100;
+  var html='';
+  html+='<div class="pnl-section" style="background:'+bg+';border:2px solid '+color+'">';
+  html+='<div class="pnl-section-title" style="color:'+color+'">🚨 人件費率アラート</div>';
+  html+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px">';
+  html+='<div style="font-size:40px;font-weight:800;color:'+color+';font-family:DM Sans,sans-serif;line-height:1">'+rateStr+'</div>';
+  html+='<div style="display:inline-flex;align-items:center;gap:6px;background:'+color+';color:#fff;padding:7px 14px;border-radius:20px;font-size:14px;font-weight:800">'+icon+' '+status+'</div>';
+  html+='</div>';
+  // ゲージ
+  html+='<div style="position:relative;height:16px;background:#E2E8F0;border-radius:10px;overflow:hidden;margin:6px 0 4px">';
+  html+='<div style="position:absolute;left:0;top:0;height:100%;width:'+pct+'%;background:'+color+';border-radius:10px;transition:width .3s"></div>';
+  html+='<div style="position:absolute;left:'+mark55+'%;top:-2px;height:20px;width:3px;background:#E05555;border-radius:2px" title="55%ライン"></div>';
+  html+='</div>';
+  html+='<div style="position:relative;height:14px;font-size:9px;color:#94a3b8">';
+  html+='<span style="position:absolute;left:0">0%</span>';
+  html+='<span style="position:absolute;left:'+(50/60*100)+'%;transform:translateX(-50%)">50%</span>';
+  html+='<span style="position:absolute;left:'+mark55+'%;transform:translateX(-50%);color:#E05555;font-weight:700">55%</span>';
+  html+='<span style="position:absolute;right:0">60%</span>';
+  html+='</div>';
+  html+='<div style="font-size:12px;color:'+color+';font-weight:700;margin-top:8px">'+msg+'</div>';
+  html+='<div style="font-size:10px;color:#94a3b8;margin-top:6px">人件費 ¥'+num(Math.round(laborTotal))+' ÷ 総売上 ¥'+num(Math.round(totalSell))+' ×100'+(usingManual?'（給与還元率の手入力値を優先）':'（自動計算）')+'</div>';
+  html+='</div>';
+  return html;
+}
+
 // 人件費＋経費＋損益サマリー＋ビジュアル のHTML
 function pnlExtraHtml(filtered,totalSell,prodCost,feeAmount){
   var html='';
   var pay=pnlPayroll(filtered);
   var laborTotal=pay.total;
   var laborRate=totalSell>0?(laborTotal/totalSell*100):0;
+  // 人件費率アラート（目立つ上部表示）
+  html+=prLaborAlertHtml(laborTotal, totalSell);
   // 人件費（自動計算）
   html+='<div class="pnl-section">';
   html+='<div class="pnl-section-title">👥 人件費（自動計算）</div>';
@@ -5056,7 +5107,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "15.9";
+var APP_VERSION = "16.0";
 
 function checkForUpdate(){
   try {
