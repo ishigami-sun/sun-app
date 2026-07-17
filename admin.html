@@ -3969,6 +3969,7 @@ var PNL_EXP=[
   {k:'減価償却費', def:163156, note:'年1,957,866の月割'},
   {k:'業務委託費', def:0, manual:true, note:'ネイリスト等／請求書到着後に入力'},
   {k:'広告費', def:0, manual:true, note:'HotPepper等（手入力）'},
+  {k:'採用費', def:0, manual:true, note:'リジョブ・求人媒体費等（手入力）'},
   {k:'その他経費', def:0, manual:true, note:'自由入力'}
 ];
 // 旧データ(分割前の 家賃/水道光熱費/材料費)を本館側へ自動移行（別邸=0、合計は保持）。冪等。
@@ -5107,7 +5108,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "16.0";
+var APP_VERSION = "16.1";
 
 function checkForUpdate(){
   try {
