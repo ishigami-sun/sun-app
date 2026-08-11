@@ -225,6 +225,7 @@
   <nav class="tab-nav">
     <button class="tab-btn active" onclick="switchTab('input')">📝 入力</button>
     <button class="tab-btn" onclick="switchTab('records')">📋 日報</button>
+    <button class="tab-btn" onclick="switchTab('reports')">📢 報告 <span id="reportsBadge" style="display:none;background:#E05555;color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:800">0</span></button>
     <button class="tab-btn" onclick="switchTab('dashboard')">📊 物販</button>
     <button class="tab-btn" onclick="switchTab('sales')">💹 売上</button>
     <button class="tab-btn" onclick="switchTab('goals')">🎯 目標</button>
@@ -386,6 +387,14 @@
   
   <div class="section-title">全日報</div>
   <div id="recordsList"></div>
+</div>
+
+<!-- ===== 📢 報告 ===== -->
+<div class="page" id="page-reports">
+  <div class="section-title">📢 報告</div>
+  <div style="font-size:12px;color:#64748B;margin-bottom:10px;line-height:1.6">全スタッフの報告一覧。📢申し送りは「確認済み」を押すと対応済みになります。未確認はタブに赤バッジで表示されます。</div>
+  <div id="reportsControls"></div>
+  <div id="reportsList"></div>
 </div>
 
 <!-- ===== 物販利益 ===== -->
@@ -1682,6 +1691,8 @@ function renderAll(){
   renderSelectedMenuEdit(); renderSelectedProductEdit();
   renderSummary(); renderRecords(); renderDashboard(); renderAdminLists();
   try{ var _sp=document.getElementById('page-sales'); if(_sp && _sp.classList.contains('active') && typeof renderSales==='function') renderSales(); }catch(e){}
+  try{ if(typeof updateReportsBadge==='function') updateReportsBadge(); }catch(e){}
+  try{ var _rp=document.getElementById('page-reports'); if(_rp && _rp.classList.contains('active') && typeof renderReportsTab==='function') renderReportsTab(); }catch(e){}
   try{ updateEntryDateBanner(); }catch(e){}
 }
 
@@ -2531,6 +2542,69 @@ function renderDailyReports(){
     html+=block('✅','今日よかった点',r.good,'#27AE60');
     html+=block('📝','改善点',r.improve,'#D4A843');
     html+=block('📢','共有事項・申し送り',r.share,'#2C7A6E');
+    html+='</div>';
+  });
+  el.innerHTML=html;
+}
+/* ===== 📢 報告タブ（一覧・絞り込み・確認済み） ===== */
+function repFilters(){ if(!state.repFilter||typeof state.repFilter!=='object') state.repFilter={period:'week',staff:'',type:'all'}; return state.repFilter; }
+function repSetPeriod(v){ repFilters().period=v; try{saveLocal();}catch(e){} renderReportsTab(); }
+function repSetStaff(v){ repFilters().staff=v; try{saveLocal();}catch(e){} renderReportsTab(); }
+function repSetType(v){ repFilters().type=v; try{saveLocal();}catch(e){} renderReportsTab(); }
+function repHasShare(r){ return !!(r && r.share && String(r.share).trim()); }
+function repNeedsConfirm(r){ return repHasShare(r) && !r.confirmed; }
+function repUnconfirmedCount(){ var reps=state.reports||[],n=0; for(var i=0;i<reps.length;i++){ if(repNeedsConfirm(reps[i])) n++; } return n; }
+function updateReportsBadge(){ var b=document.getElementById('reportsBadge'); if(!b) return; var n=repUnconfirmedCount(); if(n>0){ b.textContent=n; b.style.display='inline-block'; } else { b.style.display='none'; } }
+function repToggleConfirm(id){
+  var reps=state.reports||[];
+  for(var i=0;i<reps.length;i++){ if(String(reps[i].id)===String(id)){ reps[i].confirmed=!reps[i].confirmed; reps[i].confirmedAt=reps[i].confirmed?new Date().toISOString():null; reps[i].updatedAt=Date.now(); break; } }
+  try{ saveLocal(); }catch(e){}
+  if(typeof saveMastersToCloud==='function'){ try{ saveMastersToCloud(); }catch(e){} }
+  renderReportsTab(); updateReportsBadge();
+}
+function repPeriodStart(period){ var now=new Date(); var d=new Date(now.getFullYear(),now.getMonth(),now.getDate()); if(period==='today') return d; if(period==='week'){ var s=new Date(d); s.setDate(s.getDate()-6); return s; } if(period==='month'){ var s2=new Date(d); s2.setDate(s2.getDate()-29); return s2; } return null; }
+function renderReportsTab(){
+  if(typeof updateReportsBadge==='function') updateReportsBadge();
+  var el=document.getElementById('reportsList'); if(!el) return;
+  var f=repFilters();
+  function esc(s){ return (typeof h==='function')?h(s):String(s==null?'':s); }
+  function dlabel(d){ var p=String(d||'').split('-'); return (p.length===3)?(parseInt(p[1],10)+'月'+parseInt(p[2],10)+'日'):String(d||''); }
+  function pill(label,active,onclick){ return '<button onclick="'+onclick+'" style="padding:7px 12px;border-radius:18px;border:1.5px solid #4DB8B2;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;'+(active?"background:#4DB8B2;color:#fff":"background:#fff;color:#2C7A6E")+'">'+label+'</button>'; }
+  var ctrl=document.getElementById('reportsControls');
+  if(ctrl){
+    var so='<option value="">👥 全員</option>'; (state.staff||[]).forEach(function(nm){ so+='<option value="'+esc(nm)+'"'+(nm===f.staff?' selected':'')+'>'+esc(nm)+'</option>'; });
+    var c='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">'+pill('今日',f.period==='today',"repSetPeriod('today')")+pill('直近7日',f.period==='week',"repSetPeriod('week')")+pill('直近30日',f.period==='month',"repSetPeriod('month')")+pill('すべて',f.period==='all',"repSetPeriod('all')")+'</div>';
+    c+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">'+pill('すべて',f.type==='all',"repSetType('all')")+pill('✅よかった点',f.type==='good',"repSetType('good')")+pill('📝改善点',f.type==='improve',"repSetType('improve')")+pill('📢申し送り',f.type==='share',"repSetType('share')")+'</div>';
+    c+='<select onchange="repSetStaff(this.value)" style="width:100%;padding:9px;border:1.5px solid #C8E0DC;border-radius:8px;background:#fff;font-size:14px;font-weight:700;color:#1A4F47;margin-bottom:10px">'+so+'</select>';
+    ctrl.innerHTML=c;
+  }
+  var start=repPeriodStart(f.period);
+  var reps=(state.reports||[]).filter(function(r){ return r && (r.good||r.improve||r.share); });
+  reps=reps.filter(function(r){
+    if(f.staff && r.staff!==f.staff) return false;
+    if(f.type==='good' && !(r.good&&String(r.good).trim())) return false;
+    if(f.type==='improve' && !(r.improve&&String(r.improve).trim())) return false;
+    if(f.type==='share' && !repHasShare(r)) return false;
+    if(start){ var rd=r.date?new Date(r.date+'T00:00:00'):null; if(!rd||isNaN(rd.getTime())||rd<start) return false; }
+    return true;
+  });
+  reps.sort(function(a,b){ var au=repNeedsConfirm(a)?0:1, bu=repNeedsConfirm(b)?0:1; if(au!==bu) return au-bu; var da=a.date||'',db=b.date||''; if(da!==db) return da<db?1:-1; return String(b.createdAt||b.id||'').localeCompare(String(a.createdAt||a.id||'')); });
+  var uc=repUnconfirmedCount();
+  var head=uc>0?('<div style="background:#FDECEC;border:1.5px solid #E05555;border-radius:10px;padding:10px 12px;margin-bottom:10px;color:#B03030;font-weight:700;font-size:13px">🔴 未確認の申し送りが '+uc+' 件あります</div>'):'';
+  function block(icon,label,val,color){ if(!val||!String(val).trim()) return ''; return '<div style="margin-top:8px"><div style="font-size:12px;font-weight:700;color:'+color+';margin-bottom:2px">'+icon+' '+label+'</div><div style="font-size:13px;color:#333;white-space:pre-wrap;line-height:1.6">'+esc(val)+'</div></div>'; }
+  if(!reps.length){ el.innerHTML=head+'<div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:16px;text-align:center;color:#94a3b8;font-size:13px">条件に合う報告はありません</div>'; return; }
+  var html=head;
+  reps.forEach(function(r){
+    var needs=repNeedsConfirm(r), hasShare=repHasShare(r);
+    html+='<div style="background:#fff;border:1.5px solid '+(needs?'#E05555':'#C8E0DC')+';border-radius:12px;padding:13px;margin-bottom:10px">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:800;color:#1A4F47;font-size:14px">👤 '+esc(r.staff||'')+'</span><span style="font-size:12px;color:#64748B;font-weight:700">📅 '+esc(dlabel(r.date))+'</span></div>';
+    if(f.type==='all'||f.type==='good') html+=block('✅','今日よかった点',r.good,'#27AE60');
+    if(f.type==='all'||f.type==='improve') html+=block('📝','改善点',r.improve,'#D4A843');
+    if(f.type==='all'||f.type==='share') html+=block('📢','共有事項・申し送り',r.share,'#2C7A6E');
+    if(hasShare){
+      if(r.confirmed){ var ca=r.confirmedAt?(' '+dlabel(String(r.confirmedAt).slice(0,10))):''; html+='<div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center"><span style="color:#27AE60;font-weight:700;font-size:12px">✓ 確認済み'+ca+'</span><button onclick="repToggleConfirm(\''+esc(String(r.id))+'\')" style="font-size:11px;color:#94a3b8;background:none;border:none;cursor:pointer;text-decoration:underline">未確認に戻す</button></div>'; }
+      else { html+='<button onclick="repToggleConfirm(\''+esc(String(r.id))+'\')" style="margin-top:10px;width:100%;padding:9px;background:#E05555;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:800;cursor:pointer">✓ 確認済みにする</button>'; }
+    }
     html+='</div>';
   });
   el.innerHTML=html;
@@ -4002,10 +4076,11 @@ function switchTab(tab){
   var tabs=document.querySelectorAll('.tab-btn');
   for(var i=0;i<tabs.length;i++) tabs[i].classList.remove('active');
   document.getElementById('page-'+tab).classList.add('active');
-  var idx=['input','records','dashboard','sales','goals','admin','manual','academy','attend','inventory'].indexOf(tab);
+  var idx=['input','records','reports','dashboard','sales','goals','admin','manual','academy','attend','inventory'].indexOf(tab);
   if(idx>=0) tabs[idx].classList.add('active');
   if(tab==='admin') updateSessionInfo();
   if(tab==='records') renderRecords();
+  if(tab==='reports'){ if(typeof renderReportsTab==='function') renderReportsTab(); }
   if(tab==='dashboard') renderDashboard();
   if(tab==='sales'){ if(typeof renderSales==='function') renderSales(); }
   if(tab==='academy'){ if(typeof renderAcademyVideos==='function') renderAcademyVideos(); if(typeof renderEduAdmin==='function') renderEduAdmin(); }
@@ -5465,7 +5540,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "16.7";
+var APP_VERSION = "16.8";
 
 function checkForUpdate(){
   try {
