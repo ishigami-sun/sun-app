@@ -331,6 +331,9 @@
   <div class="section-title">TODAY</div>
   <div id="todayStats" class="dash-grid"></div>
 
+  <div class="section-title">📋 みんなの報告</div>
+  <div id="dailyReports" style="margin-bottom:10px"></div>
+
   <div class="section-title">📋 入力済み顧客リスト</div>
   
   <!-- 月選択 + 担当者選択 -->
@@ -1278,7 +1281,7 @@ function toggleStaffActive(name, newActive){
 
 
 var state = {
-  staff:[], mediaList:[], payments:[], paymentMaster:[], menus:[], products:[], records:[], eduVideos:[], airegi:{}, attendance:{}, inventory:[], invCategories:[],
+  staff:[], mediaList:[], payments:[], paymentMaster:[], menus:[], products:[], records:[], reports:[], eduVideos:[], airegi:{}, attendance:{}, inventory:[], invCategories:[],
   selectedStaff:'', clientType:'リピーター', mediaType:'',
   selectedPayment:'', taxMode:'inc',
   selectedMenus:[], selectedProducts:[],
@@ -1488,6 +1491,7 @@ function syncFromCloud(silent){
         if(res.masters.attendance){ state.attendance = attMerge(state.attendance, res.masters.attendance); }
         if(res.masters.inventory){ state.inventory = mergeInventory(state.inventory||[], res.masters.inventory, delSetOf('inventory')); }
         if(res.masters.invCategories){ state.invCategories = mergeMasterUnique(state.invCategories||[], res.masters.invCategories, delSetOf('invCategories')); }
+        if(res.masters.reports){ state.reports = mergeMasterById(state.reports||[], res.masters.reports, delSetOf('reports')); }
         if(typeof renderAcademyVideos==='function'){ try{ renderAcademyVideos(); if(typeof renderEduAdmin==='function') renderEduAdmin(); }catch(e){} }
         if(res.masters.expenses){ state.expenses = mergeByMonthKey(state.expenses, res.masters.expenses); }
         if(res.masters.payroll){ state.payroll = mergeByMonthKey(state.payroll, res.masters.payroll); }
@@ -1568,6 +1572,7 @@ function saveMastersToCloud(cb){
       inventory: state.inventory || [],
       invCategories: state.invCategories || [],
       payroll: state.payroll || {},
+      reports: state.reports || [],
       deletedMasters: state.deletedMasters || {}
     }}, cb||function(){});
   } catch(e){}
@@ -2606,6 +2611,26 @@ function restoreDataFile(input){
   rd.readAsText(f);
 }
 
+// 📋 みんなの報告（全スタッフ・日付順）。staff/admin 共通ロジック
+function renderDailyReports(){
+  var el=document.getElementById('dailyReports'); if(!el) return;
+  var reps=(state.reports||[]).filter(function(r){ return r && (r.good||r.improve||r.share); });
+  reps.sort(function(a,b){ var da=a.date||'', db=b.date||''; if(da!==db) return da<db?1:-1; return String(b.createdAt||b.id||'').localeCompare(String(a.createdAt||a.id||'')); });
+  if(!reps.length){ el.innerHTML='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:16px;text-align:center;color:#94a3b8;font-size:13px">まだ報告はありません。スタッフが入力タブの「📋 本日の報告」から投稿できます。</div>'; return; }
+  function esc(s){ return (typeof h==='function')?h(s):String(s==null?'':s); }
+  function dlabel(d){ var p=String(d||'').split('-'); return (p.length===3)?(parseInt(p[1],10)+'月'+parseInt(p[2],10)+'日'):String(d||''); }
+  function block(icon,label,val,color){ if(!val) return ''; return '<div style="margin-top:8px"><div style="font-size:12px;font-weight:700;color:'+color+';margin-bottom:2px">'+icon+' '+label+'</div><div style="font-size:13px;color:#333;white-space:pre-wrap;line-height:1.6">'+esc(val)+'</div></div>'; }
+  var html='';
+  reps.forEach(function(r){
+    html+='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:13px;margin-bottom:10px">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:800;color:#1A4F47;font-size:14px">👤 '+esc(r.staff||'')+'</span><span style="font-size:12px;color:#64748B;font-weight:700">📅 '+esc(dlabel(r.date))+'</span></div>';
+    html+=block('✅','今日よかった点',r.good,'#27AE60');
+    html+=block('📝','改善点',r.improve,'#D4A843');
+    html+=block('📢','共有事項・申し送り',r.share,'#2C7A6E');
+    html+='</div>';
+  });
+  el.innerHTML=html;
+}
 function renderRecords(){
   var today=new Date().toDateString();
   var todayRecs=[];
@@ -2615,6 +2640,7 @@ function renderRecords(){
   document.getElementById('todayStats').innerHTML=
     '<div class="dash-stat"><div class="dash-stat-label">本日売上（税込）</div><div class="dash-stat-value">¥'+num(todayTotal)+'</div><div class="dash-stat-sub">'+todayRecs.length+'件</div></div>'+
     '<div class="dash-stat"><div class="dash-stat-label">本日の客数</div><div class="dash-stat-value">'+todayClients+'人</div><div class="dash-stat-sub">平均¥'+(todayClients>0?num(Math.round(todayTotal/todayClients)):0)+'</div></div>';
+  try{ renderDailyReports(); }catch(e){}
   try{ var _st=document.getElementById('salesTrend'); if(_st&&typeof salesTrendCard==='function') _st.innerHTML=salesTrendCard(); }catch(e){}
   // 本日顧客リスト
   var custEl=document.getElementById('todayCustomerList');
@@ -5256,7 +5282,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "16.5";
+var APP_VERSION = "16.6";
 
 function checkForUpdate(){
   try {
