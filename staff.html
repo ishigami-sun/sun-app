@@ -320,14 +320,17 @@
     </div>
     <button class="submit-btn" onclick="submitRecord()">✅ 日報を登録する</button>
     <div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:14px;margin-top:12px">
-      <div style="font-size:15px;color:#1A4F47;font-weight:800;margin-bottom:4px">📋 本日の報告 <span style="color:#E05555;font-size:12px;font-weight:700">必須</span></div>
-      <div style="font-size:12px;color:#E05555;margin-bottom:10px">下の3つのうち、いずれか1つは必ず入力してください（未入力だと日報を登録できません）。</div>
+      <div style="font-size:15px;color:#1A4F47;font-weight:800;margin-bottom:4px">📋 本日の報告 <span style="color:#94a3b8;font-size:12px;font-weight:700">任意</span></div>
+      <div style="font-size:12px;color:#64748B;margin-bottom:10px;line-height:1.6">1日1回、気づいたことがあれば書いて下の「送信」を押してください。<b>日報の登録とは別</b>です（お客様ごとに書く必要はありません）。</div>
+      <label style="font-size:13px;font-weight:700;color:#1A4F47;display:block;margin-bottom:3px">👤 報告者</label>
+      <select id="reportStaff" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;font-weight:700;color:#1A4F47;background:#fff;margin-bottom:12px"><option value="">選んでください</option></select>
       <label style="font-size:13px;font-weight:700;color:#27AE60;display:block;margin-bottom:3px">✅ 今日よかった点</label>
       <textarea id="reportGood" rows="2" placeholder="お客様に喜ばれたこと・うまくいった施術など" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;margin-bottom:12px;font-family:inherit;resize:vertical;color:#1A2E2A"></textarea>
       <label style="font-size:13px;font-weight:700;color:#D4A843;display:block;margin-bottom:3px">📝 改善点</label>
       <textarea id="reportImprove" rows="2" placeholder="次はこうしたい・反省点など" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;margin-bottom:12px;font-family:inherit;resize:vertical;color:#1A2E2A"></textarea>
       <label style="font-size:13px;font-weight:700;color:#2C7A6E;display:block;margin-bottom:3px">📢 共有事項・申し送り</label>
-      <textarea id="reportShare" rows="2" placeholder="在庫切れ・予約の注意点・設備の不具合・次のシフトの人に伝えたいことなど" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;font-family:inherit;resize:vertical;color:#1A2E2A"></textarea>
+      <textarea id="reportShare" rows="2" placeholder="在庫切れ・予約の注意点・設備の不具合・次のシフトの人に伝えたいことなど" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;margin-bottom:12px;font-family:inherit;resize:vertical;color:#1A2E2A"></textarea>
+      <button onclick="submitDailyReport()" style="width:100%;padding:12px;background:#2C7A6E;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">📋 本日の報告を送信</button>
     </div>
     <button onclick="pushAndSync()" style="width:100%;margin-top:10px;padding:13px;background:#fff;color:#2C7A6E;border:2px solid #2C7A6E;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">📤 打ち終わったら更新（みんなの端末に反映）</button>
   </div>
@@ -1599,6 +1602,20 @@ function ensureEarlyMorningMenu(){
   return false;
 }
 
+// 2026年8月〜の役職変更を名簿に反映（旧名は削除履歴で全端末から除外・新名へ改名）。冪等。過去の日報等は変更しない。
+function migrateStaffRoles(){
+  if(!Array.isArray(state.staff)) return;
+  var map={'東（副店長）':'東（数字リーダー）','林':'林（副店長）','堀井':'堀井（教育リーダー）'};
+  var changed=false;
+  for(var oldN in map){ var newN=map[oldN]; var oi=state.staff.indexOf(oldN);
+    if(oi>=0){
+      if(state.staff.indexOf(newN)<0){ state.staff[oi]=newN; } else { state.staff.splice(oi,1); }
+      try{ if(typeof markMasterDeleted==='function') markMasterDeleted('staff', oldN); if(typeof unmarkMasterDeleted==='function') unmarkMasterDeleted('staff', newN); }catch(e){}
+      changed=true;
+    }
+  }
+  if(changed){ try{ saveLocal(); if(typeof saveMastersToCloud==='function') saveMastersToCloud(); }catch(e){} }
+}
 function init(){
   load();
   if(typeof fixProductIds === "function" && fixProductIds()){ try{save();}catch(e){} }
@@ -1607,7 +1624,8 @@ function init(){
   // セッションチェック
   /* PIN無効 */
 
-  if(!state.staff||!state.staff.length) state.staff=['石上（代表）','花岡（店長）','東（副店長）','堀井','林','梅田','カノン'];
+  if(!state.staff||!state.staff.length) state.staff=['石上（代表）','花岡（店長）','林（副店長）','東（数字リーダー）','堀井（教育リーダー）','梅田','カノン'];
+  try{ if(typeof migrateStaffRoles==='function') migrateStaffRoles(); }catch(e){} // 2026/8〜の役職変更を名簿に反映（既存端末）
   if(!state.mediaList||!state.mediaList.length) state.mediaList=['ホットペッパー','楽天ビューティー','Instagram','LINE','Google','ホームページ','口コミ','紹介','ビューティーメリット','友達紹介','DM','TikTok','その他'];
   // 支払い方法は代表5種に固定（毎回上書き・編集不可・同期でも変わらない）
   state.paymentMaster=[
@@ -1692,6 +1710,7 @@ function renderAll(){
   renderSummary(); renderRecords(); renderDashboard(); renderAdminLists();
   try{ var _sp=document.getElementById('page-sales'); if(_sp && _sp.classList.contains('active') && typeof renderSales==='function') renderSales(); }catch(e){}
   try{ if(typeof updateReportsBadge==='function') updateReportsBadge(); }catch(e){}
+  try{ if(typeof updateReportStaffSelect==='function') updateReportStaffSelect(); }catch(e){}
   try{ var _rp=document.getElementById('page-reports'); if(_rp && _rp.classList.contains('active') && typeof renderReportsTab==='function') renderReportsTab(); }catch(e){}
   try{ updateEntryDateBanner(); }catch(e){}
 }
@@ -2335,13 +2354,6 @@ function submitRecord(){
   if(!state.selectedStaff){ showToast('⚠️ 担当者を選んでください'); return; }
   if(!state.selectedPayment){ showToast('⚠️ 支払い方法を選んでください'); return; }
   if(!state.selectedMenus.length&&!state.selectedProducts.length){ showToast('⚠️ メニューか物販を選んでください'); return; }
-  // 本日の報告は必須（3つのうち最低1つ）。※過去日報の編集時は除く
-  if(!state.editingRecordId){
-    var _rgReq=(document.getElementById('reportGood')||{}).value||'';
-    var _riReq=(document.getElementById('reportImprove')||{}).value||'';
-    var _rsReq=(document.getElementById('reportShare')||{}).value||'';
-    if(!_rgReq.trim() && !_riReq.trim() && !_rsReq.trim()){ showToast('⚠️ 本日の報告を1つ以上入力してください（よかった点／改善点／共有事項のいずれか）'); return; }
-  }
   var menuIncTotal=0;
   for(var i=0;i<state.selectedMenus.length;i++){
     var m = state.selectedMenus[i];
@@ -2399,19 +2411,6 @@ function submitRecord(){
     if(state.deletedIds.indexOf(editId)<0) state.deletedIds.push(editId);
   }
   state.records.push(record);
-  // 本日の報告（任意）：入力があれば日報と一緒に保存（報告者名＝担当者・日付＝日報の日付）
-  var _rg=(document.getElementById('reportGood')||{}).value||'';
-  var _ri=(document.getElementById('reportImprove')||{}).value||'';
-  var _rs=(document.getElementById('reportShare')||{}).value||'';
-  var _reportAdded=false;
-  if(_rg.trim()||_ri.trim()||_rs.trim()){
-    if(!Array.isArray(state.reports)) state.reports=[];
-    state.reports.push({ id:String(Date.now())+'-'+Math.floor(Math.random()*100000), date:(function(){try{return recYMD(record);}catch(e){return '';}})(), staff:record.staff, good:_rg.trim(), improve:_ri.trim(), share:_rs.trim(), createdAt:new Date().toISOString() });
-    var _g=document.getElementById('reportGood'); if(_g)_g.value='';
-    var _ii=document.getElementById('reportImprove'); if(_ii)_ii.value='';
-    var _ss=document.getElementById('reportShare'); if(_ss)_ss.value='';
-    _reportAdded=true;
-  }
   state.selectedMenus=[]; state.selectedProducts=[];
   document.getElementById('customerName').value='';
   state.clientType='リピーター';
@@ -2430,9 +2429,35 @@ function submitRecord(){
     else if(res.queued){ showToast('📵 '+bd+'日報をオフライン保存（復旧時に自動送信）'); }
     else { showToast('⚠️ クラウド送信失敗: '+(res.error||'')); }
   });
-  if(_reportAdded){ try{ saveMastersToCloud(); }catch(e){} } // 本日の報告をクラウドへ保存
   renderAll();
   switchTab('records');
+}
+// 本日の報告（任意・1日1回・日報とは別送信）
+function submitDailyReport(){
+  var who=(document.getElementById('reportStaff')||{}).value||'';
+  var g=(document.getElementById('reportGood')||{}).value||'';
+  var im=(document.getElementById('reportImprove')||{}).value||'';
+  var sh=(document.getElementById('reportShare')||{}).value||'';
+  if(!g.trim() && !im.trim() && !sh.trim()){ showToast('⚠️ 報告を1つ以上入力してください'); return; }
+  if(!who){ showToast('⚠️ 報告者を選んでください'); return; }
+  if(!Array.isArray(state.reports)) state.reports=[];
+  var t=new Date(); var ymd=t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');
+  state.reports.push({ id:String(Date.now())+'-'+Math.floor(Math.random()*100000), date:ymd, staff:who, good:g.trim(), improve:im.trim(), share:sh.trim(), createdAt:new Date().toISOString() });
+  try{ saveLocal(); }catch(e){}
+  if(typeof saveMastersToCloud==='function'){ try{ saveMastersToCloud(function(res){ showToast(res&&res.ok?'✅ 本日の報告を送信しました！':'📵 報告を保存（オンライン時に自動送信）'); }); }catch(e){ showToast('✅ 本日の報告を保存しました'); } }
+  else { showToast('✅ 本日の報告を保存しました'); }
+  var eg=document.getElementById('reportGood'); if(eg)eg.value='';
+  var ei=document.getElementById('reportImprove'); if(ei)ei.value='';
+  var es=document.getElementById('reportShare'); if(es)es.value='';
+  if(typeof renderAll==='function') renderAll();
+}
+// 報告者セレクトを名簿で埋める（未選択時は入力中の担当者を初期選択）
+function updateReportStaffSelect(){
+  var sel=document.getElementById('reportStaff'); if(!sel) return;
+  var cur=sel.value || state.selectedStaff || '';
+  var o='<option value="">選んでください</option>';
+  (state.staff||[]).forEach(function(nm){ o+='<option value="'+h(nm)+'"'+(nm===cur?' selected':'')+'>'+h(nm)+'</option>'; });
+  sel.innerHTML=o;
 }
 
 /* RECORDS */
@@ -5540,7 +5565,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "16.8";
+var APP_VERSION = "16.9";
 
 function checkForUpdate(){
   try {
