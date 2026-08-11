@@ -1231,14 +1231,24 @@ function updateCloudStatus(){
   }
 }
 
+// 再送対象の更新系アクション（読み取り系 getAll 等は再送しない）
+function _isMutation(action){ return action==='addRecord'||action==='deleteRecord'||action==='saveMasters'||action==='bulkImport'; }
+// 送信失敗を再送キューへ（上限付き。恒久失敗の無限リトライ／サーバー連打を防ぐ）
+function _enqueueRetry(action, payload, tries){
+  var t=(tries||0)+1;
+  if(t>6){ try{ if(_isMutation(action)) showToast('⚠️ クラウド送信に繰り返し失敗しました。通信環境をご確認ください'); }catch(e){} return; }
+  syncQueue.push({action:action, payload:payload, _tries:t});
+  saveLocal();
+}
 // クラウドAPI呼び出し
-function callCloud(action, payload, callback){
+function callCloud(action, payload, callback, _tries){
+  _tries=_tries||0;
   if(!state.cloudUrl||!state.cloudKey){
     if(callback) callback({ok:false, error:'未設定'});
     return;
   }
   if(!isOnline){
-    syncQueue.push({action:action, payload:payload});
+    syncQueue.push({action:action, payload:payload, _tries:_tries});
     saveLocal();
     if(callback) callback({ok:false, error:'offline', queued:true});
     return;
@@ -1252,41 +1262,51 @@ function callCloud(action, payload, callback){
     redirect:'follow'
   }).then(function(r){ return r.json(); })
     .then(function(res){
+      if(res && res.ok===false && _isMutation(action)){
+        // サーバーがアプリレベルで失敗を返した → 更新系は再送（上限付き）。黙って失わない
+        _enqueueRetry(action, payload, _tries);
+        if(callback) callback(res);
+        return;
+      }
       state.lastSync=Date.now();
       saveLocal();
       updateCloudStatus();
       if(callback) callback(res);
     })
     .catch(function(err){
-      // 失敗時はキューに積む
-      syncQueue.push({action:action, payload:payload});
-      saveLocal();
+      // 通信失敗 → 再送（上限付き）
+      _enqueueRetry(action, payload, _tries);
       if(callback) callback({ok:false, error:err.toString(), queued:true});
     });
 }
 
-// キューを順次処理
+// キューを順次処理（多重実行を防ぐガード付き）
+var _sqRunning=false;
 function processSyncQueue(){
+  if(_sqRunning) return;
   if(!isOnline||!state.cloudUrl||syncQueue.length===0) return;
+  _sqRunning=true;
   var item = syncQueue.shift();
   saveLocal();
   callCloud(item.action, item.payload, function(){
-    setTimeout(processSyncQueue, 500);
-  });
+    _sqRunning=false;
+    if(syncQueue.length) setTimeout(processSyncQueue, 500);
+  }, item._tries||0);
 }
 
 // クラウドから全データを取得して同期
-function mergeMasterById(local, cloud){ local=Array.isArray(local)?local:[]; cloud=Array.isArray(cloud)?cloud:[]; var map={},order=[]; function put(x){ if(!x||x.id==null) return; var k=String(x.id); if(!(k in map)){ map[k]=x; order.push(k); } else if((x.updatedAt||0)>(map[k].updatedAt||0)){ map[k]=x; } } local.forEach(put); cloud.forEach(put); return order.map(function(k){ return map[k]; }); }
-function mergeMasterUnique(local, cloud){ local=Array.isArray(local)?local:[]; cloud=Array.isArray(cloud)?cloud:[]; var seen={},out=[]; local.concat(cloud).forEach(function(x){ var k=String(x); if(!seen[k]){ seen[k]=1; out.push(x); } }); return out; }
+function mergeMasterById(local, cloud, del){ local=Array.isArray(local)?local:[]; cloud=Array.isArray(cloud)?cloud:[]; del=del||{}; var map={},order=[]; function put(x){ if(!x||x.id==null) return; var k=String(x.id); if(del[k]) return; if(!(k in map)){ map[k]=x; order.push(k); } else if((x.updatedAt||0)>(map[k].updatedAt||0)){ map[k]=x; } } local.forEach(put); cloud.forEach(put); return order.map(function(k){ return map[k]; }); }
+function mergeMasterUnique(local, cloud, del){ local=Array.isArray(local)?local:[]; cloud=Array.isArray(cloud)?cloud:[]; del=del||{}; var seen={},out=[]; local.concat(cloud).forEach(function(x){ var k=String(x); if(del[k]||seen[k]) return; seen[k]=1; out.push(x); }); return out; }
 // 在庫は「実データ（仕入値/在庫数/在庫金額あり）」を空プレースホルダーより常に優先（admin.htmlと同一ロジック）。
 // 別端末で自動生成された空行(仕入値0)が、他端末で入力済みのクラウドデータをタイムスタンプだけで上書きするのを防ぐ。
 function invItemHasData(x){ return !!(x && ((parseInt(x.cost)||0)>0 || (parseInt(x.qty)||0)>0 || x.amountManual===true || (parseInt(x.amount)||0)>0)); }
-function mergeInventory(local, cloud){
-  local=Array.isArray(local)?local:[]; cloud=Array.isArray(cloud)?cloud:[];
+function mergeInventory(local, cloud, del){
+  local=Array.isArray(local)?local:[]; cloud=Array.isArray(cloud)?cloud:[]; del=del||{};
   var map={},order=[];
   function put(x){
     if(!x||x.id==null) return;
     var k=String(x.id);
+    if(del[k]) return;                    // 削除済みは復活させない
     if(!(k in map)){ map[k]=x; order.push(k); return; }
     var cur=map[k], xd=invItemHasData(x), cd=invItemHasData(cur);
     if(xd && !cd){ map[k]=x; return; }   // 実データは空を常に上書き
@@ -1296,6 +1316,14 @@ function mergeInventory(local, cloud){
   local.forEach(put); cloud.forEach(put);
   return order.map(function(k){ return map[k]; });
 }
+// ===== マスタ削除の永続化（tombstone）: 削除が別端末の同期で復活しないように（admin.htmlと同一） =====
+function _delMasters(){ if(!state.deletedMasters||typeof state.deletedMasters!=='object'||Array.isArray(state.deletedMasters)) state.deletedMasters={}; return state.deletedMasters; }
+function markMasterDeleted(cat,key){ if(key==null) return; var d=_delMasters(); if(!d[cat]) d[cat]={}; d[cat][String(key)]=1; }
+function unmarkMasterDeleted(cat,key){ if(key==null) return; var d=_delMasters(); if(d[cat]) delete d[cat][String(key)]; }
+function delSetOf(cat){ var d=state.deletedMasters; return (d&&d[cat])?d[cat]:{}; }
+function mergeDeletedMasters(cloudDel){ if(!cloudDel||typeof cloudDel!=='object') return; var d=_delMasters(); for(var cat in cloudDel){ var m=cloudDel[cat]; if(!m) continue; if(!d[cat]) d[cat]={}; if(Array.isArray(m)){ for(var i=0;i<m.length;i++) d[cat][String(m[i])]=1; } else { for(var k in m){ if(m[k]) d[cat][String(k)]=1; } } } }
+// 月キー(売上等)の巻き戻り防止: 両方にキーがあれば updatedAt の新しい方（無ければローカル維持＝従来動作）
+function mergeByMonthKey(localMap, cloudMap){ localMap=(localMap&&typeof localMap==='object')?localMap:{}; cloudMap=(cloudMap&&typeof cloudMap==='object')?cloudMap:{}; var out={},k; for(k in cloudMap) out[k]=cloudMap[k]; for(k in localMap){ if(!(k in out)){ out[k]=localMap[k]; continue; } var lv=localMap[k], cv=out[k]; var lu=(lv&&lv.updatedAt)?(new Date(lv.updatedAt).getTime()||0):0; var cu=(cv&&cv.updatedAt)?(new Date(cv.updatedAt).getTime()||0):0; out[k]=(lu>=cu)?lv:cv; } return out; }
 function pushAndSync(){
   if(!state.cloudUrl||!state.cloudKey){ showToast('⚠️ クラウド未設定'); return; }
   showToast('🔄 反映中…そのままお待ちください');
@@ -1350,19 +1378,21 @@ function syncFromCloud(silent){
       state.records = _cloudRecs.concat(_localOnly);
       // マスタも同期（ローカルが多い場合は上書きしない）
       if(res.masters){
-        // staff: ローカルとクラウドをマージ（重複排除）
+        // 先に削除履歴(tombstone)を統合し、以降のマージで削除済みを除外・復活させない
+        if(res.masters.deletedMasters) mergeDeletedMasters(res.masters.deletedMasters);
+        // staff: ローカルとクラウドをマージ（重複排除・削除済み除外）
         // ID/名前でマージ（どの端末の追加も全端末へ反映。ローカル編集は保持）
-        if(res.masters.staff) state.staff = mergeMasterUnique(state.staff, res.masters.staff);
-        if(res.masters.mediaList) state.mediaList = mergeMasterUnique(state.mediaList, res.masters.mediaList);
+        if(res.masters.staff) state.staff = mergeMasterUnique(state.staff, res.masters.staff, delSetOf('staff'));
+        if(res.masters.mediaList) state.mediaList = mergeMasterUnique(state.mediaList, res.masters.mediaList, delSetOf('mediaList'));
         // 支払い方法は5種固定のためクラウドからは同期しない
-        if(res.masters.menus) state.menus = mergeMasterById(state.menus, res.masters.menus);
-        if(res.masters.products) state.products = mergeMasterById(state.products, res.masters.products);
-        if(res.masters.productBrands) state.productBrands = mergeMasterUnique(state.productBrands, res.masters.productBrands);
+        if(res.masters.menus) state.menus = mergeMasterById(state.menus, res.masters.menus, delSetOf('menus'));
+        if(res.masters.products) state.products = mergeMasterById(state.products, res.masters.products, delSetOf('products'));
+        if(res.masters.productBrands) state.productBrands = mergeMasterUnique(state.productBrands, res.masters.productBrands, delSetOf('productBrands'));
         if(res.masters.eduVideos && res.masters.eduVideos.length >= (state.eduVideos||[]).length){ state.eduVideos = res.masters.eduVideos; }
-        if(res.masters.airegi){ state.airegi = Object.assign({}, res.masters.airegi, state.airegi||{}); }
+        if(res.masters.airegi){ state.airegi = mergeByMonthKey(state.airegi, res.masters.airegi); }
         if(res.masters.attendance){ state.attendance = attMerge(state.attendance, res.masters.attendance); }
-        if(res.masters.inventory){ state.inventory = mergeInventory(state.inventory||[], res.masters.inventory); }
-        if(res.masters.invCategories){ state.invCategories = mergeMasterUnique(state.invCategories||[], res.masters.invCategories); }
+        if(res.masters.inventory){ state.inventory = mergeInventory(state.inventory||[], res.masters.inventory, delSetOf('inventory')); }
+        if(res.masters.invCategories){ state.invCategories = mergeMasterUnique(state.invCategories||[], res.masters.invCategories, delSetOf('invCategories')); }
         if(typeof renderAcademyVideos==='function'){ try{ renderAcademyVideos(); if(typeof renderEduAdmin==='function') renderEduAdmin(); }catch(e){} }
       }
       saveLocal();
@@ -1437,7 +1467,8 @@ function saveMastersToCloud(cb){
       airegi: state.airegi || {},
       attendance: state.attendance || {},
       inventory: state.inventory || [],
-      invCategories: state.invCategories || []
+      invCategories: state.invCategories || [],
+      deletedMasters: state.deletedMasters || {}
     }}, cb||function(){});
   } catch(e){}
 }
@@ -3068,10 +3099,10 @@ function renderAdminLists(){
   var scle = document.getElementById('subCatList'); if(scle) scle.innerHTML=scl;
 }
 
-function addStaff(){ var v=document.getElementById('newStaff').value.trim(); if(!v) return; state.staff.push(v); document.getElementById('newStaff').value=''; save(); renderAll(); showToast('✅ '+v+'を追加しました'); }
-function removeStaff(i){ state.staff.splice(i,1); save(); renderAll(); }
-function addMedia(){ var v=document.getElementById('newMedia').value.trim(); if(!v) return; state.mediaList.push(v); document.getElementById('newMedia').value=''; save(); renderAll(); showToast('✅ '+v+'を追加しました'); }
-function removeMedia(i){ state.mediaList.splice(i,1); save(); renderAll(); }
+function addStaff(){ var v=document.getElementById('newStaff').value.trim(); if(!v) return; unmarkMasterDeleted('staff',v); state.staff.push(v); document.getElementById('newStaff').value=''; save(); renderAll(); showToast('✅ '+v+'を追加しました'); }
+function removeStaff(i){ var nm=state.staff[i]; state.staff.splice(i,1); markMasterDeleted('staff',nm); save(); renderAll(); }
+function addMedia(){ var v=document.getElementById('newMedia').value.trim(); if(!v) return; unmarkMasterDeleted('mediaList',v); state.mediaList.push(v); document.getElementById('newMedia').value=''; save(); renderAll(); showToast('✅ '+v+'を追加しました'); }
+function removeMedia(i){ var nm=state.mediaList[i]; state.mediaList.splice(i,1); markMasterDeleted('mediaList',nm); save(); renderAll(); }
 function addPayment(){
   var v=document.getElementById('newPayment').value.trim();
   var fee=parseFloat(document.getElementById('newPaymentFee').value)||0;
@@ -3110,7 +3141,7 @@ function addMenu(){
   document.getElementById('newMenuName').value=''; document.getElementById('newMenuPrice').value='';
   save(); renderAll(); showToast('✅ '+name+'を追加しました');
 }
-function removeMenu(i){ state.menus.splice(i,1); save(); renderAll(); }
+function removeMenu(i){ var it=state.menus[i]; state.menus.splice(i,1); if(it) markMasterDeleted('menus',it.id); save(); renderAll(); }
 function addProduct(){
   var name=document.getElementById('newProductName').value.trim();
   var category=document.getElementById('newProductCategory').value.trim();
@@ -3124,7 +3155,7 @@ function addProduct(){
   document.getElementById('newProductSize').value=''; document.getElementById('newProductCost').value=''; document.getElementById('newProductSell').value='';
   save(); renderAll(); showToast('✅ '+name+'を追加しました');
 }
-function removeProduct(i){ state.products.splice(i,1); save(); renderAll(); }
+function removeProduct(i){ var it=state.products[i]; state.products.splice(i,1); if(it) markMasterDeleted('products',it.id); save(); renderAll(); }
 function updateProductPreview(){
   var cost=parseInt(document.getElementById('newProductCost').value||'0');
   var sell=parseInt(document.getElementById('newProductSell').value||'0');
@@ -3717,7 +3748,7 @@ function invSyncFromMaster(){
   (state.products||[]).forEach(function(p){
     var exists=false;
     for(var i=0;i<state.inventory.length;i++){ if(String(state.inventory[i].id)===String(p.id) || state.inventory[i].name===p.name){ exists=true; break; } }
-    if(!exists){ state.inventory.push({id:p.id, name:p.name, category:def, cost:(p.cost||0), qty:0, amount:0, amountManual:false, updatedAt:0}); added++; }
+    if(!exists){ unmarkMasterDeleted('inventory',p.id); state.inventory.push({id:p.id, name:p.name, category:def, cost:(p.cost||0), qty:0, amount:0, amountManual:false, updatedAt:0}); added++; }
   });
   try{ saveLocal(); }catch(e){}
   renderInventory();
@@ -3759,6 +3790,7 @@ function invDeleteRow(id){
   var i=invFindIdx(id); if(i<0) return;
   if(!confirm('この商品を在庫リストから削除しますか？')) return;
   state.inventory.splice(i,1);
+  markMasterDeleted('inventory',id); // 別端末の同期で復活しないように（保存で全端末へ反映）
   try{ saveLocal(); }catch(e){}
   renderInventory();
 }
@@ -3785,6 +3817,7 @@ function invAddCategory(){
   name=String(name).trim();
   if(!name){ if(typeof showToast==='function') showToast('⚠️ 名前を入力してください'); return; }
   if(invCats().indexOf(name)>=0){ if(typeof showToast==='function') showToast('⚠️ 同じ名前のフォルダが既にあります'); return; }
+  unmarkMasterDeleted('invCategories',name);
   state.invCategories.push(name);
   state.invCollapsed[name]=false;
   try{ saveLocal(); }catch(e){}
@@ -3801,6 +3834,7 @@ function invDeleteCategory(ci){
   if(!confirm(msg)) return;
   state.inventory.forEach(function(it){ if(it.category===cat) it.category=fallback; });
   state.invCategories=cats.filter(function(c){return c!==cat;});
+  markMasterDeleted('invCategories',cat); // 別端末の同期で復活しないように
   if(state.invCollapsed) delete state.invCollapsed[cat];
   try{ saveLocal(); }catch(e){}
   renderInventory();
@@ -5373,7 +5407,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "16.4";
+var APP_VERSION = "16.5";
 
 function checkForUpdate(){
   try {
