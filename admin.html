@@ -845,6 +845,7 @@
   </style>
   <div class="sl-subtabs">
     <div class="sl-subtab active" id="slSub_daily" onclick="switchSalesSub('daily')">日別売上</div>
+    <div class="sl-subtab" id="slSub_stafftrend" onclick="switchSalesSub('stafftrend')">👥 スタッフ推移</div>
     <div class="sl-subtab" id="slSub_product" onclick="switchSalesSub('product')">商品別売上</div>
     <div class="sl-subtab" id="slSub_analysis" onclick="switchSalesSub('analysis')">分析</div>
     <div class="sl-subtab" id="slSub_reconcile" onclick="switchSalesSub('reconcile')">📋 照合</div>
@@ -874,6 +875,29 @@
     <div class="sl-card">
       <div class="sl-sec">売上集計</div>
       <div id="slDailyTable"></div>
+    </div>
+  </div>
+
+  <div class="sl-panel" id="slPanel_stafftrend">
+    <div class="sl-card">
+      <div class="sl-filter">
+        <select id="stTrendYear" onchange="state.salesYear=parseInt(this.value);renderStaffTrend()"></select>
+        <select id="stTrendMetric" onchange="state.stTrendMetric=this.value;renderStaffTrend()">
+          <option value="total">売上合計</option>
+          <option value="tech">技術売上</option>
+          <option value="prod">物販売上</option>
+        </select>
+      </div>
+      <select id="stTrendStaff" onchange="state.stTrendStaff=this.value;renderStaffTrend()" style="width:100%;margin-top:8px;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;background:#fff;font-size:14px;font-weight:700;color:#1A4F47"></select>
+    </div>
+    <div class="sl-card">
+      <div class="sl-chart-head"><span class="sl-ttl">スタッフ別 月次売上推移</span></div>
+      <div id="stTrendHint" style="font-size:11px;color:#999;margin-bottom:8px"></div>
+      <canvas id="slStaffTrendChart" height="200"></canvas>
+    </div>
+    <div class="sl-card">
+      <div class="sl-sec">数字で見る（スタッフ×月）</div>
+      <div id="stTrendTable" style="overflow-x:auto"></div>
     </div>
   </div>
 
@@ -1482,7 +1506,8 @@ function migrateToCloud(){
 }
 
 // ローカル保存（即時）
-function saveLocal(){try{ if(state.deletedIds && state.deletedIds.length>2000){ state.deletedIds=state.deletedIds.slice(-1000); } localStorage.setItem('sun_cloud_admin',JSON.stringify(state));}catch(e){} _costCache={};}
+var _quotaWarned=false;
+function saveLocal(){try{ if(state.deletedIds && state.deletedIds.length>2000){ state.deletedIds=state.deletedIds.slice(-1000); } state._syncQueue=syncQueue; /* 未送信キューも一緒に永続化（リロードで消えないように） */ localStorage.setItem('sun_cloud_admin',JSON.stringify(state));}catch(e){ if(e && (e.name==='QuotaExceededError'||/quota/i.test(String(e&&e.message||e))) && !_quotaWarned){ _quotaWarned=true; try{ showToast('⚠️ 端末の保存容量がいっぱいです。オンライン時に「同期」してから、不要な過去データの整理をご検討ください'); }catch(x){} } } _costCache={};}
 // 保存 = ローカル即時保存
 function save(){ saveLocal(); saveMastersToCloud(); }
 // 入力中の保存をまとめる（表示は即時、localStorage書込み＋マスタのクラウド送信を400msに集約）
@@ -1517,7 +1542,7 @@ function saveMastersToCloud(cb){
   } catch(e){}
 }
 
-function load(){try{var d=localStorage.getItem('sun_cloud_admin');if(d){var p=JSON.parse(d);for(var k in p)state[k]=p[k];}}catch(e){}}
+function load(){try{var d=localStorage.getItem('sun_cloud_admin');if(d){var p=JSON.parse(d);for(var k in p)state[k]=p[k];}}catch(e){} try{ if(Array.isArray(state._syncQueue)) syncQueue=state._syncQueue; /* 前回セッションの未送信キューを復元 */ }catch(e){}}
 
 function generateCOTA(){
   var nums=['1番','3番','5番','7番','9番'];
@@ -1651,6 +1676,8 @@ function init(){
   });
   // クラウド設定があれば自動同期
   if(state.cloudUrl && state.cloudKey){
+    // 前回オフラインで貯まった未送信キューをまず送信（復元済み）
+    if(isOnline && syncQueue.length){ setTimeout(function(){ try{ processSyncQueue(); }catch(e){} }, 300); }
     setTimeout(function(){ syncFromCloud(true); }, 500);
     // 5分ごとに自動同期
     setInterval(function(){ if(isOnline) syncFromCloud(true); }, 5*60*1000);
@@ -3207,7 +3234,7 @@ function pushDeletionsToCloud(){
 
 /* ===== 売上タブ（日別・商品別・分析） ===== */
 var SALES_ADMIN = true; // admin=true / staff=false（自動置換）
-var _slSalesChart=null,_slStaffChart=null;
+var _slSalesChart=null,_slStaffChart=null,_slStaffTrendChart=null;
 function salesMe(){ return (state.salesStaff && state.salesStaff.length) ? state.salesStaff : null; } // 売上タブの担当者フィルター（空=全員）
 // 1日報のスコープ別集計（admin=全体 / staff=自分の担当分）
 function salesRec(r){
@@ -3224,8 +3251,9 @@ function makeSalesChart(id, which, config){
   try{
     if(which==='sales'&&_slSalesChart){ _slSalesChart.destroy(); _slSalesChart=null; }
     if(which==='staff'&&_slStaffChart){ _slStaffChart.destroy(); _slStaffChart=null; }
+    if(which==='stafftrend'&&_slStaffTrendChart){ _slStaffTrendChart.destroy(); _slStaffTrendChart=null; }
     var ch=new Chart(cv, config);
-    if(which==='sales') _slSalesChart=ch; else _slStaffChart=ch;
+    if(which==='sales') _slSalesChart=ch; else if(which==='stafftrend') _slStaffTrendChart=ch; else _slStaffChart=ch;
   }catch(e){}
 }
 function salesPopulateYears(){
@@ -3241,13 +3269,14 @@ function salesPopulateYears(){
 }
 function renderSales(){
   if(!state.salesSub) state.salesSub='daily';
-  ['daily','product','analysis','reconcile'].forEach(function(t){
+  ['daily','stafftrend','product','analysis','reconcile'].forEach(function(t){
     var b=document.getElementById('slSub_'+t), p=document.getElementById('slPanel_'+t);
     if(b) b.classList.toggle('active', state.salesSub===t);
     if(p) p.classList.toggle('active', state.salesSub===t);
   });
   salesPopulateYears();
   if(state.salesSub==='daily') renderSalesDaily();
+  else if(state.salesSub==='stafftrend') renderStaffTrend();
   else if(state.salesSub==='product') renderSalesProduct();
   else if(state.salesSub==='analysis') renderSalesAnalysis();
   else renderReconcile();
@@ -3322,6 +3351,70 @@ function renderSalesDaily(){
       scales:{ y:{position:'left',beginAtZero:true,ticks:{callback:function(v){return '¥'+Math.round(v/10000)+'万';},font:{size:10}},grid:{color:'#f0f0f0'}},
         y1:{position:'right',beginAtZero:true,ticks:{font:{size:10}},grid:{display:false}} }}
   });
+}
+// スタッフ別 月次売上推移（全員比較・年度選択）
+function renderStaffTrend(){
+  var nowD=new Date();
+  if(!state.salesYear) state.salesYear=nowD.getFullYear();
+  var year=state.salesYear, metric=state.stTrendMetric||'total';
+  // セレクト初期化（年度・指標）
+  var ysel=document.getElementById('stTrendYear');
+  if(ysel){ var ys=''; for(var y=2026;y>=2017;y--) ys+='<option value="'+y+'"'+(y===year?' selected':'')+'>'+y+'年</option>'; ysel.innerHTML=ys; }
+  var meSel=document.getElementById('stTrendMetric'); if(meSel) meSel.value=metric;
+  // スタッフ×月 集計（技術＝menuLineInc / 物販＝prodLineSell）
+  var by={};
+  function ens(n){ if(!by[n]){ by[n]=[0,0,0,0,0,0,0,0,0,0,0,0]; } return by[n]; }
+  (state.records||[]).forEach(function(r){
+    var d=new Date(r.time); if(isNaN(d.getTime())||d.getFullYear()!==year) return;
+    var mi=d.getMonth();
+    if(metric!=='prod'){ (r.menus||[]).forEach(function(m){ var st=m.menuStaff||r.staff; ens(st)[mi]+=menuLineInc(m); }); }
+    if(metric!=='tech'){ (r.products||[]).forEach(function(p){ var st=p.productStaff||r.staff; ens(st)[mi]+=prodLineSell(p); }); }
+  });
+  // スタッフセレクト（全員 + 名簿）
+  var sel=(state.stTrendStaff && state.stTrendStaff.length) ? state.stTrendStaff : '';
+  var ssel=document.getElementById('stTrendStaff');
+  if(ssel){ var so='<option value="">👥 全員（比較）</option>'; (state.staff||[]).forEach(function(nm){ so+='<option value="'+h(nm)+'"'+(nm===sel?' selected':'')+'>'+h(nm)+'</option>'; }); ssel.innerHTML=so; }
+  // 表示対象：個別選択ならその1名。全員なら売上>0のスタッフ（名簿順→名簿外の担当者）
+  function yTot(nm){ var a=by[nm]||[],s=0; for(var i=0;i<12;i++) s+=a[i]; return s; }
+  var names;
+  if(sel){ names=[sel]; }
+  else {
+    names=(state.staff||[]).filter(function(nm){ return yTot(nm)>0; });
+    Object.keys(by).forEach(function(nm){ if(names.indexOf(nm)<0 && yTot(nm)>0) names.push(nm); });
+  }
+  // 表示月レンジ（今年は当月まで／過去年は12月。データのある最終月は必ず含む）
+  var lastMonth=(year===nowD.getFullYear())?(nowD.getMonth()+1):12, maxData=0;
+  names.forEach(function(nm){ var a=by[nm]||[]; for(var i=0;i<12;i++){ if(a[i]>0 && (i+1)>maxData) maxData=i+1; } });
+  if(maxData>lastMonth) lastMonth=maxData;
+  if(lastMonth<1) lastMonth=12;
+  var months=[]; for(var mo=1;mo<=lastMonth;mo++) months.push(mo);
+  var metricLabel=metric==='tech'?'技術売上':(metric==='prod'?'物販売上':'売上合計');
+  var hint=document.getElementById('stTrendHint'); if(hint) hint.textContent=year+'年 '+metricLabel+'（'+(sel?sel+' の推移':'全スタッフ比較')+'）';
+  // 折れ線グラフ（1本＝1スタッフ）
+  var pal=['#4DB8B2','#F0A500','#7C9CF0','#E05555','#27AE60','#B457D6','#F06292','#8D6E63','#26A69A','#FF7043','#5C6BC0','#9CCC65'];
+  var datasets=names.map(function(nm,idx){ var c=pal[idx%pal.length];
+    return {label:nm,data:months.map(function(mo){return (by[nm]||[])[mo-1]||0;}),borderColor:c,backgroundColor:c,pointBackgroundColor:c,tension:0.3,fill:false,borderWidth:2,pointRadius:3};
+  });
+  makeSalesChart('slStaffTrendChart','stafftrend',{
+    type:'line',
+    data:{ labels:months.map(function(mo){return mo+'月';}), datasets:datasets },
+    options:{responsive:true,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:true,labels:{font:{size:10},boxWidth:12}},tooltip:{callbacks:{label:function(ctx){return ctx.dataset.label+'：¥'+num(ctx.parsed.y);}}}},
+      scales:{ y:{beginAtZero:true,ticks:{callback:function(v){return '¥'+Math.round(v/10000)+'万';},font:{size:10}},grid:{color:'#f0f0f0'}}, x:{ticks:{font:{size:10}},grid:{display:false}} }}
+  });
+  // 数字テーブル（行＝月・列＝各スタッフ＋合計）
+  // 合計列は月の直後に配置（狭い画面で最重要の合計が横スクロールせず見えるように）
+  var minW=Math.max(320, 80+(names.length+1)*76);
+  var tbl='<table class="sl-tbl" style="min-width:'+minW+'px"><tr><th>月</th><th>合計</th>'+names.map(function(nm){return '<th>'+h(nm)+'</th>';}).join('')+'</tr>';
+  var colTot={}; names.forEach(function(nm){colTot[nm]=0;}); var grand=0;
+  months.forEach(function(mo){
+    var row=0, cells='';
+    names.forEach(function(nm){ var v=(by[nm]||[])[mo-1]||0; colTot[nm]+=v; row+=v; cells+='<td>'+(v?'¥'+num(v):'<span style="color:#ccc">—</span>')+'</td>'; });
+    grand+=row;
+    tbl+='<tr><td>'+mo+'月</td><td style="font-weight:700;color:#1A4F47">¥'+num(row)+'</td>'+cells+'</tr>';
+  });
+  tbl+='<tr class="sl-total"><td>合計</td><td>¥'+num(grand)+'</td>'+names.map(function(nm){return '<td>¥'+num(colTot[nm])+'</td>';}).join('')+'</tr></table>';
+  var tEl=document.getElementById('stTrendTable'); if(tEl) tEl.innerHTML=names.length?tbl:'<div class="sl-empty">この年の売上データがありません</div>';
 }
 function setSalesProd(v){ state.salesProdView=v; renderSalesProduct(); }
 function renderSalesProduct(){
@@ -5129,7 +5222,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "16.2";
+var APP_VERSION = "16.4";
 
 function checkForUpdate(){
   try {

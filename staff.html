@@ -1278,6 +1278,24 @@ function processSyncQueue(){
 // クラウドから全データを取得して同期
 function mergeMasterById(local, cloud){ local=Array.isArray(local)?local:[]; cloud=Array.isArray(cloud)?cloud:[]; var map={},order=[]; function put(x){ if(!x||x.id==null) return; var k=String(x.id); if(!(k in map)){ map[k]=x; order.push(k); } else if((x.updatedAt||0)>(map[k].updatedAt||0)){ map[k]=x; } } local.forEach(put); cloud.forEach(put); return order.map(function(k){ return map[k]; }); }
 function mergeMasterUnique(local, cloud){ local=Array.isArray(local)?local:[]; cloud=Array.isArray(cloud)?cloud:[]; var seen={},out=[]; local.concat(cloud).forEach(function(x){ var k=String(x); if(!seen[k]){ seen[k]=1; out.push(x); } }); return out; }
+// 在庫は「実データ（仕入値/在庫数/在庫金額あり）」を空プレースホルダーより常に優先（admin.htmlと同一ロジック）。
+// 別端末で自動生成された空行(仕入値0)が、他端末で入力済みのクラウドデータをタイムスタンプだけで上書きするのを防ぐ。
+function invItemHasData(x){ return !!(x && ((parseInt(x.cost)||0)>0 || (parseInt(x.qty)||0)>0 || x.amountManual===true || (parseInt(x.amount)||0)>0)); }
+function mergeInventory(local, cloud){
+  local=Array.isArray(local)?local:[]; cloud=Array.isArray(cloud)?cloud:[];
+  var map={},order=[];
+  function put(x){
+    if(!x||x.id==null) return;
+    var k=String(x.id);
+    if(!(k in map)){ map[k]=x; order.push(k); return; }
+    var cur=map[k], xd=invItemHasData(x), cd=invItemHasData(cur);
+    if(xd && !cd){ map[k]=x; return; }   // 実データは空を常に上書き
+    if(!xd && cd){ return; }              // 空は実データを絶対に上書きしない
+    if((x.updatedAt||0)>(cur.updatedAt||0)){ map[k]=x; } // 同種なら新しい方
+  }
+  local.forEach(put); cloud.forEach(put);
+  return order.map(function(k){ return map[k]; });
+}
 function pushAndSync(){
   if(!state.cloudUrl||!state.cloudKey){ showToast('⚠️ クラウド未設定'); return; }
   showToast('🔄 反映中…そのままお待ちください');
@@ -1343,7 +1361,7 @@ function syncFromCloud(silent){
         if(res.masters.eduVideos && res.masters.eduVideos.length >= (state.eduVideos||[]).length){ state.eduVideos = res.masters.eduVideos; }
         if(res.masters.airegi){ state.airegi = Object.assign({}, res.masters.airegi, state.airegi||{}); }
         if(res.masters.attendance){ state.attendance = attMerge(state.attendance, res.masters.attendance); }
-        if(res.masters.inventory){ state.inventory = mergeMasterById(state.inventory||[], res.masters.inventory); }
+        if(res.masters.inventory){ state.inventory = mergeInventory(state.inventory||[], res.masters.inventory); }
         if(res.masters.invCategories){ state.invCategories = mergeMasterUnique(state.invCategories||[], res.masters.invCategories); }
         if(typeof renderAcademyVideos==='function'){ try{ renderAcademyVideos(); if(typeof renderEduAdmin==='function') renderEduAdmin(); }catch(e){} }
       }
@@ -1390,7 +1408,8 @@ function migrateToCloud(){
 }
 
 // ローカル保存（即時）
-function saveLocal(){try{ if(state.deletedIds && state.deletedIds.length>2000){ state.deletedIds=state.deletedIds.slice(-1000); } localStorage.setItem('sun_cloud_staff',JSON.stringify(state));}catch(e){} _costCache={};}
+var _quotaWarned=false;
+function saveLocal(){try{ if(state.deletedIds && state.deletedIds.length>2000){ state.deletedIds=state.deletedIds.slice(-1000); } state._syncQueue=syncQueue; /* 未送信キューも一緒に永続化（リロードで消えないように） */ localStorage.setItem('sun_cloud_staff',JSON.stringify(state));}catch(e){ if(e && (e.name==='QuotaExceededError'||/quota/i.test(String(e&&e.message||e))) && !_quotaWarned){ _quotaWarned=true; try{ showToast('⚠️ 端末の保存容量がいっぱいです。オンライン時に「同期」してから、不要な過去データの整理をご検討ください'); }catch(x){} } } _costCache={};}
 // 保存 = ローカル即時保存
 function save(){ saveLocal(); saveMastersToCloud(); }
 // 入力中の保存をまとめる（表示は即時、localStorage書込み＋マスタのクラウド送信を400msに集約）
@@ -1423,7 +1442,7 @@ function saveMastersToCloud(cb){
   } catch(e){}
 }
 
-function load(){try{var d=localStorage.getItem('sun_cloud_staff');if(d){var p=JSON.parse(d);for(var k in p)state[k]=p[k];}}catch(e){}}
+function load(){try{var d=localStorage.getItem('sun_cloud_staff');if(d){var p=JSON.parse(d);for(var k in p)state[k]=p[k];}}catch(e){} try{ if(Array.isArray(state._syncQueue)) syncQueue=state._syncQueue; /* 前回セッションの未送信キューを復元 */ }catch(e){}}
 
 function generateCOTA(){
   var nums=['1番','3番','5番','7番','9番'];
@@ -1572,6 +1591,8 @@ function init(){
   });
   // クラウド設定があれば自動同期
   if(state.cloudUrl && state.cloudKey){
+    // 前回オフラインで貯まった未送信キューをまず送信（復元済み）
+    if(isOnline && syncQueue.length){ setTimeout(function(){ try{ processSyncQueue(); }catch(e){} }, 300); }
     setTimeout(function(){ syncFromCloud(true); }, 500);
     // 5分ごとに自動同期
     setInterval(function(){ if(isOnline) syncFromCloud(true); }, 5*60*1000);
@@ -3677,7 +3698,8 @@ function invEnsure(){
   invCats();
   if(state.inventory.length===0 && state.products && state.products.length){
     state.inventory = state.products.map(function(p){
-      return {id:p.id, name:p.name, category:invCats()[0], cost:(p.cost||0), qty:0, amount:0, amountManual:false, updatedAt:Date.now()};
+      // 自動生成のプレースホルダーは updatedAt:0（実際の入力が常に優先され、クラウドの入力済みを上書きしない）
+      return {id:p.id, name:p.name, category:invCats()[0], cost:(p.cost||0), qty:0, amount:0, amountManual:false, updatedAt:0};
     });
     try{ saveLocal(); }catch(e){}
   }
@@ -3695,7 +3717,7 @@ function invSyncFromMaster(){
   (state.products||[]).forEach(function(p){
     var exists=false;
     for(var i=0;i<state.inventory.length;i++){ if(String(state.inventory[i].id)===String(p.id) || state.inventory[i].name===p.name){ exists=true; break; } }
-    if(!exists){ state.inventory.push({id:p.id, name:p.name, category:def, cost:(p.cost||0), qty:0, amount:0, amountManual:false, updatedAt:Date.now()}); added++; }
+    if(!exists){ state.inventory.push({id:p.id, name:p.name, category:def, cost:(p.cost||0), qty:0, amount:0, amountManual:false, updatedAt:0}); added++; }
   });
   try{ saveLocal(); }catch(e){}
   renderInventory();
@@ -5351,7 +5373,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "16.0";
+var APP_VERSION = "16.4";
 
 function checkForUpdate(){
   try {
