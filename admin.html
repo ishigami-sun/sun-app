@@ -1515,6 +1515,7 @@ function syncFromCloud(silent){
         if(res.masters.mediaList) state.mediaList = mergeMasterUnique(state.mediaList, res.masters.mediaList, delSetOf('mediaList'));
         // 支払い方法は5種固定のためクラウドからは同期しない
         if(res.masters.menus) state.menus = mergeMasterById(state.menus, res.masters.menus, delSetOf('menus'));
+        try{ if(typeof dedupeMenus==='function') dedupeMenus(); }catch(e){}
         if(res.masters.products) state.products = mergeMasterById(state.products, res.masters.products, delSetOf('products'));
         if(res.masters.productBrands) state.productBrands = mergeMasterUnique(state.productBrands, res.masters.productBrands, delSetOf('productBrands'));
         if(res.masters.eduVideos && res.masters.eduVideos.length >= (state.eduVideos||[]).length){ state.eduVideos = res.masters.eduVideos; }
@@ -1670,19 +1671,36 @@ function fixProductIds(){
 }
 
 
+// メニューマスタの重複除去（同名・同価格は最初の1件だけ残す）。冪等。
+// 複数端末が同じメニューを別IDで自動追加→ID基準マージで増殖する問題（早朝料金×17件など）の恒久対策。
+function dedupeMenus(){
+  if(!Array.isArray(state.menus)) return false;
+  var seen={}, keep=[], removed=[];
+  for(var i=0;i<state.menus.length;i++){
+    var m=state.menus[i]||{};
+    var key=String(m.name||'')+'|'+String(m.price||0);
+    if(seen[key]){ removed.push(m); }
+    else { seen[key]=true; keep.push(m); }
+  }
+  if(!removed.length) return false;
+  state.menus=keep;
+  for(var j=0;j<removed.length;j++){ try{ if(removed[j].id!=null && typeof markMasterDeleted==='function') markMasterDeleted('menus', removed[j].id); }catch(e){} }
+  try{ save(); }catch(e){}
+  return true;
+}
 function ensureEarlyMorningMenu(){
   if(!state.menus) state.menus = [];
   var found = false;
   var needsUpdate = false;
   for(var i=0;i<state.menus.length;i++){
-    if(state.menus[i].name === '早朝料金'){ 
-      found = true; 
+    if(state.menus[i].name === '早朝料金'){
+      found = true;
       // 既存だが価格が低い(¥1など)場合は¥1000に修正
       if(state.menus[i].price < 100){
         state.menus[i].price = 1000;
         needsUpdate = true;
       }
-      break; 
+      break;
     }
   }
   if(!found){
@@ -1771,6 +1789,7 @@ function init(){
     var k=document.getElementById('cloudKey'); if(k&&state.cloudKey) k.value=state.cloudKey;
   }, 100);
 
+  if(typeof dedupeMenus === "function") try{ dedupeMenus(); }catch(e){}
   if(typeof ensureEarlyMorningMenu === "function") ensureEarlyMorningMenu();
 }
 
@@ -5709,7 +5728,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "17.1";
+var APP_VERSION = "17.2";
 
 function checkForUpdate(){
   try {
