@@ -319,8 +319,8 @@
     </div>
     <button class="submit-btn" onclick="submitRecord()">✅ 日報を登録する</button>
     <div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:14px;margin-top:12px">
-      <div style="font-size:15px;color:#1A4F47;font-weight:800;margin-bottom:4px">📋 本日の報告</div>
-      <div style="font-size:12px;color:#64748B;margin-bottom:10px">任意入力です。空欄でも日報は登録できます。「日報を登録する」を押すと一緒に保存されます。</div>
+      <div style="font-size:15px;color:#1A4F47;font-weight:800;margin-bottom:4px">📋 本日の報告 <span style="color:#E05555;font-size:12px;font-weight:700">必須</span></div>
+      <div style="font-size:12px;color:#E05555;margin-bottom:10px">下の3つのうち、いずれか1つは必ず入力してください（未入力だと日報を登録できません）。</div>
       <label style="font-size:13px;font-weight:700;color:#27AE60;display:block;margin-bottom:3px">✅ 今日よかった点</label>
       <textarea id="reportGood" rows="2" placeholder="お客様に喜ばれたこと・うまくいった施術など" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;margin-bottom:12px;font-family:inherit;resize:vertical;color:#1A2E2A"></textarea>
       <label style="font-size:13px;font-weight:700;color:#D4A843;display:block;margin-bottom:3px">📝 改善点</label>
@@ -2324,6 +2324,13 @@ function submitRecord(){
   if(!state.selectedStaff){ showToast('⚠️ 担当者を選んでください'); return; }
   if(!state.selectedPayment){ showToast('⚠️ 支払い方法を選んでください'); return; }
   if(!state.selectedMenus.length&&!state.selectedProducts.length){ showToast('⚠️ メニューか物販を選んでください'); return; }
+  // 本日の報告は必須（3つのうち最低1つ）。※過去日報の編集時は除く
+  if(!state.editingRecordId){
+    var _rgReq=(document.getElementById('reportGood')||{}).value||'';
+    var _riReq=(document.getElementById('reportImprove')||{}).value||'';
+    var _rsReq=(document.getElementById('reportShare')||{}).value||'';
+    if(!_rgReq.trim() && !_riReq.trim() && !_rsReq.trim()){ showToast('⚠️ 本日の報告を1つ以上入力してください（よかった点／改善点／共有事項のいずれか）'); return; }
+  }
   var menuIncTotal=0;
   for(var i=0;i<state.selectedMenus.length;i++){
     var m = state.selectedMenus[i];
@@ -5458,7 +5465,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "16.6";
+var APP_VERSION = "16.7";
 
 function checkForUpdate(){
   try {
