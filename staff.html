@@ -414,25 +414,8 @@
 
 <!-- ===== 管理 ===== -->
 <div class="page" id="page-goals">
-    <div class="section-title">🎯 月次目標（売上達成状況）</div>
-    
-    <!-- 月の選択 -->
-    <div class="card" style="margin-bottom:12px">
-      <div style="display:flex;gap:8px;align-items:center">
-        <label class="form-label" style="margin:0">対象月：</label>
-        <input type="month" id="goalsMonth" class="form-input" style="flex:1" onchange="renderGoals()">
-      </div>
-    </div>
-    
-    <!-- 目標一覧 -->
-    <div id="goalsList"></div>
-    
-    <!-- 目標設定（編集モード） -->
-    <div class="section-title" style="margin-top:20px">✏️ 目標金額の設定</div>
-    <div class="card">
-      <div style="font-size:12px;color:#64748B;margin-bottom:10px">各スタッフの月次目標を設定します（技術売上・物販売上）</div>
-      <div id="goalsEditList"></div>
-    </div>
+    <div class="section-title">🎯 月間目標（確定）</div>
+    <div id="goalsFixedContent"></div>
   </div>
   <div class="page" id="page-admin"><div class="card" style="margin-bottom:14px"><div class="section-title" style="margin:0 0 8px">☁️ クラウド同期</div><button class="add-btn" style="width:100%;background:#3DA892" onclick="syncFromCloud()">🔄 今すぐ同期する</button><div style="font-size:11px;color:var(--text-light);margin-top:6px;text-align:center">他の端末で入力した日報を最新にします</div></div><div class="card" style="margin-bottom:14px"><button class="add-btn" style="width:100%;background:#E05555" onclick="logoutSession()">🔒 ログアウト</button><div style="font-size:11px;color:var(--text-light);margin-top:6px;text-align:center" id="sessionInfo"></div></div>
   <div class="section-title">スタッフ管理</div>
@@ -2492,8 +2475,7 @@ function salesTrendCard(){
 function renderTodayTarget(){
   var el=document.getElementById('todayTarget'); if(!el) return;
   var now=new Date(); var ym=_ym(now);
-  var goal=0; var g=state.goals&&state.goals[ym];
-  if(g){ for(var k in g){ goal+=(g[k].tech||0)+(g[k].product||0); } }
+  var goal=(typeof SALON_GOAL_TOTAL!=='undefined')?SALON_GOAL_TOTAL:0; // 確定目標（サロン合計）
   var daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
   var biz=0; for(var dd=1;dd<=daysInMonth;dd++){ if(new Date(now.getFullYear(),now.getMonth(),dd).getDay()!==0) biz++; } // 日曜=定休を除く
   var dailyTarget=(goal>0&&biz>0)?Math.round(goal/biz):0;
@@ -4766,9 +4748,8 @@ function renderSpeedReport(){
     var pct=Math.round(row.total/top*100);
     var sbg=STAFF_BG_ACTIVE[staffIdx(row.name)]||'#2C7A6E';
     var medal = i<3 ? '<span style="font-size:18px">'+medals[i]+'</span>' : '<span style="display:inline-block;width:22px;text-align:center;color:#94a3b8;font-weight:800">'+(i+1)+'</span>';
-    var goal=(state.goals&&state.goals[ym]&&state.goals[ym][row.name])?state.goals[ym][row.name]:{tech:0,product:0};
     var act=calcStaffActual(row.name, ym);
-    var goalTotal=(goal.tech||0)+(goal.product||0);
+    var goalTotal=(typeof fixedGoalFor==='function')?fixedGoalFor(row.name):0;
     var actTotal=(act.tech||0)+(act.product||0);
     var gpct=goalTotal>0?Math.round(actTotal/goalTotal*100):0;
     html+='<div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:12px;margin-bottom:8px">';
@@ -4786,234 +4767,91 @@ function renderSpeedReport(){
   }
   el.innerHTML=html;
 }
-function setGoalValue(staff, type, val){
-  ensureGoals();
-  var ym = getCurrentGoalsMonth();
-  if(!state.goals[ym]) state.goals[ym] = {};
-  if(!state.goals[ym][staff]) state.goals[ym][staff] = { tech:0, product:0 };
-  var v = parseInt(val) || 0;
-  if(v < 0) v = 0;
-  state.goals[ym][staff][type] = v;
-  try { save(); } catch(e){}
-  // クラウド保存
-  if(state.cloudUrl && state.cloudKey && typeof callCloud === 'function'){
-    try {
-      callCloud('saveMasters', {masters:{
-        staff:state.staff, mediaList:state.mediaList, payments:state.payments,
-        paymentMaster:state.paymentMaster, menus:state.menus, products:state.products,
-        productBrands:state.productBrands||[], productSubCategories:state.productSubCategories||[],
-        goals:state.goals
-      }}, function(){});
-    } catch(e){}
-  }
-  // 進捗だけ更新（編集欄は再描画しない）
-  updateGoalProgress(staff);
+/* ===== 🎯 確定目標（固定表示・達成バッジ） ===== */
+var FIXED_GOALS = [
+  { key:'石上', role:'代表',   goal:3000000 },
+  { key:'東',   role:'副店長', goal:2500000 },
+  { key:'堀井', role:'',       goal:2200000 },
+  { key:'林',   role:'',       goal:1900000 },
+  { key:'花岡', role:'店長',   goal:1500000 },
+  { key:'梅田', role:'AS',     goal:300000 },
+  { key:'カノン', role:'AS',   goal:300000 }
+];
+var SALON_GOAL_TOTAL = 11700000; // サロン合計目標（確定値）
+
+function fixedGoalFor(name){
+  if(!name) return 0;
+  for(var i=0;i<FIXED_GOALS.length;i++){ if(String(name).indexOf(FIXED_GOALS[i].key)===0) return FIXED_GOALS[i].goal; }
+  return 0;
 }
-function updateGoalProgress(staff){
-  var ym = getCurrentGoalsMonth();
-  var actual = calcStaffActual(staff, ym);
-  var goals = (state.goals && state.goals[ym] && state.goals[ym][staff]) ? state.goals[ym][staff] : {tech:0, product:0};
-  // 必要客数を更新
-  var ticket = (state.tickets && state.tickets[staff]) ? state.tickets[staff] : 10000;
-  var remTech = goals.tech - actual.tech;
-  if(remTech < 0) remTech = 0;
-  var neededCustomers = (ticket > 0) ? Math.ceil(remTech / ticket) : 0;
-  var remDays = getRemainingDays(ym);
-  var perDayNeeded = (remDays > 0) ? Math.ceil(neededCustomers / remDays) : 0;
-  var nEl = document.getElementById('needed_'+staff);
-  if(nEl) nEl.textContent = neededCustomers + '人';
-  var pEl = document.getElementById('perday_'+staff);
-  if(pEl) pEl.textContent = perDayNeeded + '人/日';
-  
-  // 技術
-  var techActualEl = document.getElementById('actual_tech_'+staff);
-  var techDiffEl = document.getElementById('diff_tech_'+staff);
-  var techProgEl = document.getElementById('prog_tech_'+staff);
-  if(techActualEl) techActualEl.textContent = '¥'+num(actual.tech);
-  if(techDiffEl){
-    var d = actual.tech - goals.tech;
-    techDiffEl.textContent = (d>=0?'+':'')+'¥'+num(d);
-    techDiffEl.style.color = d>=0 ? '#27AE60' : '#E05555';
+function fixedStaffFullName(key){
+  var list=state.staff||[];
+  for(var i=0;i<list.length;i++){ if(String(list[i]).indexOf(key)===0) return list[i]; }
+  return key;
+}
+function calcFixedActual(key, ym){
+  // 日報データから当月実績を自動集計（技術＝担当者一致 / 物販＝商品ごとの担当一致）
+  var tech=0, prod=0;
+  for(var i=0;i<state.records.length;i++){
+    var r=state.records[i];
+    var d=new Date(r.time);
+    var rym=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    if(rym!==ym) continue;
+    for(var mk=0;mk<(r.menus||[]).length;mk++){ var mm=r.menus[mk]; var ms=mm.menuStaff||r.staff; if(ms&&String(ms).indexOf(key)===0) tech+=menuLineInc(mm); }
+    if(r.products&&r.products.length){
+      for(var j=0;j<r.products.length;j++){ var p=r.products[j]; var ps=p.productStaff||r.staff; if(ps&&String(ps).indexOf(key)===0) prod+=prodLineSell(p); }
+    }
   }
-  if(techProgEl){
-    var pct = goals.tech > 0 ? Math.round(actual.tech/goals.tech*100) : 0;
-    techProgEl.style.width = Math.min(pct,100)+'%';
-    techProgEl.style.background = pct>=100 ? '#27AE60' : '#3DA892';
-  }
-  // 物販
-  var pActualEl = document.getElementById('actual_product_'+staff);
-  var pDiffEl = document.getElementById('diff_product_'+staff);
-  var pProgEl = document.getElementById('prog_product_'+staff);
-  if(pActualEl) pActualEl.textContent = '¥'+num(actual.product);
-  if(pDiffEl){
-    var d = actual.product - goals.product;
-    pDiffEl.textContent = (d>=0?'+':'')+'¥'+num(d);
-    pDiffEl.style.color = d>=0 ? '#27AE60' : '#E05555';
-  }
-  if(pProgEl){
-    var pct = goals.product > 0 ? Math.round(actual.product/goals.product*100) : 0;
-    pProgEl.style.width = Math.min(pct,100)+'%';
-    pProgEl.style.background = pct>=100 ? '#D4A843' : '#FFC107';
-  }
+  return { tech:tech, product:prod, total:tech+prod };
 }
 function renderGoals(){
-  ensureGoals();
-  setGoalsMonthInputValue();
-  var ym = getCurrentGoalsMonth();
-  
-  // 一覧（進捗表示）
-  var listHtml = '';
-  for(var i=0;i<state.staff.length;i++){
-    var s = state.staff[i];
-    var actual = calcStaffActual(s, ym);
-    var goals = (state.goals[ym] && state.goals[ym][s]) ? state.goals[ym][s] : {tech:0, product:0};
-    var techDiff = actual.tech - goals.tech;
-    var pDiff = actual.product - goals.product;
-    var techPct = goals.tech > 0 ? Math.round(actual.tech/goals.tech*100) : 0;
-    var pPct = goals.product > 0 ? Math.round(actual.product/goals.product*100) : 0;
-    
-    var pc = getStaffPastelColor(s);
-    listHtml += '<div class="card" style="margin-bottom:12px;padding:14px;background:'+pc.bg+';border-left:5px solid '+pc.border+'">';
-    listHtml += '<div style="font-size:16px;font-weight:700;color:'+pc.accent+';margin-bottom:10px;display:flex;align-items:center;gap:8px">👤 '+h(s)+'</div>';
-    
-    // 技術売上
-    listHtml += '<div style="margin-bottom:12px;padding:10px;background:#F0F7F6;border-radius:8px;border-left:3px solid #3DA892">';
-    listHtml += '<div style="font-size:11px;font-weight:700;color:#64748B;margin-bottom:4px">💇 技術売上</div>';
-    listHtml += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px">';
-    listHtml += '<div>目標：<span style="font-weight:700;color:#1A4F47">¥'+num(goals.tech)+'</span></div>';
-    listHtml += '<div>実績：<span id="actual_tech_'+s+'" style="font-weight:700;color:#1A4F47">¥'+num(actual.tech)+'</span></div>';
-    listHtml += '</div>';
-    listHtml += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-top:4px">';
-    listHtml += '<div>差額：<span id="diff_tech_'+s+'" style="font-weight:700;color:'+(techDiff>=0?'#27AE60':'#E05555')+'">'+(techDiff>=0?'+':'')+'¥'+num(techDiff)+'</span></div>';
-    listHtml += '<div style="font-size:11px;color:#64748B">'+techPct+'%</div>';
-    listHtml += '</div>';
-    // プログレスバー
-    listHtml += '<div style="margin-top:6px;height:6px;background:#C8E0DC;border-radius:3px;overflow:hidden">';
-    listHtml += '<div id="prog_tech_'+s+'" style="width:'+Math.min(techPct,100)+'%;height:100%;background:'+(techPct>=100?'#27AE60':'#3DA892')+';transition:width 0.3s"></div>';
-    listHtml += '</div>';
-    listHtml += '</div>';
-    
-    // 物販売上
-    listHtml += '<div style="padding:10px;background:#FFF8E1;border-radius:8px;border-left:3px solid #D4A843">';
-    listHtml += '<div style="font-size:11px;font-weight:700;color:#64748B;margin-bottom:4px">📦 物販売上</div>';
-    listHtml += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px">';
-    listHtml += '<div>目標：<span style="font-weight:700;color:#1A4F47">¥'+num(goals.product)+'</span></div>';
-    listHtml += '<div>実績：<span id="actual_product_'+s+'" style="font-weight:700;color:#1A4F47">¥'+num(actual.product)+'</span></div>';
-    listHtml += '</div>';
-    listHtml += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-top:4px">';
-    listHtml += '<div>差額：<span id="diff_product_'+s+'" style="font-weight:700;color:'+(pDiff>=0?'#27AE60':'#E05555')+'">'+(pDiff>=0?'+':'')+'¥'+num(pDiff)+'</span></div>';
-    listHtml += '<div style="font-size:11px;color:#64748B">'+pPct+'%</div>';
-    listHtml += '</div>';
-    listHtml += '<div style="margin-top:6px;height:6px;background:#FFE0B2;border-radius:3px;overflow:hidden">';
-    listHtml += '<div id="prog_product_'+s+'" style="width:'+Math.min(pPct,100)+'%;height:100%;background:'+(pPct>=100?'#D4A843':'#FFC107')+';transition:width 0.3s"></div>';
-    listHtml += '</div>';
-    listHtml += '</div>';
-    
-    // 残り日数・客単価・必要客数
-    var remDays = getRemainingDays(ym);
-    var ticket = (state.tickets && state.tickets[s]) ? state.tickets[s] : 10000;
-    var remTech = goals.tech - actual.tech;
-    if(remTech < 0) remTech = 0;
-    var neededCustomers = (ticket > 0) ? Math.ceil(remTech / ticket) : 0;
-    var perDayNeeded = (remDays > 0) ? Math.ceil(neededCustomers / remDays) : 0;
-    
-    listHtml += '<div style="margin-top:10px;padding:10px;background:#FAF8F4;border-radius:8px;border:1px dashed #C8E0DC">';
-    listHtml += '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">';
-    listHtml += '<span style="color:#64748B">📅 残り日数：</span><span style="font-weight:700;color:#1A4F47">'+remDays+'日</span>';
-    listHtml += '</div>';
-    listHtml += '<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:6px">';
-    listHtml += '<span style="color:#64748B;white-space:nowrap">💰 客単価：¥</span>';
-    listHtml += '<input type="number" id="ticket_'+s+'" value="'+ticket+'" oninput="updateTicket(\''+s+'\',this.value)" style="flex:1;padding:4px 8px;border:1.5px solid #C8E0DC;border-radius:4px;font-size:12px;text-align:right">';
-    listHtml += '</div>';
-    listHtml += '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">';
-    listHtml += '<span style="color:#64748B">👥 必要客数：</span><span id="needed_'+s+'" style="font-weight:700;color:#C2185B">'+neededCustomers+'人</span>';
-    listHtml += '</div>';
-    if(remDays > 0 && neededCustomers > 0){
-      listHtml += '<div style="display:flex;justify-content:space-between;font-size:12px;color:#64748B">';
-      listHtml += '<span>　1日あたり：</span><span id="perday_'+s+'" style="font-weight:700;color:#E65100">'+perDayNeeded+'人/日</span>';
-      listHtml += '</div>';
-    }
-    listHtml += '</div>';
-    
-    listHtml += '</div>';
+  var el=document.getElementById('goalsFixedContent'); if(!el) return;
+  var now=new Date();
+  var ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  var ymLabel=now.getFullYear()+'年'+(now.getMonth()+1)+'月';
+  var rows=[]; var salonActual=0;
+  for(var i=0;i<FIXED_GOALS.length;i++){
+    var g=FIXED_GOALS[i];
+    var act=calcFixedActual(g.key, ym);
+    salonActual+=act.total;
+    rows.push({ key:g.key, role:g.role, goal:g.goal, actual:act.total, pct:(g.goal>0?Math.round(act.total/g.goal*100):0) });
   }
-  document.getElementById('goalsList').innerHTML = listHtml;
-  
-  // 編集欄
-  var editHtml = '';
-  for(var i=0;i<state.staff.length;i++){
-    var s = state.staff[i];
-    var goals = (state.goals[ym] && state.goals[ym][s]) ? state.goals[ym][s] : {tech:0, product:0};
-    editHtml += '<div style="padding:10px;border-bottom:1px solid #E8F5F3">';
-    editHtml += '<div style="font-weight:700;font-size:13px;color:#1A4F47;margin-bottom:6px">👤 '+h(s)+'</div>';
-    editHtml += '<div style="display:flex;gap:8px;align-items:flex-end">';
-    editHtml += '<div style="flex:1"><label style="font-size:10px;color:#64748B">技術目標</label><input type="number" id="goalInputTech_'+s+'" value="'+(goals.tech||'')+'" placeholder="0" class="form-input"></div>';
-    editHtml += '<div style="flex:1"><label style="font-size:10px;color:#64748B">物販目標</label><input type="number" id="goalInputProduct_'+s+'" value="'+(goals.product||'')+'" placeholder="0" class="form-input"></div>';
-    editHtml += '<button onclick="confirmGoal(\''+s+'\')" style="padding:9px 14px;background:#2C7A6E;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;white-space:nowrap">決定</button>';
-    editHtml += '</div>';
-    editHtml += '</div>';
+  var salonPct=SALON_GOAL_TOTAL>0?Math.round(salonActual/SALON_GOAL_TOTAL*100):0;
+  var salonDone=salonPct>=100;
+  var html='';
+  // ▼ サロン全体の進捗（上部に大きく）
+  var grad=salonDone?'linear-gradient(135deg,#B8860B,#DAA520,#F5C518)':'linear-gradient(135deg,#1A4F47,#2C7A6E)';
+  html+='<div style="background:'+grad+';border-radius:16px;padding:18px 16px;margin-bottom:16px;color:#fff;box-shadow:0 4px 14px rgba(0,0,0,0.15)'+(salonDone?';border:2px solid #FFD700':'')+'">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:14px;font-weight:800">🏆 サロン全体（'+ymLabel+'）</span>'+(salonDone?'<span style="background:#fff;color:#B8860B;font-size:12px;font-weight:800;padding:3px 10px;border-radius:12px">🎉 達成！</span>':'')+'</div>';
+  html+='<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap"><span style="font-size:28px;font-weight:900">¥'+num(salonActual)+'</span><span style="font-size:13px;opacity:0.85">/ ¥'+num(SALON_GOAL_TOTAL)+'</span><span style="margin-left:auto;font-size:24px;font-weight:900">'+salonPct+'%</span></div>';
+  html+='<div style="height:14px;background:rgba(255,255,255,0.25);border-radius:7px;overflow:hidden;margin-top:10px"><div style="height:100%;width:'+Math.min(salonPct,100)+'%;background:'+(salonDone?'#FFF8DC':'#FFD54F')+';border-radius:7px;transition:width 0.5s"></div></div>';
+  html+='<div style="font-size:12px;margin-top:7px;text-align:right;opacity:0.95">'+(salonDone?'目標超過 <b>+¥'+num(salonActual-SALON_GOAL_TOTAL)+'</b>':'目標まであと <b>¥'+num(SALON_GOAL_TOTAL-salonActual)+'</b>')+'</div>';
+  html+='</div>';
+  // ▼ スタッフ別の進捗（全員分・達成者はゴールド）
+  for(var i=0;i<rows.length;i++){
+    var row=rows[i];
+    var done=row.pct>=100;
+    var pcol=done?'#B8860B':(row.pct>=70?'#2E7D32':(row.pct>=40?'#E69500':'#C2185B'));
+    var bar=done?'linear-gradient(90deg,#DAA520,#FFD700)':(row.pct>=70?'#2E7D32':'#3DA892');
+    var card=done?'background:linear-gradient(135deg,#FFFBEB,#FFF3C4);border:2px solid #DAA520;box-shadow:0 3px 10px rgba(218,165,32,0.35)':'background:#fff;border:1px solid #E2E8F0';
+    var sbg=STAFF_BG_ACTIVE[staffIdx(fixedStaffFullName(row.key))]||'#2C7A6E';
+    html+='<div style="'+card+';border-radius:14px;padding:13px 14px;margin-bottom:10px">';
+    html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
+    html+='<span style="display:inline-block;background:'+sbg+';color:#fff;font-size:13px;font-weight:800;padding:3px 12px;border-radius:14px">'+h(row.key)+'</span>';
+    if(row.role) html+='<span style="font-size:11px;color:#64748B;font-weight:700">'+h(row.role)+'</span>';
+    if(done) html+='<span style="background:linear-gradient(135deg,#DAA520,#FFD700);color:#fff;font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px;box-shadow:0 1px 4px rgba(218,165,32,0.5)">🎉 達成！</span>';
+    html+='<span style="margin-left:auto;font-size:19px;font-weight:900;color:'+pcol+'">'+row.pct+'%</span>';
+    html+='</div>';
+    html+='<div style="display:flex;justify-content:space-between;font-size:12px;color:#64748B;margin-bottom:6px"><span>実績 <b style="color:#1A4F47">¥'+num(row.actual)+'</b> / 目標 ¥'+num(row.goal)+'</span><span>'+(done?'<b style="color:#B8860B">+¥'+num(row.actual-row.goal)+'</b>':'あと ¥'+num(row.goal-row.actual))+'</span></div>';
+    html+='<div style="height:10px;background:'+(done?'#F5E6B8':'#EEF2F1')+';border-radius:5px;overflow:hidden"><div style="height:100%;width:'+Math.min(row.pct,100)+'%;background:'+bar+';border-radius:5px;transition:width 0.5s"></div></div>';
+    html+='</div>';
   }
-  document.getElementById('goalsEditList').innerHTML = editHtml;
-}
-
-// 決定ボタンが押されたとき
-function confirmGoal(staff){
-  ensureGoals();
-  var ym = getCurrentGoalsMonth();
-  if(!state.goals[ym]) state.goals[ym] = {};
-  if(!state.goals[ym][staff]) state.goals[ym][staff] = { tech:0, product:0 };
-  
-  var techEl = document.getElementById('goalInputTech_'+staff);
-  var productEl = document.getElementById('goalInputProduct_'+staff);
-  if(techEl) state.goals[ym][staff].tech = parseInt(techEl.value) || 0;
-  if(productEl) state.goals[ym][staff].product = parseInt(productEl.value) || 0;
-  
-  try { save(); } catch(e){}
-  // クラウド保存
-  if(state.cloudUrl && state.cloudKey && typeof callCloud === 'function'){
-    try {
-      callCloud('saveMasters', {masters:{
-        staff:state.staff, mediaList:state.mediaList, payments:state.payments,
-        paymentMaster:state.paymentMaster, menus:state.menus, products:state.products,
-        productBrands:state.productBrands||[], productSubCategories:state.productSubCategories||[],
-        goals:state.goals
-      }}, function(){});
-    } catch(e){}
-  }
-  // 進捗を更新
-  updateGoalProgress(staff);
-  if(typeof showToast === 'function') showToast('✅ '+staff+'の目標を保存しました');
-}
-
-// window登録
-
-function updateTicket(staff, val){
-  if(!state.tickets) state.tickets = {};
-  var v = parseInt(val) || 0;
-  if(v < 0) v = 0;
-  state.tickets[staff] = v;
-  try{ save(); }catch(e){}
-  // 必要客数を更新
-  var ym = getCurrentGoalsMonth();
-  var actual = calcStaffActual(staff, ym);
-  var goals = (state.goals && state.goals[ym] && state.goals[ym][staff]) ? state.goals[ym][staff] : {tech:0, product:0};
-  var remTech = goals.tech - actual.tech;
-  if(remTech < 0) remTech = 0;
-  var neededCustomers = (v > 0) ? Math.ceil(remTech / v) : 0;
-  var remDays = getRemainingDays(ym);
-  var perDayNeeded = (remDays > 0) ? Math.ceil(neededCustomers / remDays) : 0;
-  
-  var nEl = document.getElementById('needed_'+staff);
-  if(nEl) nEl.textContent = neededCustomers + '人';
-  var pEl = document.getElementById('perday_'+staff);
-  if(pEl) pEl.textContent = perDayNeeded + '人/日';
+  html+='<div style="font-size:10px;color:#94a3b8;text-align:center;margin-top:4px">※実績は日報データから自動集計（技術＋物販）／目標は確定値です</div>';
+  el.innerHTML=html;
 }
 
 if(typeof window !== 'undefined'){
   window.renderGoals = renderGoals;
-  window.setGoalValue = setGoalValue;
-  window.confirmGoal = confirmGoal;
-  window.updateTicket = updateTicket;
 }
 
 
@@ -5565,7 +5403,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "16.9";
+var APP_VERSION = "17.0";
 
 function checkForUpdate(){
   try {

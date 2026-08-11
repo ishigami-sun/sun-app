@@ -227,6 +227,7 @@
     <button class="tab-btn" onclick="switchTab('reports')">📢 報告 <span id="reportsBadge" style="display:none;background:#E05555;color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:800">0</span></button>
     <button class="tab-btn" onclick="switchTab('dashboard')">📊 物販</button>
     <button class="tab-btn" onclick="switchTab('sales')">💹 売上</button>
+    <button class="tab-btn" onclick="switchTab('goals')">🎯 目標</button>
     <button class="tab-btn" onclick="switchTab('pnl')">📈 P&L</button>
     <button class="tab-btn" onclick="switchTab('admin')">⚙️ 管理</button>
     <button class="tab-btn" onclick="switchTab('manual')">📖 マニュアル</button>
@@ -382,6 +383,11 @@
 </div>
 
 <!-- ===== 損益計算書 P&L (代表専用) ===== -->
+<div class="page" id="page-goals">
+  <div class="section-title">🎯 月間目標（確定）</div>
+  <div id="goalsFixedContent"></div>
+</div>
+
 <div class="page" id="page-pnl">
   <!-- パスワード認証 -->
   <div id="pnlAuth" class="card" style="margin-top:30px">
@@ -2578,8 +2584,7 @@ function salesTrendCard(){
 function renderTodayTarget(){
   var el=document.getElementById('todayTarget'); if(!el) return;
   var now=new Date(); var ym=_ym(now);
-  var goal=0; var g=state.goals&&state.goals[ym];
-  if(g){ for(var k in g){ goal+=(g[k].tech||0)+(g[k].product||0); } }
+  var goal=(typeof SALON_GOAL_TOTAL!=='undefined')?SALON_GOAL_TOTAL:0; // 確定目標（サロン合計）
   var daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
   var biz=0; for(var dd=1;dd<=daysInMonth;dd++){ if(new Date(now.getFullYear(),now.getMonth(),dd).getDay()!==0) biz++; } // 日曜=定休を除く
   var dailyTarget=(goal>0&&biz>0)?Math.round(goal/biz):0;
@@ -2595,6 +2600,89 @@ function renderTodayTarget(){
     +'<div style="font-size:12px;color:#64748B;text-align:right"><b style="color:'+col+'">'+pct+'%</b>　'+(remain>0?'あと <b style="color:#2C7A6E">¥'+num(remain)+'</b>で達成':'<b style="color:#2E7D32">本日目標達成 🎉</b>')+'</div>'
     +'<div style="font-size:10px;color:#94a3b8;margin-top:4px">※今月の目標¥'+num(goal)+' ÷ 営業日'+biz+'日（日曜除く）</div>'
     +'</div>';
+}
+
+/* ===== 🎯 確定目標（固定表示・達成バッジ） ===== */
+var FIXED_GOALS = [
+  { key:'石上', role:'代表',   goal:3000000 },
+  { key:'東',   role:'副店長', goal:2500000 },
+  { key:'堀井', role:'',       goal:2200000 },
+  { key:'林',   role:'',       goal:1900000 },
+  { key:'花岡', role:'店長',   goal:1500000 },
+  { key:'梅田', role:'AS',     goal:300000 },
+  { key:'カノン', role:'AS',   goal:300000 }
+];
+var SALON_GOAL_TOTAL = 11700000; // サロン合計目標（確定値）
+
+function fixedGoalFor(name){
+  if(!name) return 0;
+  for(var i=0;i<FIXED_GOALS.length;i++){ if(String(name).indexOf(FIXED_GOALS[i].key)===0) return FIXED_GOALS[i].goal; }
+  return 0;
+}
+function fixedStaffFullName(key){
+  var list=state.staff||[];
+  for(var i=0;i<list.length;i++){ if(String(list[i]).indexOf(key)===0) return list[i]; }
+  return key;
+}
+function calcFixedActual(key, ym){
+  // 日報データから当月実績を自動集計（技術＝担当者一致 / 物販＝商品ごとの担当一致）
+  var tech=0, prod=0;
+  for(var i=0;i<state.records.length;i++){
+    var r=state.records[i];
+    var d=new Date(r.time);
+    var rym=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    if(rym!==ym) continue;
+    for(var mk=0;mk<(r.menus||[]).length;mk++){ var mm=r.menus[mk]; var ms=mm.menuStaff||r.staff; if(ms&&String(ms).indexOf(key)===0) tech+=menuLineInc(mm); }
+    if(r.products&&r.products.length){
+      for(var j=0;j<r.products.length;j++){ var p=r.products[j]; var ps=p.productStaff||r.staff; if(ps&&String(ps).indexOf(key)===0) prod+=prodLineSell(p); }
+    }
+  }
+  return { tech:tech, product:prod, total:tech+prod };
+}
+function renderGoals(){
+  var el=document.getElementById('goalsFixedContent'); if(!el) return;
+  var now=new Date();
+  var ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  var ymLabel=now.getFullYear()+'年'+(now.getMonth()+1)+'月';
+  var rows=[]; var salonActual=0;
+  for(var i=0;i<FIXED_GOALS.length;i++){
+    var g=FIXED_GOALS[i];
+    var act=calcFixedActual(g.key, ym);
+    salonActual+=act.total;
+    rows.push({ key:g.key, role:g.role, goal:g.goal, actual:act.total, pct:(g.goal>0?Math.round(act.total/g.goal*100):0) });
+  }
+  var salonPct=SALON_GOAL_TOTAL>0?Math.round(salonActual/SALON_GOAL_TOTAL*100):0;
+  var salonDone=salonPct>=100;
+  var html='';
+  // ▼ サロン全体の進捗（上部に大きく）
+  var grad=salonDone?'linear-gradient(135deg,#B8860B,#DAA520,#F5C518)':'linear-gradient(135deg,#1A4F47,#2C7A6E)';
+  html+='<div style="background:'+grad+';border-radius:16px;padding:18px 16px;margin-bottom:16px;color:#fff;box-shadow:0 4px 14px rgba(0,0,0,0.15)'+(salonDone?';border:2px solid #FFD700':'')+'">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:14px;font-weight:800">🏆 サロン全体（'+ymLabel+'）</span>'+(salonDone?'<span style="background:#fff;color:#B8860B;font-size:12px;font-weight:800;padding:3px 10px;border-radius:12px">🎉 達成！</span>':'')+'</div>';
+  html+='<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap"><span style="font-size:28px;font-weight:900">¥'+num(salonActual)+'</span><span style="font-size:13px;opacity:0.85">/ ¥'+num(SALON_GOAL_TOTAL)+'</span><span style="margin-left:auto;font-size:24px;font-weight:900">'+salonPct+'%</span></div>';
+  html+='<div style="height:14px;background:rgba(255,255,255,0.25);border-radius:7px;overflow:hidden;margin-top:10px"><div style="height:100%;width:'+Math.min(salonPct,100)+'%;background:'+(salonDone?'#FFF8DC':'#FFD54F')+';border-radius:7px;transition:width 0.5s"></div></div>';
+  html+='<div style="font-size:12px;margin-top:7px;text-align:right;opacity:0.95">'+(salonDone?'目標超過 <b>+¥'+num(salonActual-SALON_GOAL_TOTAL)+'</b>':'目標まであと <b>¥'+num(SALON_GOAL_TOTAL-salonActual)+'</b>')+'</div>';
+  html+='</div>';
+  // ▼ スタッフ別の進捗（全員分・達成者はゴールド）
+  for(var i=0;i<rows.length;i++){
+    var row=rows[i];
+    var done=row.pct>=100;
+    var pcol=done?'#B8860B':(row.pct>=70?'#2E7D32':(row.pct>=40?'#E69500':'#C2185B'));
+    var bar=done?'linear-gradient(90deg,#DAA520,#FFD700)':(row.pct>=70?'#2E7D32':'#3DA892');
+    var card=done?'background:linear-gradient(135deg,#FFFBEB,#FFF3C4);border:2px solid #DAA520;box-shadow:0 3px 10px rgba(218,165,32,0.35)':'background:#fff;border:1px solid #E2E8F0';
+    var sbg=STAFF_BG_ACTIVE[staffIdx(fixedStaffFullName(row.key))]||'#2C7A6E';
+    html+='<div style="'+card+';border-radius:14px;padding:13px 14px;margin-bottom:10px">';
+    html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
+    html+='<span style="display:inline-block;background:'+sbg+';color:#fff;font-size:13px;font-weight:800;padding:3px 12px;border-radius:14px">'+h(row.key)+'</span>';
+    if(row.role) html+='<span style="font-size:11px;color:#64748B;font-weight:700">'+h(row.role)+'</span>';
+    if(done) html+='<span style="background:linear-gradient(135deg,#DAA520,#FFD700);color:#fff;font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px;box-shadow:0 1px 4px rgba(218,165,32,0.5)">🎉 達成！</span>';
+    html+='<span style="margin-left:auto;font-size:19px;font-weight:900;color:'+pcol+'">'+row.pct+'%</span>';
+    html+='</div>';
+    html+='<div style="display:flex;justify-content:space-between;font-size:12px;color:#64748B;margin-bottom:6px"><span>実績 <b style="color:#1A4F47">¥'+num(row.actual)+'</b> / 目標 ¥'+num(row.goal)+'</span><span>'+(done?'<b style="color:#B8860B">+¥'+num(row.actual-row.goal)+'</b>':'あと ¥'+num(row.goal-row.actual))+'</span></div>';
+    html+='<div style="height:10px;background:'+(done?'#F5E6B8':'#EEF2F1')+';border-radius:5px;overflow:hidden"><div style="height:100%;width:'+Math.min(row.pct,100)+'%;background:'+bar+';border-radius:5px;transition:width 0.5s"></div></div>';
+    html+='</div>';
+  }
+  html+='<div style="font-size:10px;color:#94a3b8;text-align:center;margin-top:4px">※実績は日報データから自動集計（技術＋物販）／目標は確定値です</div>';
+  el.innerHTML=html;
 }
 
 // バックアップ（ファイルに保存）
@@ -4142,8 +4230,9 @@ function switchTab(tab){
   var tabs=document.querySelectorAll('.tab-btn');
   for(var i=0;i<tabs.length;i++) tabs[i].classList.remove('active');
   document.getElementById('page-'+tab).classList.add('active');
-  var idx=['input','records','reports','dashboard','sales','pnl','admin','manual','academy','attend','inventory'].indexOf(tab);
+  var idx=['input','records','reports','dashboard','sales','goals','pnl','admin','manual','academy','attend','inventory'].indexOf(tab);
   if(idx>=0) tabs[idx].classList.add('active');
+  if(tab==='goals'){ if(typeof renderGoals==='function') renderGoals(); }
   if(tab==='admin'){ updateSessionInfo(); loadStaffPinManagement(); }
   if(tab==='records') renderRecords();
   if(tab==='reports'){ if(typeof renderReportsTab==='function') renderReportsTab(); }
@@ -5372,7 +5461,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "16.9";
+var APP_VERSION = "17.0";
 
 function checkForUpdate(){
   try {
