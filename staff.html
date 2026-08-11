@@ -247,6 +247,15 @@
 
   <div id="entryDateBanner" style="display:none;background:#FFF3E0;border:1.5px solid #FFB74D;border-radius:10px;padding:10px 12px;margin-bottom:10px;display:none;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"></div>
 
+  <div class="card" style="margin-bottom:12px;padding:10px 14px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <label class="form-label" style="margin:0;white-space:nowrap">📅 来店日</label>
+      <input type="date" id="visitDatePicker" class="form-input" style="flex:1" onchange="setVisitDate(this.value)">
+      <button onclick="setVisitDate('')" style="padding:8px 12px;border:1.5px solid #C8E0DC;background:#fff;color:#2C7A6E;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">今日</button>
+    </div>
+    <div id="visitDateNote" style="font-size:10px;color:#94a3b8;margin-top:5px">前日分などを後から入力する時は日付を変更（売上はこの日に計上されます）</div>
+  </div>
+
   <div id="grp_info">
   <div class="section-title">STEP 1　担当者（施術）</div>
   <div class="card"><div class="toggle-group" id="staffGroup"></div></div>
@@ -343,6 +352,7 @@
   <div id="salesTrend" style="margin-bottom:10px"></div>
   <div class="section-title">TODAY</div>
   <div id="todayStats" class="dash-grid"></div>
+  <div id="closeCheck" style="margin-top:10px;margin-bottom:4px"></div>
 
   <div class="section-title">🏆 本日のスタッフ別 売上速報</div>
   <div id="speedReport"></div>
@@ -2493,12 +2503,52 @@ function renderTodayTarget(){
     +'</div>';
 }
 
+/* ===== 🧾 日次締めチェック（エアレジ突合・当日） ===== */
+function ensureRegClose(){ if(!state.regClose) state.regClose={}; }
+function renderCloseCheck(){
+  var el=document.getElementById('closeCheck'); if(!el) return;
+  ensureRegClose();
+  var ymd=visitTodayYMD();
+  var cnt=0, amt=0;
+  for(var i=0;i<state.records.length;i++){ var r=state.records[i]; if(recYMD(r)===ymd){ cnt++; amt+=(r.total||0); } }
+  var rc=state.regClose[ymd]||{};
+  var hasReg=(rc.amount!=null&&rc.amount>0);
+  var html='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:13px 14px">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;flex-wrap:wrap;gap:4px"><span style="font-size:13px;font-weight:800;color:#1A4F47">🧾 本日の締めチェック</span><span style="font-size:12px;color:#64748B">日報 '+cnt+'件 <b style="color:#1A4F47">¥'+num(amt)+'</b></span></div>';
+  html+='<div style="display:flex;gap:6px;margin-bottom:8px">';
+  html+='<input type="number" id="regCloseAmt" placeholder="エアレジ売上" value="'+(rc.amount!=null&&rc.amount>0?rc.amount:'')+'" inputmode="numeric" style="flex:2;min-width:0;padding:9px 10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:13px">';
+  html+='<input type="number" id="regCloseCli" placeholder="客数" value="'+(rc.clients!=null&&rc.clients>0?rc.clients:'')+'" inputmode="numeric" style="flex:1;min-width:0;padding:9px 10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:13px">';
+  html+='<button onclick="saveRegClose()" style="padding:9px 14px;background:#2C7A6E;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap">照合</button>';
+  html+='</div>';
+  if(hasReg){
+    var diff=amt-rc.amount;
+    var cdiff=(rc.clients!=null&&rc.clients>0)?(cnt-rc.clients):null;
+    if(diff===0&&(cdiff===null||cdiff===0)){
+      html+='<div style="background:#E8F5E9;border-radius:8px;padding:9px 11px;font-size:12.5px;font-weight:700;color:#2E7D32">✅ エアレジと一致しています！おつかれさまでした🎉</div>';
+    } else {
+      html+='<div style="background:#FDECEA;border-radius:8px;padding:9px 11px;font-size:12.5px;color:#C62828;line-height:1.7"><b>⚠️ 差異があります</b>　金額差 <b>'+(diff>0?'+':'')+'¥'+num(diff)+'</b>（日報−レジ）'+(cdiff!==null?'　件数差 <b>'+(cdiff>0?'+':'')+cdiff+'件</b>':'')+'<br><span style="font-size:11px">日報が少ない→入力漏れ／多い→レジ打ち忘れの可能性。今日のうちに確認しましょう</span></div>';
+    }
+  } else {
+    html+='<div style="font-size:11px;color:#94a3b8">閉店時にエアレジの「本日の売上・客数」を入力して「照合」を押すと、日報との差をその場で確認できます</div>';
+  }
+  html+='</div>';
+  el.innerHTML=html;
+}
+function saveRegClose(){
+  ensureRegClose();
+  var ymd=visitTodayYMD();
+  var a=document.getElementById('regCloseAmt'); var c=document.getElementById('regCloseCli');
+  state.regClose[ymd]={ amount:parseInt(a&&a.value,10)||0, clients:parseInt(c&&c.value,10)||0 };
+  try{ saveLocal(); }catch(e){}
+  renderCloseCheck();
+}
+
 // バックアップ（ファイルに保存）
 function backupData(){
   var data={ _app:'sun-app', _ver:(typeof APP_VERSION!=='undefined'?APP_VERSION:''), _date:new Date().toISOString(),
     records:state.records||[], staff:state.staff||[], menus:state.menus||[], products:state.products||[],
     payments:state.payments||[], paymentMaster:state.paymentMaster||[], mediaList:state.mediaList||[],
-    goals:state.goals||{}, tickets:state.tickets||{} };
+    goals:state.goals||{}, tickets:state.tickets||{}, regClose:state.regClose||{} };
   try{
     var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
     var url=URL.createObjectURL(blob);
@@ -2524,6 +2574,7 @@ function restoreDataFile(input){
       if(d.mediaList) state.mediaList=d.mediaList;
       if(d.goals) state.goals=d.goals;
       if(d.tickets) state.tickets=d.tickets;
+      if(d.regClose) state.regClose=d.regClose;
       try{ saveLocal(); }catch(e){}
       if(typeof renderAll==='function') renderAll();
       if(typeof showToast==='function') showToast('✅ 復元しました（日報 '+state.records.length+'件）');
@@ -2617,6 +2668,7 @@ function renderReportsTab(){
   el.innerHTML=html;
 }
 function renderRecords(){
+  try{ if(typeof renderCloseCheck==='function') renderCloseCheck(); }catch(e){}
   var today=new Date().toDateString();
   var todayRecs=[];
   for(var i=0;i<state.records.length;i++) if(new Date(state.records[i].time).toDateString()===today) todayRecs.push(state.records[i]);
@@ -4337,6 +4389,7 @@ function showToast(msg){
 }
 
 init();
+try{ if(typeof updateEntryDateBanner==='function') updateEntryDateBanner(); }catch(e){}
 
 /* === ブランド・カテゴリ管理（シンプル版） === */
 function ensureBrandCat(){
@@ -5403,7 +5456,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "17.0";
+var APP_VERSION = "17.1";
 
 function checkForUpdate(){
   try {
@@ -5561,8 +5614,28 @@ function clearEntryDate(){
   updateEntryDateBanner();
   if(typeof showToast==='function') showToast('✅ 本日の入力に戻しました');
 }
+/* ===== 📅 来店日ピッカー（入力フォーム） ===== */
+function visitTodayYMD(){ var n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); }
+function setVisitDate(v){
+  if(!v || v===visitTodayYMD()){ state.entryDate=''; }
+  else { state.entryDate=v; }
+  try{ saveLocal(); }catch(e){}
+  if(typeof updateEntryDateBanner==='function') updateEntryDateBanner(); else syncVisitDatePicker();
+}
+function syncVisitDatePicker(){
+  var p=document.getElementById('visitDatePicker'); if(!p) return;
+  p.value=state.entryDate||visitTodayYMD();
+  var warn=!!state.entryDate;
+  p.style.borderColor=warn?'#E65100':'';
+  var note=document.getElementById('visitDateNote');
+  if(note){
+    if(warn){ var pa=(state.entryDate||'').split('-'); note.innerHTML='<b style="color:#E65100">⚠️ '+parseInt(pa[1],10)+'月'+parseInt(pa[2],10)+'日の日報として登録されます</b>'; }
+    else { note.textContent='前日分などを後から入力する時は日付を変更（売上はこの日に計上されます）'; }
+  }
+}
 // 入力ページの「過去日付で入力中」バナー表示更新
 function updateEntryDateBanner(){
+  try{ syncVisitDatePicker(); }catch(e){}
   var b=document.getElementById('entryDateBanner');
   if(!b) return;
   if(state.editingRecordId){
