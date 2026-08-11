@@ -254,6 +254,15 @@
 
   <div id="editBanner" style="display:none;background:#E3F2FD;border:1.5px solid #1565C0;border-radius:10px;padding:10px 12px;margin-bottom:10px;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"></div>
 
+  <div class="card" style="margin-bottom:12px;padding:10px 14px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <label class="form-label" style="margin:0;white-space:nowrap">📅 来店日</label>
+      <input type="date" id="visitDatePicker" class="form-input" style="flex:1" onchange="setVisitDate(this.value)">
+      <button onclick="setVisitDate('')" style="padding:8px 12px;border:1.5px solid #C8E0DC;background:#fff;color:#2C7A6E;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">今日</button>
+    </div>
+    <div id="visitDateNote" style="font-size:10px;color:#94a3b8;margin-top:5px">前日分などを後から入力する時は日付を変更（売上はこの日に計上されます）</div>
+  </div>
+
   <div class="section-title">STEP 1　担当者（施術）</div>
   <div class="card"><div class="toggle-group" id="staffGroup"></div></div>
 
@@ -332,6 +341,7 @@
   <div id="salesTrend" style="margin-bottom:10px"></div>
   <div class="section-title">TODAY</div>
   <div id="todayStats" class="dash-grid"></div>
+  <div id="closeCheck" style="margin-top:10px;margin-bottom:4px"></div>
 
   <div class="section-title">📋 みんなの報告</div>
   <div id="dailyReports" style="margin-bottom:10px"></div>
@@ -434,6 +444,12 @@
 
 <!-- ===== 管理 ===== -->
 <div class="page" id="page-admin">
+<div class="card" style="margin-bottom:14px">
+  <div class="section-title" style="margin:0 0 8px">🧾 エアレジ照合（月次）</div>
+  <div style="font-size:12px;color:#64748B;margin-bottom:8px;line-height:1.6">エアレジからエクスポートした「<b>会計明細</b>」CSVを選ぶと、日報と自動で突き合わせて入力漏れ・差異を洗い出します（日付ズレ・まとめ会計・遅れ入力は自動で対応付け）。</div>
+  <input type="file" id="airregiFile" accept=".csv,text/csv" style="width:100%;font-size:12px;margin-bottom:8px" onchange="runAirregiCheck(this.files[0]);this.value='';">
+  <div id="airregiResult"></div>
+</div>
 
     <button class="add-btn" style="background:rgba(255,255,255,0.2);color:#fff;padding:8px 14px;font-size:12px" onclick="logoutSession()">🔒 ログアウト</button>
 
@@ -2473,7 +2489,7 @@ function submitRecord(){
   var feeRate=master?master.fee:0;
   var feeAmt=feeRate>0?Math.round(total*feeRate/100):0;
   var editId = state.editingRecordId || null;
-  var entryTime = (editId && state.editingOrigTime) ? new Date(state.editingOrigTime) : new Date();
+  var entryTime = (editId && state.editingOrigTime) ? new Date(state.editingOrigTime) : (state.entryDate ? parseYMD(state.entryDate) : new Date());
   if(isNaN(entryTime.getTime())) entryTime = new Date();
   var record={
     id:Date.now(), time:entryTime.toISOString(),
@@ -2497,8 +2513,10 @@ function submitRecord(){
   state.selectedMenus=[]; state.selectedProducts=[];
   document.getElementById('customerName').value='';
   state.clientType='リピーター';
+  state.entryDate=''; // 登録後は通常（本日）入力に戻す
   state.editingRecordId=null; state.editingOrigTime=null; state.editingCustomerName=null;
   try{ updateEditBanner(); }catch(e){}
+  try{ syncVisitDatePicker(); }catch(e){}
   saveLocal();
   // クラウド：編集時は旧を削除してから追加
   if(editId && state.cloudUrl && state.cloudKey && typeof callCloud==='function'){ try{ callCloud('deleteRecord',{id:editId},function(){}); }catch(e){} }
@@ -2511,6 +2529,25 @@ function submitRecord(){
   switchTab('records');
 }
 // 日報をタップ→入力フォームに読み込んで編集
+/* ===== 📅 来店日ピッカー（入力フォーム） ===== */
+function visitTodayYMD(){ var n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); }
+function setVisitDate(v){
+  if(!v || v===visitTodayYMD()){ state.entryDate=''; }
+  else { state.entryDate=v; }
+  try{ saveLocal(); }catch(e){}
+  syncVisitDatePicker();
+}
+function syncVisitDatePicker(){
+  var p=document.getElementById('visitDatePicker'); if(!p) return;
+  p.value=state.entryDate||visitTodayYMD();
+  var warn=!!state.entryDate;
+  p.style.borderColor=warn?'#E65100':'';
+  var note=document.getElementById('visitDateNote');
+  if(note){
+    if(warn){ var pa=(state.entryDate||'').split('-'); note.innerHTML='<b style="color:#E65100">⚠️ '+parseInt(pa[1],10)+'月'+parseInt(pa[2],10)+'日の日報として登録されます</b>'; }
+    else { note.textContent='前日分などを後から入力する時は日付を変更（売上はこの日に計上されます）'; }
+  }
+}
 function updateEditBanner(){
   var b=document.getElementById('editBanner'); if(!b) return;
   if(state.editingRecordId){
@@ -2685,12 +2722,220 @@ function renderGoals(){
   el.innerHTML=html;
 }
 
+/* ===== 🧾 エアレジ会計明細CSV照合（月次） ===== */
+function runAirregiCheck(file){
+  if(!file) return;
+  var el=document.getElementById('airregiResult');
+  if(el) el.innerHTML='<div style="font-size:12px;color:#64748B;padding:6px">読み込み中...</div>';
+  var rd=new FileReader();
+  rd.onload=function(){
+    var buf=rd.result; var txt='';
+    try{ txt=new TextDecoder('utf-8',{fatal:false}).decode(buf); }catch(e){}
+    if(txt.indexOf('取引No')<0){ try{ txt=new TextDecoder('shift_jis').decode(buf); }catch(e){} }
+    if(txt.indexOf('取引No')<0){ if(el) el.innerHTML='<div style="font-size:12px;color:#C62828;padding:6px">⚠️ エアレジの「会計明細」CSVを選んでください（ヘッダーに「取引No」が見つかりません）</div>'; return; }
+    try{ airregiReconcile(txt); }catch(e){ if(el) el.innerHTML='<div style="font-size:12px;color:#C62828;padding:6px">⚠️ 照合中にエラー: '+h(String(e&&e.message||e))+'</div>'; }
+  };
+  rd.readAsArrayBuffer(file);
+}
+function _csvParseLine(line){
+  var out=[],cur='',q=false;
+  for(var i=0;i<line.length;i++){
+    var ch=line[i];
+    if(q){ if(ch==='"'){ if(line[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=ch; }
+    else { if(ch==='"') q=true; else if(ch===','){ out.push(cur); cur=''; } else cur+=ch; }
+  }
+  out.push(cur); return out;
+}
+function _airAddDays(day,n){ var p=day.split('-'); var dt=new Date(parseInt(p[0],10),parseInt(p[1],10)-1,parseInt(p[2],10)+n,12); return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); }
+function airregiReconcile(txt){
+  var el=document.getElementById('airregiResult');
+  var lines=txt.replace(/\r/g,'').split('\n').filter(function(l){return l.length;});
+  var hdr=_csvParseLine(lines[0]);
+  var ix={};
+  for(var i=0;i<hdr.length;i++) ix[hdr[i].trim()]=i;
+  function gv(row,name){ var k=ix[name]; return (k==null)?'':(row[k]||'').trim(); }
+  var txs=[];
+  for(var i=1;i<lines.length;i++){
+    var row=_csvParseLine(lines[i]);
+    var kd=gv(row,'会計日'); if(!kd) continue; // 商品明細行はスキップ
+    var day=(gv(row,'来店日')||kd).replace(/\//g,'-');
+    var fixedS=gv(row,'修正後合計'); var totS=gv(row,'合計');
+    var amt=Math.round(parseFloat(fixedS!==''?fixedS:totS)||0);
+    txs.push({ day:day, time:gv(row,'会計時間').slice(0,5), amt:amt, m:null });
+  }
+  if(!txs.length){ if(el) el.innerHTML='<div style="font-size:12px;color:#C62828;padding:6px">⚠️ 会計データが見つかりませんでした</div>'; return; }
+  // 日報側を日付でグループ化
+  var sunByDay={};
+  for(var i=0;i<state.records.length;i++){
+    var r=state.records[i];
+    var d0=recYMD(r); if(!d0) continue;
+    (sunByDay[d0]=sunByDay[d0]||[]).push({ total:r.total||0, staff:r.staff||'', day:d0, m:null });
+  }
+  var regByDay={};
+  txs.forEach(function(t){ (regByDay[t.day]=regByDay[t.day]||[]).push(t); });
+  var days=Object.keys(regByDay).sort();
+  // パス1: 同日・金額完全一致
+  days.forEach(function(day){
+    regByDay[day].forEach(function(t){
+      if(t.m) return;
+      var S=sunByDay[day]||[];
+      for(var j=0;j<S.length;j++){ if(!S[j].m && S[j].total===t.amt){ t.m=S[j].m='exact'; break; } }
+    });
+  });
+  // パス2: ±1日・金額完全一致（日付ズレ）
+  days.forEach(function(day){
+    regByDay[day].forEach(function(t){
+      if(t.m||t.amt<=0) return;
+      var cands=[_airAddDays(day,1),_airAddDays(day,-1)];
+      for(var k=0;k<2 && !t.m;k++){
+        var S=sunByDay[cands[k]]||[];
+        for(var j=0;j<S.length;j++){ if(!S[j].m && S[j].total===t.amt){ t.m=S[j].m='shift'; break; } }
+      }
+    });
+  });
+  // パス3: 同日・近似金額（±max(1100円,10%)）→ 金額不一致候補
+  var nearPairs=[];
+  days.forEach(function(day){
+    var R=(regByDay[day]||[]).filter(function(t){return !t.m;});
+    var S=(sunByDay[day]||[]).filter(function(s){return !s.m;});
+    var pairs=[];
+    for(var a=0;a<R.length;a++) for(var b=0;b<S.length;b++){
+      var df=Math.abs(R[a].amt-S[b].total);
+      if(df<=Math.max(1100,R[a].amt*0.1)) pairs.push([df,a,b]);
+    }
+    pairs.sort(function(x,y){return x[0]-y[0];});
+    var ua={},ub={};
+    pairs.forEach(function(p){
+      if(ua[p[1]]||ub[p[2]]) return;
+      ua[p[1]]=ub[p[2]]=1;
+      R[p[1]].m='near'; S[p[2]].m='near';
+      nearPairs.push({day:day,time:R[p[1]].time,reg:R[p[1]].amt,sun:S[p[2]].total,staff:S[p[2]].staff});
+    });
+  });
+  // パス4: まとめ会計（同日・レジ1件=日報2〜3件の合計）
+  days.forEach(function(day){
+    var R=(regByDay[day]||[]).filter(function(t){return !t.m;});
+    R.forEach(function(t){
+      if(t.m) return;
+      var free=(sunByDay[day]||[]).filter(function(s){return !s.m;});
+      for(var a=0;a<free.length && !t.m;a++) for(var b=a+1;b<free.length && !t.m;b++){
+        if(free[a].total+free[b].total===t.amt){ t.m='combo'; free[a].m=free[b].m='combo'; }
+      }
+      if(!t.m) for(var a=0;a<free.length && !t.m;a++) for(var b=a+1;b<free.length && !t.m;b++) for(var c=b+1;c<free.length && !t.m;c++){
+        if(free[a].total+free[b].total+free[c].total===t.amt){ t.m='combo'; free[a].m=free[b].m=free[c].m='combo'; }
+      }
+    });
+  });
+  // パス5: 遅れ入力（2〜7日後の同額日報）
+  days.forEach(function(day){
+    regByDay[day].forEach(function(t){
+      if(t.m||t.amt<=0) return;
+      for(var dd=2;dd<=7 && !t.m;dd++){
+        var S=sunByDay[_airAddDays(day,dd)]||[];
+        for(var j=0;j<S.length;j++){ if(!S[j].m && S[j].total===t.amt){ t.m=S[j].m='late'; break; } }
+      }
+    });
+  });
+  // 集計
+  var minDay=days[0], maxDay=days[days.length-1];
+  var missing=[], missTot=0;
+  days.forEach(function(day){ regByDay[day].forEach(function(t){ if(!t.m){ missing.push(t); missTot+=t.amt; } }); });
+  missing.sort(function(a,b){ return a.day<b.day?-1:(a.day>b.day?1:(a.time<b.time?-1:1)); });
+  var sunOnly=[], sunTot=0;
+  Object.keys(sunByDay).sort().forEach(function(day){
+    if(day<minDay||day>maxDay) return;
+    sunByDay[day].forEach(function(s){ if(!s.m){ sunOnly.push(s); sunTot+=s.total; } });
+  });
+  window._airregiLast={ minDay:minDay, maxDay:maxDay, missing:missing, sunOnly:sunOnly, nearPairs:nearPairs };
+  // 表示
+  var matched=txs.length-missing.length;
+  var html='<div style="background:#EAF5F3;border-radius:10px;padding:10px 12px;font-size:12.5px;line-height:1.9;margin-bottom:10px"><b>📊 照合結果（'+h(minDay)+' 〜 '+h(maxDay)+'）</b><br>'
+    +'レジ会計 '+txs.length+'件中 <b>'+matched+'件</b> 対応OK（日付ズレ・まとめ会計・遅れ入力を含む）<br>'
+    +'<b style="color:#C62828">① 入力漏れ疑い：'+missing.length+'件 ¥'+num(missTot)+'</b><br>'
+    +'<b style="color:#E65100">② 日報のみ（レジ会計なし）：'+sunOnly.length+'件 ¥'+num(sunTot)+'</b><br>'
+    +'<b style="color:#B8860B">③ 金額不一致：'+nearPairs.length+'件</b></div>';
+  if(missing.length){
+    html+='<div style="font-size:12px;font-weight:800;color:#C62828;margin:6px 0 4px">① 入力漏れ疑い（レジに会計あり・日報なし）→ 日報を追加入力してください</div>';
+    html+='<div style="max-height:220px;overflow:auto;border:1px solid #F1D0CD;border-radius:8px;margin-bottom:8px">';
+    missing.forEach(function(t){ html+='<div style="display:flex;justify-content:space-between;padding:6px 10px;border-bottom:1px solid #FBEAE8;font-size:12px"><span>'+h(t.day.slice(5))+'　'+h(t.time)+'</span><b>¥'+num(t.amt)+'</b></div>'; });
+    html+='</div>';
+  }
+  if(sunOnly.length){
+    html+='<div style="font-size:12px;font-weight:800;color:#E65100;margin:6px 0 4px">② 日報のみ（レジ打ち忘れ or 金額相違の可能性）</div>';
+    html+='<div style="max-height:180px;overflow:auto;border:1px solid #FFE0B2;border-radius:8px;margin-bottom:8px">';
+    sunOnly.forEach(function(s){ html+='<div style="display:flex;justify-content:space-between;padding:6px 10px;border-bottom:1px solid #FFF3E0;font-size:12px"><span>'+h(s.day.slice(5))+'　'+h(s.staff)+'</span><b>¥'+num(s.total)+'</b></div>'; });
+    html+='</div>';
+  }
+  if(nearPairs.length){
+    html+='<div style="font-size:12px;font-weight:800;color:#B8860B;margin:6px 0 4px">③ 金額不一致（同じ会計とみられるが金額が違う）</div>';
+    html+='<div style="max-height:180px;overflow:auto;border:1px solid #F5E6B8;border-radius:8px;margin-bottom:8px">';
+    nearPairs.forEach(function(p){ var df=p.reg-p.sun; html+='<div style="display:flex;justify-content:space-between;padding:6px 10px;border-bottom:1px solid #FFF8E1;font-size:12px;gap:6px"><span>'+h(p.day.slice(5))+' '+h(p.time)+'　'+h(p.staff)+'</span><span>レジ¥'+num(p.reg)+' / 日報¥'+num(p.sun)+'（<b>'+(df>0?'+':'')+num(df)+'</b>）</span></div>'; });
+    html+='</div>';
+  }
+  html+='<button onclick="downloadAirregiCsv()" style="width:100%;padding:10px;background:#2C7A6E;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">📥 結果をCSVで保存</button>';
+  if(el) el.innerHTML=html;
+}
+function downloadAirregiCsv(){
+  var d=window._airregiLast; if(!d){ return; }
+  var rows=[['区分','日付','レジ会計時間','レジ金額','日報金額','差額','日報担当']];
+  d.missing.forEach(function(t){ rows.push(['①入力漏れ疑い',t.day,t.time,t.amt,'','','']); });
+  d.sunOnly.forEach(function(s){ rows.push(['②日報のみ',s.day,'','',s.total,'',s.staff]); });
+  d.nearPairs.forEach(function(p){ rows.push(['③金額不一致',p.day,p.time,p.reg,p.sun,p.reg-p.sun,p.staff]); });
+  var csv='﻿'+rows.map(function(r){ return r.map(function(c){ c=String(c==null?'':c); return (c.indexOf(',')>=0||c.indexOf('"')>=0)?('"'+c.replace(/"/g,'""')+'"'):c; }).join(','); }).join('\n');
+  var blob=new Blob([csv],{type:'text/csv'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='airregi_shogo_'+d.minDay.replace(/-/g,'')+'_'+d.maxDay.replace(/-/g,'')+'.csv';
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); },500);
+}
+
+/* ===== 🧾 日次締めチェック（エアレジ突合・当日） ===== */
+function ensureRegClose(){ if(!state.regClose) state.regClose={}; }
+function renderCloseCheck(){
+  var el=document.getElementById('closeCheck'); if(!el) return;
+  ensureRegClose();
+  var ymd=visitTodayYMD();
+  var cnt=0, amt=0;
+  for(var i=0;i<state.records.length;i++){ var r=state.records[i]; if(recYMD(r)===ymd){ cnt++; amt+=(r.total||0); } }
+  var rc=state.regClose[ymd]||{};
+  var hasReg=(rc.amount!=null&&rc.amount>0);
+  var html='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:13px 14px">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;flex-wrap:wrap;gap:4px"><span style="font-size:13px;font-weight:800;color:#1A4F47">🧾 本日の締めチェック</span><span style="font-size:12px;color:#64748B">日報 '+cnt+'件 <b style="color:#1A4F47">¥'+num(amt)+'</b></span></div>';
+  html+='<div style="display:flex;gap:6px;margin-bottom:8px">';
+  html+='<input type="number" id="regCloseAmt" placeholder="エアレジ売上" value="'+(rc.amount!=null&&rc.amount>0?rc.amount:'')+'" inputmode="numeric" style="flex:2;min-width:0;padding:9px 10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:13px">';
+  html+='<input type="number" id="regCloseCli" placeholder="客数" value="'+(rc.clients!=null&&rc.clients>0?rc.clients:'')+'" inputmode="numeric" style="flex:1;min-width:0;padding:9px 10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:13px">';
+  html+='<button onclick="saveRegClose()" style="padding:9px 14px;background:#2C7A6E;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap">照合</button>';
+  html+='</div>';
+  if(hasReg){
+    var diff=amt-rc.amount;
+    var cdiff=(rc.clients!=null&&rc.clients>0)?(cnt-rc.clients):null;
+    if(diff===0&&(cdiff===null||cdiff===0)){
+      html+='<div style="background:#E8F5E9;border-radius:8px;padding:9px 11px;font-size:12.5px;font-weight:700;color:#2E7D32">✅ エアレジと一致しています！おつかれさまでした🎉</div>';
+    } else {
+      html+='<div style="background:#FDECEA;border-radius:8px;padding:9px 11px;font-size:12.5px;color:#C62828;line-height:1.7"><b>⚠️ 差異があります</b>　金額差 <b>'+(diff>0?'+':'')+'¥'+num(diff)+'</b>（日報−レジ）'+(cdiff!==null?'　件数差 <b>'+(cdiff>0?'+':'')+cdiff+'件</b>':'')+'<br><span style="font-size:11px">日報が少ない→入力漏れ／多い→レジ打ち忘れの可能性。今日のうちに確認しましょう</span></div>';
+    }
+  } else {
+    html+='<div style="font-size:11px;color:#94a3b8">閉店時にエアレジの「本日の売上・客数」を入力して「照合」を押すと、日報との差をその場で確認できます</div>';
+  }
+  html+='</div>';
+  el.innerHTML=html;
+}
+function saveRegClose(){
+  ensureRegClose();
+  var ymd=visitTodayYMD();
+  var a=document.getElementById('regCloseAmt'); var c=document.getElementById('regCloseCli');
+  state.regClose[ymd]={ amount:parseInt(a&&a.value,10)||0, clients:parseInt(c&&c.value,10)||0 };
+  try{ saveLocal(); }catch(e){}
+  renderCloseCheck();
+}
+
 // バックアップ（ファイルに保存）
 function backupData(){
   var data={ _app:'sun-app', _ver:(typeof APP_VERSION!=='undefined'?APP_VERSION:''), _date:new Date().toISOString(),
     records:state.records||[], staff:state.staff||[], menus:state.menus||[], products:state.products||[],
     payments:state.payments||[], paymentMaster:state.paymentMaster||[], mediaList:state.mediaList||[],
-    goals:state.goals||{}, tickets:state.tickets||{} };
+    goals:state.goals||{}, tickets:state.tickets||{}, regClose:state.regClose||{} };
   try{
     var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
     var url=URL.createObjectURL(blob);
@@ -2716,6 +2961,7 @@ function restoreDataFile(input){
       if(d.mediaList) state.mediaList=d.mediaList;
       if(d.goals) state.goals=d.goals;
       if(d.tickets) state.tickets=d.tickets;
+      if(d.regClose) state.regClose=d.regClose;
       try{ saveLocal(); }catch(e){}
       if(typeof renderAll==='function') renderAll();
       if(typeof showToast==='function') showToast('✅ 復元しました（日報 '+state.records.length+'件）');
@@ -2809,6 +3055,7 @@ function renderReportsTab(){
   el.innerHTML=html;
 }
 function renderRecords(){
+  try{ if(typeof renderCloseCheck==='function') renderCloseCheck(); }catch(e){}
   var today=new Date().toDateString();
   var todayRecs=[];
   for(var i=0;i<state.records.length;i++) if(new Date(state.records[i].time).toDateString()===today) todayRecs.push(state.records[i]);
@@ -4861,6 +5108,7 @@ function showToast(msg){
 }
 
 init();
+try{ if(typeof syncVisitDatePicker==='function') syncVisitDatePicker(); }catch(e){}
 
 /* === 拡張機能 v2.5 === */
 function ensureProductMasters(){
@@ -5461,7 +5709,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "17.0";
+var APP_VERSION = "17.1";
 
 function checkForUpdate(){
   try {
