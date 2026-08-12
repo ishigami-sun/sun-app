@@ -328,19 +328,6 @@
       </div>
     </div>
     <button class="submit-btn" onclick="submitRecord()">✅ 日報を登録する</button>
-    <div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:14px;margin-top:12px">
-      <div style="font-size:15px;color:#1A4F47;font-weight:800;margin-bottom:4px">📋 本日の報告 <span style="color:#94a3b8;font-size:12px;font-weight:700">任意</span></div>
-      <div style="font-size:12px;color:#64748B;margin-bottom:10px;line-height:1.6">1日1回、気づいたことがあれば書いて下の「送信」を押してください。<b>日報の登録とは別</b>です（お客様ごとに書く必要はありません）。</div>
-      <label style="font-size:13px;font-weight:700;color:#1A4F47;display:block;margin-bottom:3px">👤 報告者</label>
-      <select id="reportStaff" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;font-weight:700;color:#1A4F47;background:#fff;margin-bottom:12px"><option value="">選んでください</option></select>
-      <label style="font-size:13px;font-weight:700;color:#27AE60;display:block;margin-bottom:3px">✅ 今日よかった点</label>
-      <textarea id="reportGood" rows="2" placeholder="お客様に喜ばれたこと・うまくいった施術など" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;margin-bottom:12px;font-family:inherit;resize:vertical;color:#1A2E2A"></textarea>
-      <label style="font-size:13px;font-weight:700;color:#D4A843;display:block;margin-bottom:3px">📝 改善点</label>
-      <textarea id="reportImprove" rows="2" placeholder="次はこうしたい・反省点など" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;margin-bottom:12px;font-family:inherit;resize:vertical;color:#1A2E2A"></textarea>
-      <label style="font-size:13px;font-weight:700;color:#2C7A6E;display:block;margin-bottom:3px">📢 共有事項・申し送り</label>
-      <textarea id="reportShare" rows="2" placeholder="在庫切れ・予約の注意点・設備の不具合・次のシフトの人に伝えたいことなど" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;margin-bottom:12px;font-family:inherit;resize:vertical;color:#1A2E2A"></textarea>
-      <button onclick="submitDailyReport()" style="width:100%;padding:12px;background:#2C7A6E;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">📋 本日の報告を送信</button>
-    </div>
     <button onclick="pushAndSync()" style="width:100%;margin-top:10px;padding:13px;background:#fff;color:#2C7A6E;border:2px solid #2C7A6E;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">📤 打ち終わったら更新（みんなの端末に反映）</button>
   </div>
 </div>
@@ -405,6 +392,19 @@
 <!-- ===== 📢 報告 ===== -->
 <div class="page" id="page-reports">
   <div class="section-title">📢 報告</div>
+  <div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:14px;margin-bottom:14px">
+    <div style="font-size:15px;color:#1A4F47;font-weight:800;margin-bottom:4px">📋 本日の報告 <span style="color:#94a3b8;font-size:12px;font-weight:700">任意</span></div>
+    <div style="font-size:12px;color:#64748B;margin-bottom:10px;line-height:1.6">1日1回、気づいたことがあれば書いて下の「送信」を押してください。<b>日報の登録とは別</b>です（お客様ごとに書く必要はありません）。</div>
+    <label style="font-size:13px;font-weight:700;color:#1A4F47;display:block;margin-bottom:3px">👤 報告者</label>
+    <select id="reportStaff" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;font-weight:700;color:#1A4F47;background:#fff;margin-bottom:12px"><option value="">選んでください</option></select>
+    <label style="font-size:13px;font-weight:700;color:#27AE60;display:block;margin-bottom:3px">✅ 今日よかった点</label>
+    <textarea id="reportGood" rows="2" placeholder="お客様に喜ばれたこと・うまくいった施術など" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;margin-bottom:12px;font-family:inherit;resize:vertical;color:#1A2E2A"></textarea>
+    <label style="font-size:13px;font-weight:700;color:#D4A843;display:block;margin-bottom:3px">📝 改善点</label>
+    <textarea id="reportImprove" rows="2" placeholder="次はこうしたい・反省点など" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;margin-bottom:12px;font-family:inherit;resize:vertical;color:#1A2E2A"></textarea>
+    <label style="font-size:13px;font-weight:700;color:#2C7A6E;display:block;margin-bottom:3px">📢 共有事項・申し送り</label>
+    <textarea id="reportShare" rows="2" placeholder="在庫切れ・予約の注意点・設備の不具合・次のシフトの人に伝えたいことなど" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:14px;margin-bottom:12px;font-family:inherit;resize:vertical;color:#1A2E2A"></textarea>
+    <button onclick="submitDailyReport()" style="width:100%;padding:12px;background:#2C7A6E;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">📋 本日の報告を送信</button>
+  </div>
   <div style="font-size:12px;color:#64748B;margin-bottom:10px;line-height:1.6">全スタッフの報告一覧。📢申し送りは「確認済み」を押すと対応済みになります。未確認はタブに赤バッジで表示されます。</div>
   <div id="reportsControls"></div>
   <div id="reportsList"></div>
@@ -2462,6 +2462,7 @@ function submitDailyReport(){
   var ei=document.getElementById('reportImprove'); if(ei)ei.value='';
   var es=document.getElementById('reportShare'); if(es)es.value='';
   if(typeof renderAll==='function') renderAll();
+  try{ if(typeof renderReportsTab==='function') renderReportsTab(); }catch(e){}
 }
 // 報告者セレクトを名簿で埋める（未選択時は入力中の担当者を初期選択）
 function updateReportStaffSelect(){
@@ -2608,7 +2609,7 @@ function renderDailyReports(){
   var el=document.getElementById('dailyReports'); if(!el) return;
   var reps=(state.reports||[]).filter(function(r){ return r && (r.good||r.improve||r.share); });
   reps.sort(function(a,b){ var da=a.date||'', db=b.date||''; if(da!==db) return da<db?1:-1; return String(b.createdAt||b.id||'').localeCompare(String(a.createdAt||a.id||'')); });
-  if(!reps.length){ el.innerHTML='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:16px;text-align:center;color:#94a3b8;font-size:13px">まだ報告はありません。入力タブの「📋 本日の報告」から投稿できます。</div>'; return; }
+  if(!reps.length){ el.innerHTML='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:16px;text-align:center;color:#94a3b8;font-size:13px">まだ報告はありません。報告タブの上のフォームから投稿できます。</div>'; return; }
   function esc(s){ return (typeof h==='function')?h(s):String(s==null?'':s); }
   function dlabel(d){ var p=String(d||'').split('-'); return (p.length===3)?(parseInt(p[1],10)+'月'+parseInt(p[2],10)+'日'):String(d||''); }
   function block(icon,label,val,color){ if(!val) return ''; return '<div style="margin-top:8px"><div style="font-size:12px;font-weight:700;color:'+color+';margin-bottom:2px">'+icon+' '+label+'</div><div style="font-size:13px;color:#333;white-space:pre-wrap;line-height:1.6">'+esc(val)+'</div></div>'; }
@@ -4158,7 +4159,7 @@ function switchTab(tab){
   if(idx>=0) tabs[idx].classList.add('active');
   if(tab==='admin') updateSessionInfo();
   if(tab==='records') renderRecords();
-  if(tab==='reports'){ if(typeof renderReportsTab==='function') renderReportsTab(); }
+  if(tab==='reports'){ if(typeof renderReportsTab==='function') renderReportsTab(); if(typeof updateReportStaffSelect==='function') try{ updateReportStaffSelect(); }catch(e){} }
   if(tab==='dashboard') renderDashboard();
   if(tab==='sales'){ if(typeof renderSales==='function') renderSales(); }
   if(tab==='academy'){ if(typeof renderAcademyVideos==='function') renderAcademyVideos(); if(typeof renderEduAdmin==='function') renderEduAdmin(); }
@@ -5475,7 +5476,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "17.2";
+var APP_VERSION = "17.3";
 
 function checkForUpdate(){
   try {
