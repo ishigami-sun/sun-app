@@ -2660,7 +2660,7 @@ function renderTodayTarget(){
   var now=new Date(); var ym=_ym(now);
   var goal=(typeof SALON_GOAL_TOTAL!=='undefined')?SALON_GOAL_TOTAL:0; // 確定目標（サロン合計）
   var daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
-  var biz=0; for(var dd=1;dd<=daysInMonth;dd++){ if(new Date(now.getFullYear(),now.getMonth(),dd).getDay()!==0) biz++; } // 日曜=定休を除く
+  var biz=0; for(var dd=1;dd<=daysInMonth;dd++){ if(new Date(now.getFullYear(),now.getMonth(),dd).getDay()!==1) biz++; } // 月曜=定休を除く
   var dailyTarget=(goal>0&&biz>0)?Math.round(goal/biz):0;
   var today=new Date().toDateString(); var todaySales=0;
   for(var i=0;i<state.records.length;i++){ if(new Date(state.records[i].time).toDateString()===today) todaySales+=(state.records[i].total||0); }
@@ -2672,7 +2672,7 @@ function renderTodayTarget(){
     +'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px"><span style="font-size:13px;font-weight:800;color:#1A4F47">🎯 本日の目標</span><span style="font-size:12px;color:#64748B">¥'+num(todaySales)+' / ¥'+num(dailyTarget)+'</span></div>'
     +'<div style="height:10px;background:#EEF2F1;border-radius:5px;overflow:hidden;margin-bottom:5px"><div style="height:100%;width:'+bar+'%;background:'+col+';border-radius:5px"></div></div>'
     +'<div style="font-size:12px;color:#64748B;text-align:right"><b style="color:'+col+'">'+pct+'%</b>　'+(remain>0?'あと <b style="color:#2C7A6E">¥'+num(remain)+'</b>で達成':'<b style="color:#2E7D32">本日目標達成 🎉</b>')+'</div>'
-    +'<div style="font-size:10px;color:#94a3b8;margin-top:4px">※今月の目標¥'+num(goal)+' ÷ 営業日'+biz+'日（日曜除く）</div>'
+    +'<div style="font-size:10px;color:#94a3b8;margin-top:4px">※今月の目標¥'+num(goal)+' ÷ 営業日'+biz+'日（月曜定休除く）</div>'
     +'</div>';
 }
 
@@ -4127,8 +4127,8 @@ function renderSalesAnalysis(){
       if(pp.mtd && !done){
         var nowG=new Date(); var lastD=new Date(nowG.getFullYear(),nowG.getMonth()+1,0).getDate();
         var bizLeft=0;
-        for(var dd=nowG.getDate();dd<=lastD;dd++){ if(new Date(nowG.getFullYear(),nowG.getMonth(),dd).getDay()!==0) bizLeft++; }
-        if(bizLeft>0) gh+='<div style="font-size:11px;color:#94a3b8;margin-top:5px">残り営業日 '+bizLeft+'日（日曜除く）→ 1日あたり <b style="color:#E65100">¥'+num(Math.ceil((goal-act)/bizLeft))+'</b> で達成ペース</div>';
+        for(var dd=nowG.getDate();dd<=lastD;dd++){ if(new Date(nowG.getFullYear(),nowG.getMonth(),dd).getDay()!==1) bizLeft++; }
+        if(bizLeft>0) gh+='<div style="font-size:11px;color:#94a3b8;margin-top:5px">残り営業日 '+bizLeft+'日（月曜定休除く）→ 1日あたり <b style="color:#E65100">¥'+num(Math.ceil((goal-act)/bizLeft))+'</b> で達成ペース</div>';
       }
       gh+='</div>';
       gEl.innerHTML=gh;
@@ -5893,7 +5893,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "17.7";
+var APP_VERSION = "17.8";
 
 function checkForUpdate(){
   try {
