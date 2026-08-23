@@ -959,14 +959,14 @@
 
   <div class="sl-panel" id="slPanel_analysis">
     <div id="slVerifyBanner"></div>
-    <div class="sl-periods">
-      <div class="sl-ptab active" onclick="setSalesRange('week',this)">直近1週間</div>
-      <div class="sl-ptab" onclick="setSalesRange('month',this)">直近1ヶ月</div>
-      <div class="sl-ptab" onclick="setSalesRange('3month',this)">直近3ヶ月</div>
-      <div class="sl-ptab" onclick="setSalesRange('year',this)">今年</div>
+    <div class="sl-periods" style="align-items:center">
+      <div class="sl-ptab active" id="slP_this" onclick="setSalesRange('this')">今月</div>
+      <div class="sl-ptab" id="slP_prev" onclick="setSalesRange('prev')">先月</div>
+      <div class="sl-ptab" id="slP_year" onclick="setSalesRange('year')">今年</div>
+      <input type="month" id="slMonthPick" onchange="if(this.value)setSalesRange(this.value)" style="flex:1;min-width:130px;padding:7px 8px;border:1.5px solid #C8E0DC;border-radius:14px;font-size:12px;font-weight:700;color:#1A4F47;background:#fff">
     </div>
     <select id="slStaffAnalysis" onchange="state.salesStaff=this.value;renderSales()" style="width:100%;margin:2px 0 8px;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;background:#fff;font-size:14px;font-weight:700;color:#1A4F47"></select>
-    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#64748B;font-weight:700;margin:2px 0 6px"><input type="checkbox" id="slIncludeToday" onchange="setSalesIncludeToday(this.checked)">当日を含める（既定は昨日までで前期と公平に比較）</label>
+    <label id="slIncludeTodayWrap" style="display:flex;align-items:center;gap:6px;font-size:12px;color:#64748B;font-weight:700;margin:2px 0 6px"><input type="checkbox" id="slIncludeToday" onchange="setSalesIncludeToday(this.checked)">当日を含める（既定は昨日まで・前月の同日数と公平に比較）</label>
     <div id="slRangeLabel" style="font-size:11px;color:#64748B;margin-bottom:8px"></div>
     <div id="slMetrics" class="sl-metrics"></div>
     <div class="sl-card"><div class="sl-ttl" style="margin-bottom:6px">👥 スタッフ別 単価分析</div><div style="font-size:11px;color:#64748B;margin-bottom:6px">担当数＝メニューを1件以上担当した会計数（延べ）。横にスクロールできます→</div><div id="slStaffTable" style="overflow-x:auto"></div></div>
@@ -4007,18 +4007,33 @@ function renderSalesProduct(){
   }
 }
 function toggleSalesStaff(i){ var el=document.getElementById('slStDet_'+i); if(el) el.style.display=(el.style.display==='none')?'block':'none'; }
-function setSalesRange(v,el){ state.salesRange=v; if(el&&el.parentNode){ var ps=el.parentNode.querySelectorAll('.sl-ptab'); for(var i=0;i<ps.length;i++) ps[i].classList.remove('active'); el.classList.add('active'); } renderSalesAnalysis(); }
-function salesRangeBounds(v){
-  var inc=!!state.salesIncludeToday;
-  var ref=new Date();
-  if(!inc && v!=='year'){ ref.setDate(ref.getDate()-1); } // 既定は当日除外（未確定の当日売上で前期比が歪むのを防ぐ）
-  var start=new Date(ref), end=new Date(ref);
-  if(v==='week'){ start.setDate(start.getDate()-6); }
-  else if(v==='month'){ start.setMonth(start.getMonth()-1); start.setDate(start.getDate()+1); }
-  else if(v==='3month'){ start.setMonth(start.getMonth()-3); start.setDate(start.getDate()+1); }
-  else { start=new Date(ref.getFullYear(),0,1); end=new Date(ref.getFullYear(),11,31); }
-  start.setHours(0,0,0,0); end.setHours(23,59,59,999);
-  return {start:start,end:end};
+function setSalesRange(v,el){ state.salesRange=v; try{ saveLocal(); }catch(e){} renderSalesAnalysis(); }
+function salesPeriods(v){
+  // カレンダー月ベースの期間: 'this'=今月(当日除外MTD) / 'prev'=先月 / 'YYYY-MM'=任意の月 / 'year'=今年
+  var now=new Date();
+  function mS(y,m){ var d=new Date(y,m,1); d.setHours(0,0,0,0); return d; }
+  function mE(y,m){ var d=new Date(y,m+1,0); d.setHours(23,59,59,999); return d; }
+  if(v==='year'){
+    var cs=mS(now.getFullYear(),0), ce=mE(now.getFullYear(),11);
+    return {cur:{start:cs,end:ce}, prev:{start:mS(now.getFullYear()-1,0),end:mE(now.getFullYear()-1,11)}, mtd:false};
+  }
+  if(v==='this'){
+    var endDay=new Date(now); if(!state.salesIncludeToday) endDay.setDate(endDay.getDate()-1);
+    if(endDay.getMonth()===now.getMonth() && endDay.getFullYear()===now.getFullYear()){
+      var y=now.getFullYear(), m=now.getMonth();
+      var ce2=new Date(endDay); ce2.setHours(23,59,59,999);
+      var py=m===0?y-1:y, pm=m===0?11:m-1;
+      var lastPrev=new Date(py,pm+1,0).getDate();
+      var pe=new Date(py,pm,Math.min(endDay.getDate(),lastPrev)); pe.setHours(23,59,59,999);
+      return {cur:{start:mS(y,m),end:ce2}, prev:{start:mS(py,pm),end:pe}, mtd:true};
+    }
+    v='prev'; // 1日の朝に当日除外だと今月分が無いので先月全体を表示
+  }
+  var ty,tm;
+  if(v==='prev'){ ty=now.getFullYear(); tm=now.getMonth()-1; if(tm<0){tm=11;ty--;} }
+  else { var p=String(v).split('-'); ty=parseInt(p[0],10); tm=parseInt(p[1],10)-1; }
+  var py2=tm===0?ty-1:ty, pm2=tm===0?11:tm-1;
+  return {cur:{start:mS(ty,tm),end:mE(ty,tm)}, prev:{start:mS(py2,pm2),end:mE(py2,pm2)}, mtd:false};
 }
 function setSalesIncludeToday(v){ state.salesIncludeToday=!!v; try{ saveLocal(); }catch(e){} renderSalesAnalysis(); }
 function salesAggRange(start,end){
@@ -4069,15 +4084,21 @@ function verifySalesStartupCheck(){
 function renderSalesAnalysis(){
   var ssel=document.getElementById('slStaffAnalysis');
   if(ssel){ var so='<option value="">担当：全員</option>'; (state.staff||[]).forEach(function(nm){ so+='<option value="'+h(nm)+'"'+(nm===state.salesStaff?' selected':'')+'>'+h(nm)+'</option>'; }); ssel.innerHTML=so; }
-  var v=state.salesRange||'week', cur=salesRangeBounds(v);
-  var len=cur.end-cur.start;
-  var prevEnd=new Date(cur.start.getTime()-1), prevStart=new Date(prevEnd.getTime()-len);
-  var A=salesAggRange(cur.start,cur.end), P=salesAggRange(prevStart,prevEnd);
+  var v=state.salesRange;
+  if(v!=='this'&&v!=='prev'&&v!=='year'&&!/^\d{4}-\d{2}$/.test(String(v||''))) v='this'; // 旧設定(week等)は今月へ移行
+  state.salesRange=v;
+  ['this','prev','year'].forEach(function(k){ var e=document.getElementById('slP_'+k); if(e) e.classList.toggle('active', v===k); });
+  var isPick=/^\d{4}-\d{2}$/.test(String(v));
+  var mp=document.getElementById('slMonthPick'); if(mp){ mp.value=isPick?v:''; mp.style.borderColor=isPick?'#2C7A6E':'#C8E0DC'; }
+  var pp=salesPeriods(v), cur=pp.cur;
+  var A=salesAggRange(cur.start,cur.end), P=salesAggRange(pp.prev.start,pp.prev.end);
   var cb=document.getElementById('slIncludeToday'); if(cb) cb.checked=!!state.salesIncludeToday;
+  var tw=document.getElementById('slIncludeTodayWrap'); if(tw) tw.style.display=(v==='this')?'flex':'none';
+  var cmpLbl=(v==='year')?'前年比':'前月比';
   function fmtD(d){ return (d.getMonth()+1)+'/'+d.getDate(); }
   var lb=document.getElementById('slRangeLabel');
-  if(lb) lb.innerHTML='📅 集計期間：<b>'+fmtD(cur.start)+'〜'+fmtD(cur.end)+'</b>'+(state.salesIncludeToday?'（当日含む）':'（昨日まで・当日除外）')+'　前期：'+fmtD(prevStart)+'〜'+fmtD(prevEnd);
-  function diff(c,p,unit,money){ var d=c-p, up=d>=0; return '<div class="sl-diff '+(up?'up':'down')+'">'+(up?'▲ ':'▼ ')+(money?'¥':'')+num(Math.abs(d))+(unit||'')+'（前期比）</div>'; }
+  if(lb) lb.innerHTML='📅 集計期間：<b>'+fmtD(cur.start)+'〜'+fmtD(cur.end)+'</b>'+(pp.mtd?(state.salesIncludeToday?'（今月・当日含む）':'（今月・昨日まで）'):'')+'　比較：'+fmtD(pp.prev.start)+'〜'+fmtD(pp.prev.end)+(pp.mtd?'（前月の同日数）':'');
+  function diff(c,p,unit,money){ var d=c-p, up=d>=0; return '<div class="sl-diff '+(up?'up':'down')+'">'+(up?'▲ ':'▼ ')+(money?'¥':'')+num(Math.abs(d))+(unit||'')+'（'+cmpLbl+'）</div>'; }
   function card(label,val,dh,sub){ return '<div class="sl-mcard"><div class="sl-mlabel">'+label+'</div><div class="sl-mval">'+val+'</div>'+(sub||'')+dh+'</div>'; }
   var techU=A.clients>0?Math.round(A.tech/A.clients):0, techUp=P.clients>0?Math.round(P.tech/P.clients):0;
   var totU=A.clients>0?Math.round(A.sales/A.clients):0, totUp=P.clients>0?Math.round(P.sales/P.clients):0;
@@ -5845,7 +5866,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "17.5";
+var APP_VERSION = "17.6";
 
 function checkForUpdate(){
   try {
