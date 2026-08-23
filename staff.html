@@ -876,6 +876,7 @@
     <select id="slStaffAnalysis" onchange="state.salesStaff=this.value;renderSales()" style="width:100%;margin:2px 0 8px;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;background:#fff;font-size:14px;font-weight:700;color:#1A4F47"></select>
     <label id="slIncludeTodayWrap" style="display:flex;align-items:center;gap:6px;font-size:12px;color:#64748B;font-weight:700;margin:2px 0 6px"><input type="checkbox" id="slIncludeToday" onchange="setSalesIncludeToday(this.checked)">当日を含める（既定は昨日まで・前月の同日数と公平に比較）</label>
     <div id="slRangeLabel" style="font-size:11px;color:#64748B;margin-bottom:8px"></div>
+    <div id="slGoal"></div>
     <div id="slMetrics" class="sl-metrics"></div>
     <div class="sl-card"><div class="sl-ttl" style="margin-bottom:6px">👥 スタッフ別 単価分析</div><div style="font-size:11px;color:#64748B;margin-bottom:6px">担当数＝メニューを1件以上担当した会計数（延べ）。横にスクロールできます→</div><div id="slStaffTable" style="overflow-x:auto"></div></div>
   </div>
@@ -3789,6 +3790,29 @@ function renderSalesAnalysis(){
   html+=card('💰 総合客単価','¥'+num(totU),diff(totU,totUp,'',true),'<div style="font-size:10px;color:#94a3b8">施術＋物販</div>');
   html+=card('🔁 リピート率（実人数）',rr+'%',diff(rr,prr,'%',false),'<div style="font-size:10px;color:#94a3b8">実人数'+A.uniq+'人中'+A.repu+'人／延べ'+rrN+'%</div>');
   var mEl=document.getElementById('slMetrics'); if(mEl) mEl.innerHTML=html;
+  // ▼ 🎯 目標達成（確定目標との対比・月表示のときのみ）
+  var gEl=document.getElementById('slGoal');
+  if(gEl){
+    var meG=salesMe();
+    var goal=(v==='year')?0:(meG!=null?(typeof fixedGoalFor==='function'?fixedGoalFor(meG):0):(typeof SALON_GOAL_TOTAL!=='undefined'?SALON_GOAL_TOTAL:0));
+    if(goal>0){
+      var act=A.sales, gp=Math.round(act/goal*100), done=gp>=100;
+      var gh='<div style="background:'+(done?'linear-gradient(135deg,#FFFBEB,#FFF3C4);border:2px solid #DAA520':'#fff;border:1px solid #C8E0DC')+';border-radius:12px;padding:12px 14px;margin-bottom:10px">';
+      gh+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:13px;font-weight:800;color:#1A4F47">🎯 目標達成　'+(meG!=null?h(staffBase(meG)):'サロン全体')+'</span>'+(done?'<span style="background:linear-gradient(135deg,#DAA520,#FFD700);color:#fff;font-size:11px;font-weight:800;padding:2px 9px;border-radius:12px">🎉 達成！</span>':'')+'<span style="margin-left:auto;font-size:18px;font-weight:900;color:'+(done?'#B8860B':(gp>=70?'#2E7D32':'#E69500'))+'">'+gp+'%</span></div>';
+      gh+='<div style="height:12px;background:'+(done?'#F5E6B8':'#EEF2F1')+';border-radius:6px;overflow:hidden;margin-bottom:6px"><div style="height:100%;width:'+Math.min(gp,100)+'%;background:'+(done?'linear-gradient(90deg,#DAA520,#FFD700)':(gp>=70?'#2E7D32':'#3DA892'))+';border-radius:6px;transition:width 0.5s"></div></div>';
+      gh+='<div style="font-size:12px;color:#64748B;display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px"><span>実績 <b style="color:#1A4F47">¥'+num(act)+'</b> / 目標 ¥'+num(goal)+'</span><span>'+(done?'<b style="color:#B8860B">目標超過 +¥'+num(act-goal)+'</b>':'あと <b style="color:#2C7A6E">¥'+num(goal-act)+'</b>')+'</span></div>';
+      if(pp.mtd && !done){
+        var nowG=new Date(); var lastD=new Date(nowG.getFullYear(),nowG.getMonth()+1,0).getDate();
+        var bizLeft=0;
+        for(var dd=nowG.getDate();dd<=lastD;dd++){ if(new Date(nowG.getFullYear(),nowG.getMonth(),dd).getDay()!==0) bizLeft++; }
+        if(bizLeft>0) gh+='<div style="font-size:11px;color:#94a3b8;margin-top:5px">残り営業日 '+bizLeft+'日（日曜除く）→ 1日あたり <b style="color:#E65100">¥'+num(Math.ceil((goal-act)/bizLeft))+'</b> で達成ペース</div>';
+      }
+      gh+='</div>';
+      gEl.innerHTML=gh;
+    } else {
+      gEl.innerHTML=(v==='year')?'':'<div style="font-size:11px;color:#94a3b8;margin-bottom:10px">🎯 このスタッフの確定目標は未設定です</div>';
+    }
+  }
   // ▼ スタッフ別 単価分析（売上＝明細帰属／担当数＝メニューを1件以上担当した会計数）
   var me=salesMe(), by={};
   function ens(st){ if(!by[st]) by[st]={tech:0,prod:0,tcl:0,pcl:0}; return by[st]; }
@@ -3804,12 +3828,15 @@ function renderSalesAnalysis(){
   if(tEl){
     if(!arr.length){ tEl.innerHTML='<div style="font-size:12px;color:#94a3b8;text-align:center;padding:12px">この期間のデータがありません</div>'; }
     else {
-      var t='<table class="sl-tbl" style="min-width:540px;border-collapse:collapse;font-size:12px"><tr><th>スタッフ</th><th>施術売上</th><th>担当数</th><th>施術単価</th><th>物販売上</th><th>物販単価<br>(担当客割り)</th><th>物販単価<br>(購入客のみ)</th></tr>';
+      var t='<table class="sl-tbl" style="min-width:600px;border-collapse:collapse;font-size:12px"><tr><th>スタッフ</th><th>施術売上</th><th>担当数</th><th>施術単価</th><th>物販売上</th><th>物販単価<br>(担当客割り)</th><th>物販単価<br>(購入客のみ)</th><th>目標達成率</th></tr>';
       arr.forEach(function(e){ var st=e[0], x=e[1];
         var tU=x.tcl>0?Math.round(x.tech/x.tcl):0;
         var pAll=x.tcl>0?Math.round(x.prod/x.tcl):0;
         var pBuy=x.pcl>0?('¥'+num(Math.round(x.prod/x.pcl))+'<span style="color:#94a3b8;font-size:10px">（'+x.pcl+'件）</span>'):'<span style="color:#cbd5e1">—</span>';
-        t+='<tr><td style="font-weight:800;color:#1A4F47;white-space:nowrap">'+h(st)+'</td><td>¥'+num(x.tech)+'</td><td>'+x.tcl+'件</td><td style="font-weight:800;color:#2C7A6E">¥'+num(tU)+'</td><td>¥'+num(x.prod)+'</td><td>¥'+num(pAll)+'</td><td>'+pBuy+'</td></tr>';
+        var sg=(v!=='year'&&typeof fixedGoalFor==='function')?fixedGoalFor(st):0;
+        var gCell='<span style="color:#cbd5e1">—</span>';
+        if(sg>0){ var sgp=Math.round((x.tech+x.prod)/sg*100); gCell='<b style="color:'+(sgp>=100?'#B8860B':(sgp>=70?'#2E7D32':'#E69500'))+'">'+sgp+'%</b>'+(sgp>=100?' 🎉':''); }
+        t+='<tr><td style="font-weight:800;color:#1A4F47;white-space:nowrap">'+h(st)+'</td><td>¥'+num(x.tech)+'</td><td>'+x.tcl+'件</td><td style="font-weight:800;color:#2C7A6E">¥'+num(tU)+'</td><td>¥'+num(x.prod)+'</td><td>¥'+num(pAll)+'</td><td>'+pBuy+'</td><td>'+gCell+'</td></tr>';
       });
       t+='</table>';
       tEl.innerHTML=t;
@@ -5573,7 +5600,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "17.6";
+var APP_VERSION = "17.7";
 
 function checkForUpdate(){
   try {
