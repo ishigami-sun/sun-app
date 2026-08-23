@@ -873,6 +873,7 @@
       <div class="sl-ptab" onclick="setSalesRange('3month',this)">直近3ヶ月</div>
       <div class="sl-ptab" onclick="setSalesRange('year',this)">今年</div>
     </div>
+    <select id="slStaffAnalysis" onchange="state.salesStaff=this.value;renderSales()" style="width:100%;margin:2px 0 8px;padding:10px;border:1.5px solid #C8E0DC;border-radius:8px;background:#fff;font-size:14px;font-weight:700;color:#1A4F47"></select>
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#64748B;font-weight:700;margin:2px 0 6px"><input type="checkbox" id="slIncludeToday" onchange="setSalesIncludeToday(this.checked)">当日を含める（既定は昨日までで前期と公平に比較）</label>
     <div id="slRangeLabel" style="font-size:11px;color:#64748B;margin-bottom:8px"></div>
     <div id="slMetrics" class="sl-metrics"></div>
@@ -3522,14 +3523,17 @@ function pushDeletionsToCloud(){
 /* ===== 売上タブ（日別・商品別・分析） ===== */
 var SALES_ADMIN = false; // admin=true / staff=false（自動置換）
 var _slSalesChart=null,_slStaffChart=null;
+/* ===== 担当者フィルタの姓ベース照合（役職名変更後も旧名の日報にマッチさせる） ===== */
+function staffBase(n){ return String(n||'').split('（')[0].split('(')[0].trim(); }
+function sameStaff(a,b){ var x=staffBase(a); return x!=='' && x===staffBase(b); }
 function salesMe(){ return (state.salesStaff && state.salesStaff.length) ? state.salesStaff : null; } // 売上タブの担当者フィルター（空=全員）
 // 1日報のスコープ別集計（admin=全体 / staff=自分の担当分）
 function salesRec(r){
   var me=salesMe(), tech=0,prod=0,items=0;
   var menus=r.menus||[], prods=r.products||[];
-  for(var i=0;i<menus.length;i++){ var m=menus[i]; var st=m.menuStaff||r.staff; if(me==null||st===me) tech+=menuLineInc(m); }
-  for(var j=0;j<prods.length;j++){ var p=prods[j]; var st=p.productStaff||r.staff; if(me==null||st===me){ prod+=prodLineSell(p); items+=(p.qty||1); } }
-  var client=(me==null)?1:(r.staff===me?1:0);
+  for(var i=0;i<menus.length;i++){ var m=menus[i]; var st=m.menuStaff||r.staff; if(me==null||sameStaff(st,me)) tech+=menuLineInc(m); }
+  for(var j=0;j<prods.length;j++){ var p=prods[j]; var st=p.productStaff||r.staff; if(me==null||sameStaff(st,me)){ prod+=prodLineSell(p); items+=(p.qty||1); } }
+  var client=(me==null)?1:(sameStaff(r.staff,me)?1:0);
   return {tech:tech,prod:prod,items:items,client:client};
 }
 function makeSalesChart(id, which, config){
@@ -3649,9 +3653,9 @@ function renderSalesProduct(){
     var by={};
     function ens(n){ if(!by[n]) by[n]={tech:0,prod:0,items:0,clients:0,menus:{}}; return by[n]; }
     recs.forEach(function(r){
-      (r.menus||[]).forEach(function(m){ var st=m.menuStaff||r.staff; if(me!=null&&st!==me)return; var o=ens(st); var v2=menuLineInc(m); o.tech+=v2; o.menus[m.name]=(o.menus[m.name]||0)+v2; });
-      (r.products||[]).forEach(function(p){ var st=p.productStaff||r.staff; if(me!=null&&st!==me)return; var o=ens(st); o.prod+=prodLineSell(p); o.items+=(p.qty||1); });
-      var ms=r.staff; if(me==null||ms===me){ ens(ms).clients+=1; }
+      (r.menus||[]).forEach(function(m){ var st=m.menuStaff||r.staff; if(me!=null&&!sameStaff(st,me))return; var o=ens(st); var v2=menuLineInc(m); o.tech+=v2; o.menus[m.name]=(o.menus[m.name]||0)+v2; });
+      (r.products||[]).forEach(function(p){ var st=p.productStaff||r.staff; if(me!=null&&!sameStaff(st,me))return; var o=ens(st); o.prod+=prodLineSell(p); o.items+=(p.qty||1); });
+      var ms=r.staff; if(me==null||sameStaff(ms,me)){ ens(ms).clients+=1; }
     });
     var arr=Object.keys(by).map(function(k){return [k,by[k]];}).sort(function(a,b){return (b[1].tech+b[1].prod)-(a[1].tech+a[1].prod);});
     var html='';
@@ -3663,7 +3667,7 @@ function renderSalesProduct(){
     body.innerHTML=html||'<div class="sl-empty">データがありません</div>';
   } else if(v==='menu'){
     var bym={};
-    recs.forEach(function(r){ (r.menus||[]).forEach(function(m){ var st=m.menuStaff||r.staff; if(me!=null&&st!==me)return; if(!bym[m.name]) bym[m.name]={c:0,s:0}; bym[m.name].c+=(m.qty||1); bym[m.name].s+=menuLineInc(m); }); });
+    recs.forEach(function(r){ (r.menus||[]).forEach(function(m){ var st=m.menuStaff||r.staff; if(me!=null&&!sameStaff(st,me))return; if(!bym[m.name]) bym[m.name]={c:0,s:0}; bym[m.name].c+=(m.qty||1); bym[m.name].s+=menuLineInc(m); }); });
     var am=Object.keys(bym).map(function(k){return [k,bym[k]];}).sort(function(a,b){return b[1].s-a[1].s;});
     var t1={c:0,s:0}, h1='<table class="sl-tbl"><tr><th>メニュー</th><th>件数</th><th>売上</th></tr>';
     am.forEach(function(e){ t1.c+=e[1].c;t1.s+=e[1].s; h1+='<tr><td>'+h(e[0])+'</td><td>'+num(e[1].c)+'件</td><td>¥'+num(e[1].s)+'</td></tr>'; });
@@ -3671,7 +3675,7 @@ function renderSalesProduct(){
     body.innerHTML=am.length?h1:'<div class="sl-empty">データがありません</div>';
   } else {
     var byp={};
-    recs.forEach(function(r){ (r.products||[]).forEach(function(p){ var st=p.productStaff||r.staff; if(me!=null&&st!==me)return; if(!byp[p.name]) byp[p.name]={c:0,s:0,cost:0,profit:0}; byp[p.name].c+=(p.qty||1); byp[p.name].s+=prodLineSell(p); var rc=resolveCost(p); byp[p.name].cost+=(rc!=null?rc:0)*(p.qty||1); byp[p.name].profit+=prodLineProfit(p); }); });
+    recs.forEach(function(r){ (r.products||[]).forEach(function(p){ var st=p.productStaff||r.staff; if(me!=null&&!sameStaff(st,me))return; if(!byp[p.name]) byp[p.name]={c:0,s:0,cost:0,profit:0}; byp[p.name].c+=(p.qty||1); byp[p.name].s+=prodLineSell(p); var rc=resolveCost(p); byp[p.name].cost+=(rc!=null?rc:0)*(p.qty||1); byp[p.name].profit+=prodLineProfit(p); }); });
     var ap=Object.keys(byp).map(function(k){return [k,byp[k]];}).sort(function(a,b){return b[1].s-a[1].s;});
     var t2={c:0,s:0,cost:0,profit:0}, h2='<table class="sl-tbl"><tr><th>商品名</th><th>点数</th><th>仕入</th><th>売上</th><th>利益</th></tr>';
     ap.forEach(function(e){ t2.c+=e[1].c;t2.s+=e[1].s;t2.cost+=e[1].cost;t2.profit+=e[1].profit; h2+='<tr><td>'+h(e[0])+'</td><td>'+num(e[1].c)+'点</td><td>¥'+num(e[1].cost)+'</td><td>¥'+num(e[1].s)+'</td><td>¥'+num(e[1].profit)+'</td></tr>'; });
@@ -3740,6 +3744,8 @@ function verifySalesStartupCheck(){
   }catch(e){}
 }
 function renderSalesAnalysis(){
+  var ssel=document.getElementById('slStaffAnalysis');
+  if(ssel){ var so='<option value="">担当：全員</option>'; (state.staff||[]).forEach(function(nm){ so+='<option value="'+h(nm)+'"'+(nm===state.salesStaff?' selected':'')+'>'+h(nm)+'</option>'; }); ssel.innerHTML=so; }
   var v=state.salesRange||'week', cur=salesRangeBounds(v);
   var len=cur.end-cur.start;
   var prevEnd=new Date(cur.start.getTime()-1), prevStart=new Date(prevEnd.getTime()-len);
@@ -3767,8 +3773,8 @@ function renderSalesAnalysis(){
   function ens(st){ if(!by[st]) by[st]={tech:0,prod:0,tcl:0,pcl:0}; return by[st]; }
   (state.records||[]).forEach(function(r){ var d=new Date(r.time); if(isNaN(d.getTime())||d<cur.start||d>cur.end) return;
     var tset={}, pset={};
-    (r.menus||[]).forEach(function(m){ var st=m.menuStaff||r.staff; if(!st||(me!=null&&st!==me))return; ens(st).tech+=menuLineInc(m); tset[st]=1; });
-    (r.products||[]).forEach(function(p){ var st=p.productStaff||r.staff; if(!st||(me!=null&&st!==me))return; ens(st).prod+=prodLineSell(p); pset[st]=1; });
+    (r.menus||[]).forEach(function(m){ var st=staffBase(m.menuStaff||r.staff); if(!st||(me!=null&&!sameStaff(st,me)))return; ens(st).tech+=menuLineInc(m); tset[st]=1; });
+    (r.products||[]).forEach(function(p){ var st=staffBase(p.productStaff||r.staff); if(!st||(me!=null&&!sameStaff(st,me)))return; ens(st).prod+=prodLineSell(p); pset[st]=1; });
     for(var k in tset) by[k].tcl++;
     for(var k in pset) by[k].pcl++;
   });
@@ -5546,7 +5552,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "17.4";
+var APP_VERSION = "17.5";
 
 function checkForUpdate(){
   try {
