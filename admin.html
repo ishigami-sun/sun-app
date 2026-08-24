@@ -4037,6 +4037,7 @@ function salesPeriods(v){
   return {cur:{start:mS(ty,tm),end:mE(ty,tm)}, prev:{start:mS(py2,pm2),end:mE(py2,pm2)}, mtd:false};
 }
 function setSalesIncludeToday(v){ state.salesIncludeToday=!!v; try{ saveLocal(); }catch(e){} renderSalesAnalysis(); }
+function setPaceDays(k,v){ if(!state.paceDays) state.paceDays={}; var n=parseInt(v,10)||0; if(n<1)n=1; if(n>31)n=31; state.paceDays[k]=n; try{ saveLocal(); }catch(e){} renderSalesAnalysis(); }
 function salesAggRange(start,end){
   var me=salesMe(), tech=0,prod=0,clients=0,rep=0;
   var persons={}; // 実人数（顧客名ベース・名前が空のレコードは1人として数える）
@@ -4128,7 +4129,16 @@ function renderSalesAnalysis(){
         var nowG=new Date(); var lastD=new Date(nowG.getFullYear(),nowG.getMonth()+1,0).getDate();
         var bizLeft=0;
         for(var dd=nowG.getDate();dd<=lastD;dd++){ if(new Date(nowG.getFullYear(),nowG.getMonth(),dd).getDay()!==1) bizLeft++; }
-        if(bizLeft>0) gh+='<div style="font-size:11px;color:#94a3b8;margin-top:5px">残り営業日 '+bizLeft+'日（月曜定休除く）→ 1日あたり <b style="color:#E65100">¥'+num(Math.ceil((goal-act)/bizLeft))+'</b> で達成ペース</div>';
+        if(meG!=null){
+          // スタッフ個人：定休日のほかに公休あり（基本週休2日）→ 残り出勤日数で割る。目安を初期値に、実際の日数へ修正可能
+          if(!state.paceDays) state.paceDays={};
+          var pk=nowG.getFullYear()+'-'+String(nowG.getMonth()+1).padStart(2,'0')+'|'+staffBase(meG);
+          var est=Math.max(1, bizLeft-Math.round(bizLeft/6)); // 週6営業のうち週1公休の目安
+          var days=(state.paceDays[pk]!=null&&state.paceDays[pk]>0)?state.paceDays[pk]:est;
+          gh+='<div style="font-size:11px;color:#94a3b8;margin-top:5px;display:flex;align-items:center;gap:4px;flex-wrap:wrap">残り出勤 <input type="number" min="1" max="31" value="'+days+'" onchange="setPaceDays(\''+pk+'\',this.value)" style="width:46px;padding:3px 4px;border:1.5px solid #C8E0DC;border-radius:6px;font-size:12px;font-weight:700;text-align:center;color:#1A4F47">日<span style="color:#cbd5e1">（週休2日めやす・実際の日数に直せます)</span>→ 1日あたり <b style="color:#E65100">¥'+num(Math.ceil((goal-act)/days))+'</b> で達成ペース</div>';
+        } else if(bizLeft>0){
+          gh+='<div style="font-size:11px;color:#94a3b8;margin-top:5px">残り営業日 '+bizLeft+'日（月曜定休除く）→ 1日あたり <b style="color:#E65100">¥'+num(Math.ceil((goal-act)/bizLeft))+'</b> で達成ペース</div>';
+        }
       }
       gh+='</div>';
       gEl.innerHTML=gh;
@@ -5893,7 +5903,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "17.8";
+var APP_VERSION = "17.9";
 
 function checkForUpdate(){
   try {
