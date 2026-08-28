@@ -1995,16 +1995,24 @@ function renderSelectedMenuEdit(){
   if(!state.selectedMenus.length){ sec.style.display='none'; return; }
   sec.style.display='block';
   var html='';
+  html+='<div style="font-size:10.5px;color:#94a3b8;margin-bottom:6px;line-height:1.6">💡 メニュー表どおりの価格は<b>税抜</b>のまま／ホットペッパー等の税込価格を打つときは<b>税込</b>をタップ（【hot】メニューは自動で税込）。請求額は各行の「最終金額（税込）」で確認できます</div>';
   for(var i=0;i<state.selectedMenus.length;i++){
     var m=state.selectedMenus[i];
-    var incAmt=menuInc(m);
-    var taxNote='<span id="taxNote_'+i+'" style="color:#2C7A6E;margin-left:8px;font-size:12px;font-weight:600">→税込¥'+num(incAmt)+'</span>';
+    var curMode=m.taxMode||'exc';
+    var otherLabel=(curMode==='inc')?'税抜':'税込';
+    var otherAmt=(curMode==='inc')?menuExc(m):menuInc(m);
+    var taxNote='<span id="taxNote_'+i+'" style="color:#2C7A6E;margin-left:8px;font-size:12px;font-weight:600">→'+otherLabel+'¥'+num(otherAmt)+'</span>';
     var discInfo=m.discountPct>0?'<div id="discInfo_'+i+'" style="font-size:11px;color:#C2185B;font-weight:700;margin-top:4px">割引：−'+m.discountPct+'%OFF（−¥'+num(Math.round(menuInc(m)*m.discountPct/100)*m.qty)+'）</div>':'<div id="discInfo_'+i+'" style="display:none"></div>';
     var extraInfo=m.extraAmount>0?'<div style="font-size:11px;color:#D4A843;font-weight:700;margin-top:4px">追加料金：＋¥'+num(m.extraAmount)+'</div>':'';
     html+='<div class="selected-item">';
     html+='<div class="selected-item-top"><div class="selected-item-name">'+h(m.name)+(m.qty>1?' × '+m.qty:'')+'</div><button class="remove-btn" onclick="removeSelectedMenu('+i+')">✕</button></div>';
     html+='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0 4px"><span style="font-size:11px;color:#64748B;font-weight:700;align-self:center">担当：</span><span id="menuStaffGrid_'+i+'"></span></div>';
-    html+='<div class="price-edit-wrap"><span class="price-edit-label">税抜：¥</span>';
+    html+='<div class="price-edit-wrap">';
+    html+='<span style="display:inline-flex;border:1.5px solid #2C7A6E;border-radius:8px;overflow:hidden;margin-right:8px">';
+    html+='<button type="button" onclick="setMenuTax('+i+',\'exc\')" style="padding:6px 12px;border:none;background:'+(curMode!=='inc'?'#2C7A6E':'#fff')+';color:'+(curMode!=='inc'?'#fff':'#2C7A6E')+';font-size:12px;font-weight:800;cursor:pointer">税抜</button>';
+    html+='<button type="button" onclick="setMenuTax('+i+',\'inc\')" style="padding:6px 12px;border:none;border-left:1.5px solid #2C7A6E;background:'+(curMode==='inc'?'#2C7A6E':'#fff')+';color:'+(curMode==='inc'?'#fff':'#2C7A6E')+';font-size:12px;font-weight:800;cursor:pointer">税込</button>';
+    html+='</span>';
+    html+='<span class="price-edit-label">'+(curMode==='inc'?'税込':'税抜')+'で入力：¥</span>';
     html+='<input class="price-edit-input" type="number" value="'+m.inputPrice+'" oninput="updateMenuPrice('+i+',this.value)">'+taxNote+'</div>';
     html+='<div style="display:flex;gap:6px;flex-wrap:wrap"><span style="font-size:11px;color:#64748B;align-self:center">追加：</span>';
     html+='<button class="price-up-btn" onclick="addExtra('+i+',500)">＋500</button>';
@@ -2071,6 +2079,18 @@ function updateMenuStaff(i,val){ if(state.selectedMenus[i]) state.selectedMenus[
 // メニュー1行の税込金額（担当者按分用・割引/ポイント反映）
 function menuLineInc(m){ if(!m) return 0; var inc=menuInc(m); var amt=inc*(m.qty||1); if(m.discountPct>0) amt-=Math.round(inc*m.discountPct/100)*(m.qty||1); if(m.pointDiscount) amt-=(m.pointDiscount||0); return amt; }
 function removeSelectedMenu(i){ state.selectedMenus.splice(i,1); renderMenuList(); renderSelectedMenuEdit(); renderSummary(); }
+function setMenuTax(i,mode){ var m=state.selectedMenus[i]; if(!m) return; if((m.taxMode||'exc')===mode) return; toggleMenuTax(i); }
+function toggleMenuTax(i){
+  var m=state.selectedMenus[i];
+  if(!m) return;
+  var newMode=(m.taxMode==='inc')?'exc':'inc';
+  m.inputPrice=(newMode==='inc')?menuInc(m):menuExc(m);
+  m.basePrice=m.inputPrice-(m.extraAmount||0);
+  m.taxMode=newMode;
+  try{ save(); }catch(e){}
+  renderSelectedMenuEdit();
+  renderSummary();
+}
 function updateMenuPrice(i,val){
   if(state.selectedMenus[i]){
     var v=parseInt(val)||0;
@@ -5903,7 +5923,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "17.9";
+var APP_VERSION = "18.0";
 
 function checkForUpdate(){
   try {
