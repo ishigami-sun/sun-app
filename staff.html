@@ -1889,6 +1889,7 @@ function renderSelectedMenuEdit(){
   if(!state.selectedMenus.length){ sec.style.display='none'; return; }
   sec.style.display='block';
   var html='';
+  html+='<div style="font-size:10.5px;color:#94a3b8;margin-bottom:6px;line-height:1.6">💡 メニュー表どおりの価格は<b>税抜</b>のまま／ホットペッパー等の税込価格を打つときは<b>税込</b>をタップ（【hot】メニューは自動で税込）。請求額は各行の「最終金額（税込）」で確認できます</div>';
   for(var i=0;i<state.selectedMenus.length;i++){
     var m=state.selectedMenus[i];
     var curMode=m.taxMode||'exc';
@@ -1901,8 +1902,11 @@ function renderSelectedMenuEdit(){
     html+='<div class="selected-item-top"><div class="selected-item-name">'+h(m.name)+(m.qty>1?' × '+m.qty:'')+'</div><button class="remove-btn" onclick="removeSelectedMenu('+i+')">✕</button></div>';
     html+='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0 4px"><span style="font-size:11px;color:#64748B;font-weight:700;align-self:center">担当：</span><span id="menuStaffGrid_'+i+'"></span></div>';
     html+='<div class="price-edit-wrap">';
-    html+='<button type="button" onclick="toggleMenuTax('+i+')" style="margin-right:6px;padding:4px 8px;border:1.5px solid #2C7A6E;background:'+(curMode==='inc'?'#2C7A6E':'#fff')+';color:'+(curMode==='inc'?'#fff':'#2C7A6E')+';border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">いま'+(curMode==='inc'?'税込':'税抜')+'｜タップで'+(curMode==='inc'?'税抜':'税込')+'に切替</button>';
-    html+='<span class="price-edit-label">'+(curMode==='inc'?'税込':'税抜')+'：¥</span>';
+    html+='<span style="display:inline-flex;border:1.5px solid #2C7A6E;border-radius:8px;overflow:hidden;margin-right:8px">';
+    html+='<button type="button" onclick="setMenuTax('+i+',\'exc\')" style="padding:6px 12px;border:none;background:'+(curMode!=='inc'?'#2C7A6E':'#fff')+';color:'+(curMode!=='inc'?'#fff':'#2C7A6E')+';font-size:12px;font-weight:800;cursor:pointer">税抜</button>';
+    html+='<button type="button" onclick="setMenuTax('+i+',\'inc\')" style="padding:6px 12px;border:none;border-left:1.5px solid #2C7A6E;background:'+(curMode==='inc'?'#2C7A6E':'#fff')+';color:'+(curMode==='inc'?'#fff':'#2C7A6E')+';font-size:12px;font-weight:800;cursor:pointer">税込</button>';
+    html+='</span>';
+    html+='<span class="price-edit-label">'+(curMode==='inc'?'税込':'税抜')+'で入力：¥</span>';
     html+='<input class="price-edit-input" type="number" value="'+m.inputPrice+'" oninput="updateMenuPrice('+i+',this.value)">'+taxNote+'</div>';
     html+='<div style="display:flex;gap:6px;flex-wrap:wrap"><span style="font-size:11px;color:#64748B;align-self:center">追加：</span>';
     html+='<button class="price-up-btn" onclick="addExtra('+i+',500)">＋500</button>';
@@ -2006,6 +2010,7 @@ function resetExtra(i){
 }
 
 // メニュー行ごとに 税込入力⇄税抜入力 を切替（請求額=税込は保ったまま入力単位だけ変換）
+function setMenuTax(i,mode){ var m=state.selectedMenus[i]; if(!m) return; if((m.taxMode||'exc')===mode) return; toggleMenuTax(i); }
 function toggleMenuTax(i){
   var m=state.selectedMenus[i];
   if(!m) return;
@@ -5610,7 +5615,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "17.9";
+var APP_VERSION = "18.0";
 
 function checkForUpdate(){
   try {
