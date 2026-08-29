@@ -1418,7 +1418,7 @@ function syncFromCloud(silent){
         if(res.masters.attendance){ state.attendance = attMerge(state.attendance, res.masters.attendance); }
         if(res.masters.inventory){ state.inventory = mergeInventory(state.inventory||[], res.masters.inventory, delSetOf('inventory')); }
         if(res.masters.invCategories){ state.invCategories = mergeMasterUnique(state.invCategories||[], res.masters.invCategories, delSetOf('invCategories')); }
-        if(res.masters.reports){ state.reports = mergeMasterById(state.reports||[], res.masters.reports, delSetOf('reports')); }
+        if(res.masters.reports){ var _crl=res.masters.reports.length; state.reports = mergeMasterById(state.reports||[], res.masters.reports, delSetOf('reports')); if((state.reports||[]).length>_crl){ try{ _pushMastersNow(); }catch(e){} } } // ローカルにしか無い報告があればクラウドへ自動復元
         if(typeof renderAcademyVideos==='function'){ try{ renderAcademyVideos(); if(typeof renderEduAdmin==='function') renderEduAdmin(); }catch(e){} }
       }
       saveLocal();
@@ -1477,6 +1477,25 @@ if(typeof window!=='undefined'){ try{ window.addEventListener('pagehide', flushS
 // マスタをクラウドに保存する共通関数
 function saveMastersToCloud(cb){
   if(!state.cloudUrl || !state.cloudKey || typeof callCloud !== 'function') return;
+  // 全量上書き方式のため、送信前にクラウド側の最新「報告」を取り込みマージしてから送る
+  // （同期していない端末の送信が、他端末で入力された新しい報告を消すのを防ぐ）
+  _pullReportsThenPush(function(){ _pushMastersNow(cb); });
+}
+function _pullReportsThenPush(next){
+  try{
+    callCloud('getAll', {}, function(res){
+      try{
+        if(res && res.ok && res.masters){
+          if(res.masters.deletedMasters && typeof mergeDeletedMasters==='function') mergeDeletedMasters(res.masters.deletedMasters);
+          if(res.masters.reports) state.reports = mergeMasterById(state.reports||[], res.masters.reports, delSetOf('reports'));
+          try{ saveLocal(); }catch(e){}
+        }
+      }catch(e){}
+      next();
+    });
+  }catch(e){ next(); }
+}
+function _pushMastersNow(cb){
   try {
     callCloud('saveMasters', {masters:{
       staff: state.staff || [],
@@ -5630,7 +5649,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "18.5";
+var APP_VERSION = "18.6";
 
 function checkForUpdate(){
   try {
