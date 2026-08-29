@@ -4106,6 +4106,13 @@ function verifySalesStartupCheck(){
     document.body.insertBefore(div, document.body.firstChild);
   }catch(e){}
 }
+/* エアレジ「商品別売上」画面と同じ基準の1行金額（外税=税抜/内税=税込・割引後） */
+function airRegiMenuLine(m){
+  var q=m.qty||1, p=m.inputPrice||0, amt=p*q;
+  if(m.discountPct>0) amt-=Math.round(p*m.discountPct/100)*q;
+  if(m.pointDiscount) amt-=(m.taxMode==='inc')?(m.pointDiscount||0):Math.round((m.pointDiscount||0)/1.1);
+  return amt;
+}
 function renderSalesAnalysis(){
   var ssel=document.getElementById('slStaffAnalysis');
   if(ssel){ var so='<option value="">担当：全員</option>'; (state.staff||[]).forEach(function(nm){ so+='<option value="'+h(nm)+'"'+(nm===state.salesStaff?' selected':'')+'>'+h(nm)+'</option>'; }); ssel.innerHTML=so; }
@@ -4137,8 +4144,6 @@ function renderSalesAnalysis(){
   html+=card('💰 総合客単価','¥'+num(totU),diff(totU,totUp,'',true),'<div style="font-size:10px;color:#94a3b8">施術＋物販</div>');
   html+=card('🔁 リピート率（実人数）',rr+'%',diff(rr,prr,'%',false),'<div style="font-size:10px;color:#94a3b8">実人数'+A.uniq+'人中'+A.repu+'人／延べ'+rrN+'%</div>');
   var mEl=document.getElementById('slMetrics'); if(mEl) mEl.innerHTML=html;
-  var txEl=document.getElementById('slTaxNote');
-  if(txEl){ var excT=Math.round(A.sales/1.1); txEl.innerHTML='💴 金額はすべて<b>税込</b>（割引適用後）｜参考：税抜合計 <b>¥'+num(excT)+'</b> ／ 消費税(10%) ¥'+num(A.sales-excT); }
   // ▼ 🎯 目標達成（確定目標との対比・月表示のときのみ）
   var gEl=document.getElementById('slGoal');
   if(gEl){
@@ -4174,11 +4179,11 @@ function renderSalesAnalysis(){
     }
   }
   // ▼ スタッフ別 単価分析（売上＝明細帰属／担当数＝メニューを1件以上担当した会計数）
-  var me=salesMe(), by={};
+  var me=salesMe(), by={}, airMixed=0;
   function ens(st){ if(!by[st]) by[st]={tech:0,prod:0,tcl:0,pcl:0}; return by[st]; }
   (state.records||[]).forEach(function(r){ var d=new Date(r.time); if(isNaN(d.getTime())||d<cur.start||d>cur.end) return;
     var tset={}, pset={};
-    (r.menus||[]).forEach(function(m){ var st=staffBase(m.menuStaff||r.staff); if(!st||(me!=null&&!sameStaff(st,me)))return; ens(st).tech+=menuLineInc(m); tset[st]=1; });
+    (r.menus||[]).forEach(function(m){ var st=staffBase(m.menuStaff||r.staff); if(!st||(me!=null&&!sameStaff(st,me)))return; ens(st).tech+=menuLineInc(m); airMixed+=airRegiMenuLine(m); tset[st]=1; });
     (r.products||[]).forEach(function(p){ var st=staffBase(p.productStaff||r.staff); if(!st||(me!=null&&!sameStaff(st,me)))return; ens(st).prod+=prodLineSell(p); pset[st]=1; });
     for(var k in tset) by[k].tcl++;
     for(var k in pset) by[k].pcl++;
@@ -4202,6 +4207,8 @@ function renderSalesAnalysis(){
       tEl.innerHTML=t;
     }
   }
+  var txEl=document.getElementById('slTaxNote');
+  if(txEl){ var excT=Math.round(A.sales/1.1); txEl.innerHTML='💴 金額はすべて<b>税込</b>（割引適用後）｜参考：税抜合計 <b>¥'+num(excT)+'</b> ／ 消費税(10%) ¥'+num(A.sales-excT)+'<br>📟 エアレジ「商品別売上」画面基準の施術売上：<b>¥'+num(airMixed)+'</b>（外税=税抜・内税=税込・割引後。あの画面と直接比べられます）'; }
   renderSalesVerifyBanner();
 }
 
@@ -5930,7 +5937,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "18.3";
+var APP_VERSION = "18.4";
 
 function checkForUpdate(){
   try {
