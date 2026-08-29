@@ -3842,10 +3842,10 @@ function renderSalesAnalysis(){
   }
   // ▼ スタッフ別 単価分析（売上＝明細帰属／担当数＝メニューを1件以上担当した会計数）
   var me=salesMe(), by={}, airMixed=0;
-  function ens(st){ if(!by[st]) by[st]={tech:0,prod:0,tcl:0,pcl:0}; return by[st]; }
+  function ens(st){ if(!by[st]) by[st]={tech:0,prod:0,air:0,tcl:0,pcl:0}; return by[st]; }
   (state.records||[]).forEach(function(r){ var d=new Date(r.time); if(isNaN(d.getTime())||d<cur.start||d>cur.end) return;
     var tset={}, pset={};
-    (r.menus||[]).forEach(function(m){ var st=staffBase(m.menuStaff||r.staff); if(!st||(me!=null&&!sameStaff(st,me)))return; ens(st).tech+=menuLineInc(m); airMixed+=airRegiMenuLine(m); tset[st]=1; });
+    (r.menus||[]).forEach(function(m){ var st=staffBase(m.menuStaff||r.staff); if(!st||(me!=null&&!sameStaff(st,me)))return; ens(st).tech+=menuLineInc(m); var _av=airRegiMenuLine(m); ens(st).air+=_av; airMixed+=_av; tset[st]=1; });
     (r.products||[]).forEach(function(p){ var st=staffBase(p.productStaff||r.staff); if(!st||(me!=null&&!sameStaff(st,me)))return; ens(st).prod+=prodLineSell(p); pset[st]=1; });
     for(var k in tset) by[k].tcl++;
     for(var k in pset) by[k].pcl++;
@@ -3855,7 +3855,7 @@ function renderSalesAnalysis(){
   if(tEl){
     if(!arr.length){ tEl.innerHTML='<div style="font-size:12px;color:#94a3b8;text-align:center;padding:12px">この期間のデータがありません</div>'; }
     else {
-      var t='<table class="sl-tbl" style="min-width:600px;border-collapse:collapse;font-size:12px"><tr><th>スタッフ</th><th>施術売上</th><th>担当数</th><th>施術単価</th><th>物販売上</th><th>物販単価<br>(担当客割り)</th><th>物販単価<br>(購入客のみ)</th><th>目標達成率</th></tr>';
+      var t='<table class="sl-tbl" style="min-width:660px;border-collapse:collapse;font-size:12px"><tr><th>スタッフ</th><th>施術売上</th><th>📟エアレジ<br>換算</th><th>担当数</th><th>施術単価</th><th>物販売上</th><th>物販単価<br>(担当客割り)</th><th>物販単価<br>(購入客のみ)</th><th>目標達成率</th></tr>';
       arr.forEach(function(e){ var st=e[0], x=e[1];
         var tU=x.tcl>0?Math.round(x.tech/x.tcl):0;
         var pAll=x.tcl>0?Math.round(x.prod/x.tcl):0;
@@ -3863,7 +3863,7 @@ function renderSalesAnalysis(){
         var sg=(v!=='year'&&typeof fixedGoalFor==='function')?fixedGoalFor(st):0;
         var gCell='<span style="color:#cbd5e1">—</span>';
         if(sg>0){ var sTot=x.tech+x.prod; var sDone=sTot>=sg; var sgp=sDone?Math.round(sTot/sg*100):Math.floor(sTot/sg*100); gCell='<b style="color:'+(sDone?'#B8860B':(sgp>=70?'#2E7D32':'#E69500'))+'">'+sgp+'%</b>'+(sDone?' 🎉':''); }
-        t+='<tr><td style="font-weight:800;color:#1A4F47;white-space:nowrap">'+h(st)+'</td><td>¥'+num(x.tech)+'</td><td>'+x.tcl+'件</td><td style="font-weight:800;color:#2C7A6E">¥'+num(tU)+'</td><td>¥'+num(x.prod)+'</td><td>¥'+num(pAll)+'</td><td>'+pBuy+'</td><td>'+gCell+'</td></tr>';
+        t+='<tr><td style="font-weight:800;color:#1A4F47;white-space:nowrap">'+h(st)+'</td><td>¥'+num(x.tech)+'</td><td style="color:#64748B">¥'+num(x.air)+'</td><td>'+x.tcl+'件</td><td style="font-weight:800;color:#2C7A6E">¥'+num(tU)+'</td><td>¥'+num(x.prod)+'</td><td>¥'+num(pAll)+'</td><td>'+pBuy+'</td><td>'+gCell+'</td></tr>';
       });
       t+='</table>';
       tEl.innerHTML=t;
@@ -5630,7 +5630,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "18.4";
+var APP_VERSION = "18.5";
 
 function checkForUpdate(){
   try {
