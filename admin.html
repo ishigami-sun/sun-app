@@ -4152,8 +4152,10 @@ function renderSalesAnalysis(){
       gh+='<div style="font-size:12px;color:#64748B;display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px"><span>実績 <b style="color:#1A4F47">¥'+num(act)+'</b> / 目標 ¥'+num(goal)+'</span><span>'+(done?'<b style="color:#B8860B">目標超過 +¥'+num(act-goal)+'</b>':'あと <b style="color:#2C7A6E">¥'+num(goal-act)+'</b>')+'</span></div>';
       if(pp.mtd && !done){
         var nowG=new Date(); var lastD=new Date(nowG.getFullYear(),nowG.getMonth()+1,0).getDate();
+        // 当日除外（実績が昨日まで）なら今日も「残り」に数える／当日込みなら今日は実績側なので残りは明日から
+        var firstLeft=nowG.getDate()+(state.salesIncludeToday?1:0);
         var bizLeft=0;
-        for(var dd=nowG.getDate();dd<=lastD;dd++){ if(new Date(nowG.getFullYear(),nowG.getMonth(),dd).getDay()!==1) bizLeft++; }
+        for(var dd=firstLeft;dd<=lastD;dd++){ if(new Date(nowG.getFullYear(),nowG.getMonth(),dd).getDay()!==1) bizLeft++; }
         if(meG!=null){
           // スタッフ個人：定休日のほかに公休あり（基本週休2日）→ 残り出勤日数で割る。目安を初期値に、実際の日数へ修正可能
           if(!state.paceDays) state.paceDays={};
@@ -5928,7 +5930,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "18.2";
+var APP_VERSION = "18.3";
 
 function checkForUpdate(){
   try {
