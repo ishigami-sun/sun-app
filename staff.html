@@ -3802,7 +3802,7 @@ function renderSalesAnalysis(){
     var meG=salesMe();
     var goal=(v==='year')?0:(meG!=null?(typeof fixedGoalFor==='function'?fixedGoalFor(meG):0):(typeof SALON_GOAL_TOTAL!=='undefined'?SALON_GOAL_TOTAL:0));
     if(goal>0){
-      var act=A.sales, gp=Math.round(act/goal*100), done=gp>=100;
+      var act=A.sales, done=act>=goal, gp=done?Math.round(act/goal*100):Math.floor(act/goal*100);
       var gh='<div style="background:'+(done?'linear-gradient(135deg,#FFFBEB,#FFF3C4);border:2px solid #DAA520':'#fff;border:1px solid #C8E0DC')+';border-radius:12px;padding:12px 14px;margin-bottom:10px">';
       gh+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:13px;font-weight:800;color:#1A4F47">🎯 目標達成　'+(meG!=null?h(staffBase(meG)):'サロン全体')+'</span>'+(done?'<span style="background:linear-gradient(135deg,#DAA520,#FFD700);color:#fff;font-size:11px;font-weight:800;padding:2px 9px;border-radius:12px">🎉 達成！</span>':'')+'<span style="margin-left:auto;font-size:18px;font-weight:900;color:'+(done?'#B8860B':(gp>=70?'#2E7D32':'#E69500'))+'">'+gp+'%</span></div>';
       gh+='<div style="height:12px;background:'+(done?'#F5E6B8':'#EEF2F1')+';border-radius:6px;overflow:hidden;margin-bottom:6px"><div style="height:100%;width:'+Math.min(gp,100)+'%;background:'+(done?'linear-gradient(90deg,#DAA520,#FFD700)':(gp>=70?'#2E7D32':'#3DA892'))+';border-radius:6px;transition:width 0.5s"></div></div>';
@@ -3850,7 +3850,7 @@ function renderSalesAnalysis(){
         var pBuy=x.pcl>0?('¥'+num(Math.round(x.prod/x.pcl))+'<span style="color:#94a3b8;font-size:10px">（'+x.pcl+'件）</span>'):'<span style="color:#cbd5e1">—</span>';
         var sg=(v!=='year'&&typeof fixedGoalFor==='function')?fixedGoalFor(st):0;
         var gCell='<span style="color:#cbd5e1">—</span>';
-        if(sg>0){ var sgp=Math.round((x.tech+x.prod)/sg*100); gCell='<b style="color:'+(sgp>=100?'#B8860B':(sgp>=70?'#2E7D32':'#E69500'))+'">'+sgp+'%</b>'+(sgp>=100?' 🎉':''); }
+        if(sg>0){ var sTot=x.tech+x.prod; var sDone=sTot>=sg; var sgp=sDone?Math.round(sTot/sg*100):Math.floor(sTot/sg*100); gCell='<b style="color:'+(sDone?'#B8860B':(sgp>=70?'#2E7D32':'#E69500'))+'">'+sgp+'%</b>'+(sDone?' 🎉':''); }
         t+='<tr><td style="font-weight:800;color:#1A4F47;white-space:nowrap">'+h(st)+'</td><td>¥'+num(x.tech)+'</td><td>'+x.tcl+'件</td><td style="font-weight:800;color:#2C7A6E">¥'+num(tU)+'</td><td>¥'+num(x.prod)+'</td><td>¥'+num(pAll)+'</td><td>'+pBuy+'</td><td>'+gCell+'</td></tr>';
       });
       t+='</table>';
@@ -5026,10 +5026,10 @@ function renderGoals(){
     var g=FIXED_GOALS[i];
     var act=calcFixedActual(g.key, ym);
     salonActual+=act.total;
-    rows.push({ key:g.key, role:g.role, goal:g.goal, actual:act.total, pct:(g.goal>0?Math.round(act.total/g.goal*100):0) });
+    rows.push({ key:g.key, role:g.role, goal:g.goal, actual:act.total, done:(g.goal>0&&act.total>=g.goal), pct:(g.goal>0?(act.total>=g.goal?Math.round(act.total/g.goal*100):Math.floor(act.total/g.goal*100)):0) });
   }
-  var salonPct=SALON_GOAL_TOTAL>0?Math.round(salonActual/SALON_GOAL_TOTAL*100):0;
-  var salonDone=salonPct>=100;
+  var salonDone=salonActual>=SALON_GOAL_TOTAL;
+  var salonPct=SALON_GOAL_TOTAL>0?(salonDone?Math.round(salonActual/SALON_GOAL_TOTAL*100):Math.floor(salonActual/SALON_GOAL_TOTAL*100)):0;
   var html='';
   // ▼ サロン全体の進捗（上部に大きく）
   var grad=salonDone?'linear-gradient(135deg,#B8860B,#DAA520,#F5C518)':'linear-gradient(135deg,#1A4F47,#2C7A6E)';
@@ -5042,7 +5042,7 @@ function renderGoals(){
   // ▼ スタッフ別の進捗（全員分・達成者はゴールド）
   for(var i=0;i<rows.length;i++){
     var row=rows[i];
-    var done=row.pct>=100;
+    var done=!!row.done;
     var pcol=done?'#B8860B':(row.pct>=70?'#2E7D32':(row.pct>=40?'#E69500':'#C2185B'));
     var bar=done?'linear-gradient(90deg,#DAA520,#FFD700)':(row.pct>=70?'#2E7D32':'#3DA892');
     var card=done?'background:linear-gradient(135deg,#FFFBEB,#FFF3C4);border:2px solid #DAA520;box-shadow:0 3px 10px rgba(218,165,32,0.35)':'background:#fff;border:1px solid #E2E8F0';
@@ -5615,7 +5615,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "18.0";
+var APP_VERSION = "18.1";
 
 function checkForUpdate(){
   try {
