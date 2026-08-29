@@ -878,6 +878,7 @@
     <div id="slRangeLabel" style="font-size:11px;color:#64748B;margin-bottom:8px"></div>
     <div id="slGoal"></div>
     <div id="slMetrics" class="sl-metrics"></div>
+    <div id="slTaxNote" style="font-size:11px;color:#64748B;margin:6px 0 10px"></div>
     <div class="sl-card"><div class="sl-ttl" style="margin-bottom:6px">👥 スタッフ別 単価分析</div><div style="font-size:11px;color:#64748B;margin-bottom:6px">担当数＝メニューを1件以上担当した会計数（延べ）。横にスクロールできます→</div><div id="slStaffTable" style="overflow-x:auto"></div></div>
   </div>
   <div class="sl-panel" id="slPanel_reconcile">
@@ -2522,9 +2523,11 @@ function renderTodayTarget(){
   var today=new Date().toDateString(); var todaySales=0;
   for(var i=0;i<state.records.length;i++){ if(new Date(state.records[i].time).toDateString()===today) todaySales+=(state.records[i].total||0); }
   if(dailyTarget<=0){ el.innerHTML='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:12px;text-align:center;color:#94a3b8;font-size:12px">🎯 本日の目標：「🎯目標」タブで今月の目標を設定すると表示されます</div>'; return; }
-  var pct=Math.round(todaySales/dailyTarget*100), bar=Math.min(pct,100);
+  var achieved=todaySales>=dailyTarget;
+  var pct=achieved?Math.round(todaySales/dailyTarget*100):Math.floor(todaySales/dailyTarget*100);
+  var bar=Math.min(pct,100);
   var remain=Math.max(0,dailyTarget-todaySales);
-  var col=pct>=100?'#2E7D32':(pct>=70?'#E69500':'#2C7A6E');
+  var col=achieved?'#2E7D32':(pct>=70?'#E69500':'#2C7A6E');
   el.innerHTML='<div style="background:#fff;border:1px solid #C8E0DC;border-radius:12px;padding:13px 14px">'
     +'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px"><span style="font-size:13px;font-weight:800;color:#1A4F47">🎯 本日の目標</span><span style="font-size:12px;color:#64748B">¥'+num(todaySales)+' / ¥'+num(dailyTarget)+'</span></div>'
     +'<div style="height:10px;background:#EEF2F1;border-radius:5px;overflow:hidden;margin-bottom:5px"><div style="height:100%;width:'+bar+'%;background:'+col+';border-radius:5px"></div></div>'
@@ -2556,7 +2559,7 @@ function renderCloseCheck(){
     if(diff===0&&(cdiff===null||cdiff===0)){
       html+='<div style="background:#E8F5E9;border-radius:8px;padding:9px 11px;font-size:12.5px;font-weight:700;color:#2E7D32">✅ エアレジと一致しています！おつかれさまでした🎉</div>';
     } else {
-      html+='<div style="background:#FDECEA;border-radius:8px;padding:9px 11px;font-size:12.5px;color:#C62828;line-height:1.7"><b>⚠️ 差異があります</b>　金額差 <b>'+(diff>0?'+':'')+'¥'+num(diff)+'</b>（日報−レジ）'+(cdiff!==null?'　件数差 <b>'+(cdiff>0?'+':'')+cdiff+'件</b>':'')+'<br><span style="font-size:11px">日報が少ない→入力漏れ／多い→レジ打ち忘れの可能性。今日のうちに確認しましょう</span></div>';
+      html+='<div style="background:#FDECEA;border-radius:8px;padding:9px 11px;font-size:12.5px;color:#C62828;line-height:1.7"><b>⚠️ 差異があります</b>　金額差 <b>'+(diff>=0?'+':'−')+'¥'+num(Math.abs(diff))+'</b>（日報−レジ）'+(cdiff!==null?'　件数差 <b>'+(cdiff>=0?'+':'−')+Math.abs(cdiff)+'件</b>':'')+'<br><span style="font-size:11px">日報が少ない→入力漏れ／多い→レジ打ち忘れの可能性。今日のうちに確認しましょう</span></div>';
     }
   } else {
     html+='<div style="font-size:11px;color:#94a3b8">閉店時にエアレジの「本日の売上・客数」を入力して「照合」を押すと、日報との差をその場で確認できます</div>';
@@ -3789,13 +3792,15 @@ function renderSalesAnalysis(){
   var rr=A.uniq>0?Math.round(A.repu/A.uniq*100):0, prr=P.uniq>0?Math.round(P.repu/P.uniq*100):0;
   var rrN=A.clients>0?Math.round(A.rep/A.clients*100):0;
   var html='';
-  html+=card('💇 施術売上','¥'+num(A.tech),diff(A.tech,P.tech,'',true));
-  html+=card('📦 物販売上','¥'+num(A.prod),diff(A.prod,P.prod,'',true));
+  html+=card('💇 施術売上','¥'+num(A.tech),diff(A.tech,P.tech,'',true),'<div style="font-size:10px;color:#94a3b8">税抜 ¥'+num(Math.round(A.tech/1.1))+'</div>');
+  html+=card('📦 物販売上','¥'+num(A.prod),diff(A.prod,P.prod,'',true),'<div style="font-size:10px;color:#94a3b8">税抜 ¥'+num(Math.round(A.prod/1.1))+'</div>');
   html+=card('👥 来客数（延べ）',num(A.clients)+'名',diff(A.clients,P.clients,'名',false));
   html+=card('✂️ 施術客単価','¥'+num(techU),diff(techU,techUp,'',true),'<div style="font-size:10px;color:#94a3b8">物販を含みません（値上げ判断用）</div>');
   html+=card('💰 総合客単価','¥'+num(totU),diff(totU,totUp,'',true),'<div style="font-size:10px;color:#94a3b8">施術＋物販</div>');
   html+=card('🔁 リピート率（実人数）',rr+'%',diff(rr,prr,'%',false),'<div style="font-size:10px;color:#94a3b8">実人数'+A.uniq+'人中'+A.repu+'人／延べ'+rrN+'%</div>');
   var mEl=document.getElementById('slMetrics'); if(mEl) mEl.innerHTML=html;
+  var txEl=document.getElementById('slTaxNote');
+  if(txEl){ var excT=Math.round(A.sales/1.1); txEl.innerHTML='💴 金額はすべて<b>税込</b>（割引適用後）｜参考：税抜合計 <b>¥'+num(excT)+'</b> ／ 消費税(10%) ¥'+num(A.sales-excT); }
   // ▼ 🎯 目標達成（確定目標との対比・月表示のときのみ）
   var gEl=document.getElementById('slGoal');
   if(gEl){
@@ -4963,7 +4968,8 @@ function renderSpeedReport(){
     var act=calcStaffActual(row.name, ym);
     var goalTotal=(typeof fixedGoalFor==='function')?fixedGoalFor(row.name):0;
     var actTotal=(act.tech||0)+(act.product||0);
-    var gpct=goalTotal>0?Math.round(actTotal/goalTotal*100):0;
+    var gdone=goalTotal>0&&actTotal>=goalTotal;
+    var gpct=goalTotal>0?(gdone?Math.round(actTotal/goalTotal*100):Math.floor(actTotal/goalTotal*100)):0;
     html+='<div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:12px;margin-bottom:8px">';
     html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'+medal;
     html+='<span style="display:inline-block;background:'+sbg+';color:#fff;font-size:13px;font-weight:800;padding:3px 11px;border-radius:14px">'+h(row.name)+'</span>';
@@ -4971,7 +4977,7 @@ function renderSpeedReport(){
     html+='<div style="background:#EEF2F1;border-radius:8px;height:10px;overflow:hidden;margin-bottom:5px"><div style="width:'+pct+'%;height:100%;background:'+sbg+'"></div></div>';
     html+='<div style="font-size:11px;color:#64748B;margin-bottom:'+(goalTotal>0?'8px':'0')+'">技術¥'+num(row.tech)+' ／ 物販¥'+num(row.prod)+' ／ '+row.clients+'人</div>';
     if(goalTotal>0){
-      var gcolor = gpct>=100?'#2E7D32':(gpct>=70?'#E69500':'#C2185B');
+      var gcolor = gdone?'#2E7D32':(gpct>=70?'#E69500':'#C2185B');
       html+='<div style="font-size:11px;color:#64748B;margin-bottom:3px">🎯 今月の目標達成：<b style="color:'+gcolor+'">'+gpct+'%</b>（¥'+num(actTotal)+' / ¥'+num(goalTotal)+'）</div>';
       html+='<div style="background:#EEF2F1;border-radius:8px;height:8px;overflow:hidden"><div style="width:'+Math.min(gpct,100)+'%;height:100%;background:'+gcolor+'"></div></div>';
     }
@@ -5615,7 +5621,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "18.1";
+var APP_VERSION = "18.2";
 
 function checkForUpdate(){
   try {
