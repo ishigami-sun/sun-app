@@ -235,7 +235,7 @@
     <button class="tab-btn" onclick="switchTab('attend')">🕐 出勤簿</button>
     <button class="tab-btn" onclick="switchTab('inventory')">📦 在庫</button>
   </nav>
-  <div id="cloudStatus" style="margin-top:8px;padding:6px 10px;border-radius:8px;font-size:11px;text-align:center;background:rgba(255,255,255,0.15);color:#fff;display:none">
+  <div id="cloudStatus" onclick="try{syncFromCloud()}catch(e){}" style="margin-top:8px;padding:8px 10px;border-radius:8px;font-size:11px;text-align:center;background:rgba(255,255,255,0.15);color:#fff;display:none;cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,0.2)">
     <span id="cloudStatusText">🔄 接続中...</span>
   </div>
 </header>
@@ -1251,7 +1251,7 @@ function updateCloudStatus(){
       else if(ago<3600) msg+=' ・ '+Math.floor(ago/60)+'分前に同期';
       else msg+=' ・ '+Math.floor(ago/3600)+'時間前に同期';
     }
-    txt.innerHTML=msg;
+    txt.innerHTML=msg+'　<b style="opacity:0.95">🔄 タップで同期</b>';
   }
 }
 
@@ -5650,7 +5650,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "18.7";
+var APP_VERSION = "18.8";
 
 function checkForUpdate(){
   try {
