@@ -263,6 +263,8 @@
     <div id="visitDateNote" style="font-size:10px;color:#94a3b8;margin-top:5px">前日分などを後から入力する時は日付を変更（売上はこの日に計上されます）</div>
   </div>
 
+  <div id="draftWarn"></div>
+  <div id="inputShortageWarn"></div>
   <div class="section-title">STEP 1　担当者（施術）</div>
   <div class="card"><div class="toggle-group" id="staffGroup"></div></div>
 
@@ -274,6 +276,7 @@
         <input class="form-input" id="customerName" placeholder="例：山田 花子" autocomplete="off" oninput="showNameSuggestions()" onfocus="showNameSuggestions()">
         <div id="nameSuggestions" style="position:absolute;top:100%;left:0;right:0;background:#fff;border-radius:0 0 10px 10px;box-shadow:0 8px 20px rgba(0,0,0,0.12);z-index:50;display:none;max-height:160px;overflow-y:auto;"></div>
       </div>
+      <div id="prevCopyBanner"></div>
     </div>
     <div class="form-group">
       <label class="form-label">客種</label>
@@ -330,6 +333,7 @@
       </div>
     </div>
     <button class="submit-btn" onclick="submitRecord()">✅ 日報を登録する</button>
+    <button onclick="quickDraftRecord()" style="width:100%;margin-top:8px;padding:12px;background:#fff;color:#E65100;border:2px solid #F0A500;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer">⏱ 仮登録（担当と金額だけ・あとで詳細）</button>
     <button onclick="pushAndSync()" style="width:100%;margin-top:10px;padding:13px;background:#fff;color:#2C7A6E;border:2px solid #2C7A6E;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">📤 打ち終わったら更新（みんなの端末に反映）</button>
   </div>
 </div>
@@ -1851,6 +1855,7 @@ function recYMD(r){
 function defaultTaxMode(n){ return /HOT|ホットペッパー/i.test(n||'') ? 'inc' : 'exc'; } // HOT=税込 / その他=税抜（自動判定）
 
 function renderAll(){
+  try{ renderPrevCopyBanner(); renderDraftWarn(); renderInputShortageWarn(); }catch(e){}
   renderStaffButtons(); renderMediaButtons(); renderPaymentButtons(); renderClientType();
   renderTaxMode(); renderMenuList(); renderProductList();
   renderSelectedMenuEdit(); renderSelectedProductEdit();
@@ -1958,8 +1963,137 @@ function kanaNorm(s){
   }
   return out;
 }
+/* ===== 🔁 前回コピー（常連さまの入力を数タップに） ===== */
+function findLastVisit(name){
+  var key=kanaNorm(String(name||'').replace(/\s+/g,''));
+  if(!key) return null;
+  var best=null;
+  for(var i=0;i<state.records.length;i++){
+    var r=state.records[i];
+    if(kanaNorm(String(r.customerName||'').replace(/\s+/g,''))!==key) continue;
+    if(!(r.menus||[]).length) continue;
+    if((r.menus||[]).some(function(m){return String(m.name||'').indexOf('【仮】')===0;})) continue;
+    if(!best || new Date(r.time)>new Date(best.time)) best=r;
+  }
+  return best;
+}
+function rosterNameOf(n){
+  var list=state.staff||[];
+  for(var i=0;i<list.length;i++){ if(typeof sameStaff==='function' && sameStaff(list[i],n)) return list[i]; }
+  return n;
+}
+function renderPrevCopyBanner(){
+  var el=document.getElementById('prevCopyBanner'); if(!el) return;
+  var name=(document.getElementById('customerName')||{}).value||'';
+  var r=findLastVisit(name.trim());
+  if(!r){ el.innerHTML=''; return; }
+  var d=new Date(r.time);
+  var names=(r.menus||[]).map(function(m){return m.name;}).join('、');
+  el.innerHTML='<div style="margin-top:8px;background:#EAF5F3;border:1.5px solid #4DB8B2;border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><div style="flex:1;min-width:150px;font-size:12px;color:#1A4F47;line-height:1.6"><b>🔁 前回来店 '+(d.getMonth()+1)+'/'+d.getDate()+'</b>　'+h(names)+'　¥'+num(r.total||0)+'</div><button onclick="copyLastVisit()" style="padding:9px 14px;background:#2C7A6E;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap">前回の内容をコピー</button></div>';
+}
+function copyLastVisit(){
+  var name=(document.getElementById('customerName')||{}).value||'';
+  var r=findLastVisit(name.trim());
+  if(!r){ showToast('前回の日報が見つかりません'); return; }
+  var menus=JSON.parse(JSON.stringify(r.menus||[]));
+  for(var i=0;i<menus.length;i++){ if(menus[i].menuStaff) menus[i].menuStaff=rosterNameOf(menus[i].menuStaff); }
+  state.selectedMenus=menus;
+  if(r.staff) state.selectedStaff=rosterNameOf(r.staff);
+  if(r.payment) state.selectedPayment=r.payment;
+  if(r.media) state.mediaType=r.media;
+  state.clientType='リピーター';
+  try{ saveLocal(); }catch(e){}
+  renderAll();
+  showToast('🔁 前回の内容をコピーしました。変更があれば直して登録してください');
+}
+
+/* ===== ⏱ 仮登録（担当＋金額だけ10秒で。詳細はあとで日報タブから） ===== */
+function quickDraftRecord(){
+  if(!state.selectedStaff){ showToast('⚠️ まずSTEP1で担当者を選んでください'); return; }
+  var v=window.prompt('レジの税込金額を入力してください（メニュー内訳はあとで日報タブから入力）','');
+  if(v==null) return;
+  var amt=parseInt(String(v).replace(/[^0-9]/g,''),10)||0;
+  if(amt<=0){ showToast('⚠️ 金額が正しくありません'); return; }
+  var entryTime=(state.entryDate&&typeof parseYMD==='function')?parseYMD(state.entryDate):new Date();
+  if(isNaN(entryTime.getTime())) entryTime=new Date();
+  var exc=Math.round(amt/1.1);
+  var record={ id:Date.now(), time:entryTime.toISOString(), staff:state.selectedStaff,
+    customerName:((document.getElementById('customerName')||{}).value||'').trim(),
+    clientType:state.clientType||'リピーター', media:state.mediaType||'', payment:state.selectedPayment||'',
+    taxMode:'inc', paymentFeeRate:0, paymentFeeAmount:0,
+    menus:[{id:0,name:'【仮】詳細あとで入力',price:0,qty:1,inputPrice:amt,taxMode:'inc',extraAmount:0,discountPct:0,basePrice:amt,menuStaff:state.selectedStaff}],
+    products:[], menuAmount:amt, productSell:0, productProfit:0,
+    total:amt, totalExc:exc, taxAmount:amt-exc, clientCount:1 };
+  state.records.push(record);
+  state.entryDate='';
+  try{ if(typeof syncVisitDatePicker==='function') syncVisitDatePicker(); }catch(e){}
+  try{ if(typeof updateEntryDateBanner==='function') updateEntryDateBanner(); }catch(e){}
+  var cn=document.getElementById('customerName'); if(cn) cn.value='';
+  try{ saveLocal(); }catch(e){}
+  if(typeof callCloud==='function'){ try{ callCloud('addRecord',{record:record},function(res){ showToast(res&&res.ok?'⏱ 仮登録しました！あとで日報タブから詳細を入力してください':'⏱ 仮登録を保存（オンライン時に自動送信）'); }); }catch(e){} }
+  renderAll();
+}
+function draftCount(){
+  var n=0;
+  for(var i=0;i<state.records.length;i++){
+    if((state.records[i].menus||[]).some(function(m){return String(m.name||'').indexOf('【仮】')===0;})) n++;
+  }
+  return n;
+}
+function renderDraftWarn(){
+  var el=document.getElementById('draftWarn'); if(!el) return;
+  var n=draftCount();
+  el.innerHTML=n?'<div style="background:#FFF3E0;border:1.5px solid #F0A500;border-radius:10px;padding:9px 12px;font-size:12px;font-weight:700;color:#E65100;margin-bottom:10px">⏳ 仮登録が'+n+'件あります。日報タブで開いて、【仮】の行を本来のメニューに置き換えてください</div>':'';
+}
+
+/* ===== 🔔 締めチェック連動の入力漏れ警告（入力タブ上部） ===== */
+function renderInputShortageWarn(){
+  var el=document.getElementById('inputShortageWarn'); if(!el) return;
+  try{
+    var ymd=visitTodayYMD();
+    var rc=(state.regClose||{})[ymd];
+    if(!rc||!(rc.clients>0)){ el.innerHTML=''; return; }
+    var cnt=0;
+    for(var i=0;i<state.records.length;i++){ if(recYMD(state.records[i])===ymd) cnt++; }
+    var short=rc.clients-cnt;
+    el.innerHTML=(short>0)?'<div style="background:#FDECEA;border:1.5px solid #E05555;border-radius:10px;padding:9px 12px;font-size:12px;font-weight:700;color:#C62828;margin-bottom:10px">⚠️ 締めチェック：レジ客数'+rc.clients+'名に対して日報'+cnt+'件。あと'+short+'件の入力漏れがある可能性があります</div>':'';
+  }catch(e){ el.innerHTML=''; }
+}
+
+/* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
+var WHATS_NEW_ITEMS=[
+  '🔁 顧客名を選ぶと「前回の内容をコピー」ボタンが出ます。常連さまの入力が数タップで完了',
+  '⏱ 「仮登録」ボタン新設。忙しい時は担当と金額だけ10秒で登録→あとで日報タブから詳細入力',
+  '💸 割引ボタンを実際に使う「10・20・30・40・50%」に変更',
+  '📊 メニュー一覧が「よく使う順」に自動で並ぶようになりました',
+  '🔔 締めチェックで客数が足りない時、入力タブにも警告が出ます',
+  '🔎 検索がひらがな・カタカナどちらでもヒットするようになりました',
+  '📣 この「アップデートのお知らせ」も新機能。更新のたびに変更点をお伝えします'
+];
+function showWhatsNew(){
+  try{
+    if(state.lastSeenVersion===APP_VERSION) return;
+    var ov=document.createElement('div');
+    ov.id='whatsNewOverlay';
+    ov.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    var lis='';
+    for(var i=0;i<WHATS_NEW_ITEMS.length;i++) lis+='<li style="margin-bottom:8px;line-height:1.6">'+WHATS_NEW_ITEMS[i]+'</li>';
+    ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:420px;width:100%;max-height:80vh;overflow-y:auto;padding:20px 18px;box-shadow:0 10px 40px rgba(0,0,0,0.3)">'
+      +'<div style="font-size:17px;font-weight:900;color:#1A4F47">🎉 アプリが新しくなりました</div>'
+      +'<div style="font-size:11px;color:#94a3b8;margin:2px 0 10px">バージョン '+APP_VERSION+'</div>'
+      +'<ul style="font-size:12.5px;color:#374151;padding-left:18px;margin:0 0 14px">'+lis+'</ul>'
+      +'<button onclick="closeWhatsNew()" style="width:100%;padding:13px;background:#2C7A6E;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">OK！</button></div>';
+    document.body.appendChild(ov);
+  }catch(e){}
+}
+function closeWhatsNew(){
+  state.lastSeenVersion=APP_VERSION;
+  try{ saveLocal(); }catch(e){}
+  var ov=document.getElementById('whatsNewOverlay'); if(ov) ov.remove();
+}
 function showNameSuggestions(){
   var val=document.getElementById('customerName').value.trim();
+  try{ renderPrevCopyBanner(); }catch(e){}
   var history=getCustomerHistory();
   var filtered=[];
   var nv=kanaNorm(val);
@@ -1986,9 +2120,16 @@ function selectCustomerName(name){
 function renderMenuList(){
   var el=document.getElementById('menuList');
   if(!state.menus.length){ el.innerHTML='<div class="empty"><div class="empty-text">管理タブからメニューを追加</div></div>'; return; }
+  // よく使う順に表示（直近90日の使用回数。マスタの並びは変更しない）
+  var _useCnt={};
+  try{
+    var _since=Date.now()-90*24*3600*1000;
+    for(var _ri=0;_ri<state.records.length;_ri++){ var _rr=state.records[_ri]; var _tt=new Date(_rr.time).getTime(); if(!(_tt>=_since)) continue; (_rr.menus||[]).forEach(function(_mm){ _useCnt[_mm.name]=(_useCnt[_mm.name]||0)+1; }); }
+  }catch(e){}
+  var menusView=state.menus.slice().sort(function(a,b){ return (_useCnt[b.name]||0)-(_useCnt[a.name]||0); });
   var html='';
-  for(var i=0;i<state.menus.length;i++){
-    var m=state.menus[i];
+  for(var i=0;i<menusView.length;i++){
+    var m=menusView[i];
     var dp=m.price;
     var sel=findById(state.selectedMenus,m.id);
     var hasPrice=m.price>0;
@@ -2055,7 +2196,7 @@ function renderSelectedMenuEdit(){
     if(m.extraAmount>0) html+='<button class="price-up-btn reset" onclick="resetExtra('+i+')">リセット</button>';
     html+='</div>';
     html+='<div class="discount-row"><span style="font-size:11px;color:#64748B;align-self:center">割引：</span>';
-    var pcts=[5,10,15,20];
+    var pcts=[10,20,30,40,50];
     for(var di=0;di<pcts.length;di++){
       var pct=pcts[di];
       var isA=m.discountPct===pct;
@@ -2064,7 +2205,7 @@ function renderSelectedMenuEdit(){
     if(m.discountPct>0) html+='<button class="discount-btn" style="border-color:#E05555;color:#E05555;background:#FFF5F5" onclick="setDiscount('+i+',0)">割引なし</button>';
     html+='</div>';
     // 自由％入力
-    var isCustomPct = m.discountPct>0 && [5,10,15,20].indexOf(m.discountPct)<0;
+    var isCustomPct = m.discountPct>0 && [10,20,30,40,50].indexOf(m.discountPct)<0;
     html+='<div style="display:flex;gap:6px;align-items:center;margin-top:6px;padding:8px;background:#FCE4EC;border-radius:8px;border-left:3px solid #C2185B">';
     html+='<span style="font-size:11px;color:#64748B;font-weight:600">自由割引：</span>';
     html+='<input type="number" min="0" max="100" value="'+(isCustomPct?m.discountPct:'')+'" oninput="setCustomDiscount('+i+',this.value)" style="width:70px;padding:6px 10px;border:1.5px solid #C2185B;border-radius:6px;font-size:13px;font-weight:600;color:#C2185B;background:#fff;text-align:center" placeholder="0">';
@@ -2424,7 +2565,7 @@ function renderSelectedProductEdit(){
     if(p.cost>0) html+='<span class="prod-profit-badge">利益¥'+num(prodLineProfit(p))+'</span>';
     html+='</div>';
     html+='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px"><span style="font-size:11px;color:#64748B;font-weight:700;align-self:center">割引：</span>';
-    var ppcts=[5,10,15,20];
+    var ppcts=[10,20,30,40,50];
     for(var pdi=0;pdi<ppcts.length;pdi++){ var ppct=ppcts[pdi]; var pa=(p.discountPct===ppct); html+='<button onclick="setProductDiscount('+i+','+ppct+')" style="padding:5px 11px;border-radius:18px;border:1.5px solid '+(pa?'#C2185B':'#C8E0DC')+';background:'+(pa?'#C2185B':'#fff')+';color:'+(pa?'#fff':'#64748B')+';font-size:11px;font-weight:'+(pa?'700':'500')+';cursor:pointer;margin:0 2px 4px 0">'+ppct+'%OFF</button>'; }
     if(p.discountPct>0) html+='<button onclick="setProductDiscount('+i+',0)" style="padding:5px 11px;border-radius:18px;border:1.5px solid #E05555;background:#FFF5F5;color:#E05555;font-size:11px;font-weight:600;cursor:pointer;margin:0 2px 4px 0">割引なし</button>';
     html+='</div>';
@@ -3021,6 +3162,7 @@ function saveRegClose(){
   state.regClose[ymd]={ amount:parseInt(a&&a.value,10)||0, clients:parseInt(c&&c.value,10)||0 };
   try{ saveLocal(); }catch(e){}
   renderCloseCheck();
+  try{ renderInputShortageWarn(); }catch(e){}
 }
 
 // バックアップ（ファイルに保存）
@@ -5970,7 +6112,8 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "19.0";
+var APP_VERSION = "19.1";
+try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
   try {
