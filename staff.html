@@ -1198,8 +1198,8 @@ function cloudCall(action, payload, callback){
     if(callback) callback({ok:false, error:'offline'});
     return;
   }
-  var data = Object.assign({key: CLOUD_KEY, action: action}, payload);
-  fetch(CLOUD_URL, {
+  var data = Object.assign({key: (state.cloudKey||CLOUD_KEY), action: action}, payload);
+  fetch((state.cloudUrl||CLOUD_URL), {
     method:'POST',
     body: JSON.stringify(data),
     headers:{'Content-Type':'text/plain;charset=utf-8'},
@@ -1437,6 +1437,8 @@ function syncFromCloud(silent){
 function saveCloudConfig(){
   state.cloudUrl = document.getElementById('cloudUrl').value.trim();
   state.cloudKey = document.getElementById('cloudKey').value.trim();
+  state.cloudUrlCustom = !!state.cloudUrl;
+  state.cloudKeyCustom = !!state.cloudKey;
   saveLocal();
   document.getElementById('cloudConfigStatus').textContent = '✅ 設定を保存しました';
   updateCloudStatus();
@@ -1660,8 +1662,9 @@ function migrateStaffRoles(){
 function init(){
   load();
   if(typeof fixProductIds === "function" && fixProductIds()){ try{save();}catch(e){} }
-  state.cloudUrl = CLOUD_URL;
-  state.cloudKey = CLOUD_KEY;
+  // 管理タブで入力したキー/URLを最優先（キー再発行後に埋め込み値で上書きしないため）
+  if(!state.cloudUrlCustom || !state.cloudUrl) state.cloudUrl = CLOUD_URL;
+  if(!state.cloudKeyCustom || !state.cloudKey) state.cloudKey = CLOUD_KEY;
   // セッションチェック
   /* PIN無効 */
 
@@ -1955,6 +1958,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '🔑 クラウド接続キーを管理タブで変更できるようになりました（開き直しても保持されます）。同期失敗が出ている端末は管理タブで新しいキーを入力してください',
   '🔁 顧客名を選ぶと「前回の内容をコピー」ボタンが出ます。常連さまの入力が数タップで完了',
   '⏱ 「仮登録」ボタン新設。忙しい時は担当と金額だけ10秒で登録→あとで日報タブから詳細入力',
   '💸 割引ボタンを実際に使う「10・20・30・40・50%」に変更',
@@ -5805,7 +5809,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "19.1";
+var APP_VERSION = "19.2";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
