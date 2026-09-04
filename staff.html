@@ -1839,11 +1839,24 @@ function getCustomerHistory(){
   arr.sort(function(a,b){ return new Date(b[1].last)-new Date(a[1].last); });
   return arr;
 }
+/* かな正規化（検索用）：ひらがな→カタカナ、半角カナ→全角、全角英数→半角、小文字化。
+   カタカナ/ひらがな・全半角のどちらで打っても同じものがヒットするようにする */
+function kanaNorm(s){
+  s=String(s||'').toLowerCase();
+  try{ s=s.normalize('NFKC'); }catch(e){}
+  var out='';
+  for(var i=0;i<s.length;i++){
+    var c=s.charCodeAt(i);
+    out+=(c>=0x3041&&c<=0x3096)?String.fromCharCode(c+0x60):s.charAt(i);
+  }
+  return out;
+}
 function showNameSuggestions(){
   var val=document.getElementById('customerName').value.trim();
   var history=getCustomerHistory();
   var filtered=[];
-  for(var i=0;i<history.length;i++) if(!val||history[i][0].indexOf(val)>=0) filtered.push(history[i]);
+  var nv=kanaNorm(val);
+  for(var i=0;i<history.length;i++) if(!val||kanaNorm(history[i][0]).indexOf(nv)>=0) filtered.push(history[i]);
   var box=document.getElementById('nameSuggestions');
   if(!filtered.length){ box.style.display='none'; return; }
   var html='';
@@ -4244,7 +4257,7 @@ function renderInventory(){
   invEnsure();
   var el=document.getElementById('invBody'); if(!el) return;
   var sb=document.getElementById('invSearch'); if(sb && sb.value!==(state.invSearch||'')) sb.value=(state.invSearch||'');
-  var query=(state.invSearch||'').trim().toLowerCase();
+  var query=kanaNorm((state.invSearch||'').trim());
   var thead='<thead><tr style="background:#2C7A6E;color:#fff"><th style="padding:8px;text-align:left">商品名</th><th style="padding:8px">分類</th><th style="padding:8px;text-align:right">仕入値</th><th style="padding:8px;text-align:center">在庫数</th><th style="padding:8px;text-align:right">在庫金額</th><th style="padding:8px"></th></tr></thead>';
   var s='';
   // 上部フォルダ・クイックナビ（タップでそのフォルダへジャンプ）
@@ -4256,7 +4269,7 @@ function renderInventory(){
   var matchedAny=false;
   invCats().forEach(function(cat, ci){
     var items=invCatItems(cat);
-    var shown = query ? items.filter(function(it){ return String(it.name||'').toLowerCase().indexOf(query)>=0; }) : items;
+    var shown = query ? items.filter(function(it){ return kanaNorm(it.name||'').indexOf(query)>=0; }) : items;
     if(query && shown.length===0) return; // 検索中は該当なしフォルダを隠す
     matchedAny=true;
     var collapsed = query ? false : !!state.invCollapsed[cat]; // 検索中は展開表示
@@ -5650,7 +5663,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "18.9";
+var APP_VERSION = "19.0";
 
 function checkForUpdate(){
   try {
