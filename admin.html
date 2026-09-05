@@ -1087,8 +1087,8 @@ function toggleAcademy(n){var b=document.getElementById('acaBody_'+n);var a=docu
 var TAX_RATE = 0.1;
 
 
-var CLOUD_URL = "https://script.google.com/macros/s/AKfycbytWfE31hbXzNNdPbx2NkwgIMudBCslNWJIP7LIfcvMt8hfg-FvB3VUZD73VHsKFHYi/exec";
-var CLOUD_KEY = "sun-secret-2026-ishigami-abc";
+var CLOUD_URL = "https://script.google.com/macros/s/AKfycbxTy4rrPDjLwrP7JH1HoctOOqltzrC5WvYU6VRKmpaab2YBrWtRTckUBl0Ac4GM2s_SgA/exec";
+var CLOUD_KEY = ""; // セキュリティ対応：キーはコードに置かない。各端末の管理タブで入力（localStorageに保存）
 var loginState = { selectedStaff:'', pin:'', setupPin:'', setupPhase:1, firstPin:'' };
 
 function showLogin(){
@@ -1347,7 +1347,7 @@ var state = {
   fixedCosts:{},
   expenses:{}, staffTypes:{}, payroll:{},
   // クラウド設定
-  cloudUrl:'https://script.google.com/macros/s/AKfycbytWfE31hbXzNNdPbx2NkwgIMudBCslNWJIP7LIfcvMt8hfg-FvB3VUZD73VHsKFHYi/exec', cloudKey:'sun-secret-2026-ishigami-abc', lastSync:0,
+  cloudUrl:'https://script.google.com/macros/s/AKfycbxTy4rrPDjLwrP7JH1HoctOOqltzrC5WvYU6VRKmpaab2YBrWtRTckUBl0Ac4GM2s_SgA/exec', cloudKey:'', lastSync:0,
 };
 
 // クラウド同期のキュー（オフライン対応）
@@ -1360,10 +1360,10 @@ function updateCloudStatus(){
   var el=document.getElementById('cloudStatus');
   var txt=document.getElementById('cloudStatusText');
   if(!el||!txt) return;
-  if(!state.cloudUrl){
+  if(!state.cloudUrl || !state.cloudKey){
     el.style.display='block';
     el.style.background='rgba(244,67,54,0.25)';
-    txt.innerHTML='⚠️ クラウド未設定 - 管理タブから設定してください';
+    txt.innerHTML='🔑 接続キー未設定 — 管理タブ「クラウド設定」のSECRET_KEY欄にキーを入力してください';
   } else if(!isOnline){
     el.style.display='block';
     el.style.background='rgba(255,152,0,0.25)';
@@ -2065,7 +2065,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
-  '🔑 クラウド接続キーを管理タブで変更できるようになりました（開き直しても保持）。同期失敗が出ている端末は管理タブでキーを設定',
+  '🔒 セキュリティ対応完了：接続先を新デプロイに切替・公開コードから鍵を削除。各端末で管理タブ→クラウド設定に新しいSECRET_KEYを1回入力してください',
   '🔁 前回コピー／⏱ 仮登録／💸 割引10〜50%／📊 よく使う順ソート／🔎 かな検索（スタッフ向け新機能）',
   '🔔 締めチェックで客数が足りない時、入力タブにも警告が出ます',
   '📣 お知らせはスタッフ用と管理者用で内容を分けています（スタッフには使い方のみ表示）'
@@ -6112,7 +6112,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "19.3";
+var APP_VERSION = "19.4";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
