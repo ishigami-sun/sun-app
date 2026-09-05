@@ -5510,6 +5510,19 @@ function showToast(msg){
 }
 
 init();
+// URLの #k=… でアクセスすると接続キーを自動保存（管理者が各端末で1回開くだけ。キーは履歴に残らないよう即消去）
+try{
+  if(location.hash && location.hash.indexOf('#k=')===0){
+    var _hk=decodeURIComponent(location.hash.slice(3)).trim();
+    if(_hk){ state.cloudKey=_hk; state.cloudKeyCustom=true; try{ saveLocal(); }catch(e){}
+      try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){ location.hash=''; }
+      try{ updateCloudStatus(); }catch(e){}
+      try{ showToast('🔑 接続キーを設定しました'); }catch(e){}
+      try{ setTimeout(function(){ syncFromCloud(); },600); }catch(e){}
+    }
+  }
+}catch(e){}
+
 try{ if(typeof syncVisitDatePicker==='function') syncVisitDatePicker(); }catch(e){}
 try{ if(typeof verifySalesStartupCheck==='function') verifySalesStartupCheck(); }catch(e){}
 
@@ -6112,7 +6125,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "19.5";
+var APP_VERSION = "19.6";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
