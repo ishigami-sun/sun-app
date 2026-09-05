@@ -431,7 +431,7 @@
     <div class="section-title">🎯 月間目標（確定）</div>
     <div id="goalsFixedContent"></div>
   </div>
-  <div class="page" id="page-admin"><div class="card" style="margin-bottom:14px"><div class="section-title" style="margin:0 0 8px">☁️ クラウド同期</div><button class="add-btn" style="width:100%;background:#3DA892" onclick="syncFromCloud()">🔄 今すぐ同期する</button><div style="font-size:11px;color:var(--text-light);margin-top:6px;text-align:center">他の端末で入力した日報を最新にします</div></div><div class="card" style="margin-bottom:14px"><button class="add-btn" style="width:100%;background:#E05555" onclick="logoutSession()">🔒 ログアウト</button><div style="font-size:11px;color:var(--text-light);margin-top:6px;text-align:center" id="sessionInfo"></div></div>
+  <div class="page" id="page-admin"><div class="card" style="margin-bottom:14px"><div class="section-title" style="margin:0 0 8px">☁️ クラウド同期</div><button class="add-btn" style="width:100%;background:#3DA892" onclick="syncFromCloud()">🔄 今すぐ同期する</button><div style="font-size:11px;color:var(--text-light);margin-top:6px;text-align:center">他の端末で入力した日報を最新にします</div></div><div class="card" style="margin-bottom:14px"><div class="section-title" style="margin:0 0 8px">🔑 接続キー（SECRET_KEY）</div><div style="font-size:11px;color:var(--text-light);margin-bottom:8px">クラウド同期に必要なキーです。店長から共有されたキーを貼り付けて保存してください（この端末に保存されるので入力は1回だけ）</div><input class="form-input" id="cloudKey" type="password" placeholder="SUN-… のキーを貼り付け" style="margin-bottom:8px"><button class="add-btn" style="width:100%" onclick="saveCloudKeyOnly()">💾 保存して同期</button><div id="cloudConfigStatus" style="font-size:11px;color:var(--text-light);margin-top:6px"></div></div><div class="card" style="margin-bottom:14px"><button class="add-btn" style="width:100%;background:#E05555" onclick="logoutSession()">🔒 ログアウト</button><div style="font-size:11px;color:var(--text-light);margin-top:6px;text-align:center" id="sessionInfo"></div></div>
   <div class="section-title">スタッフ管理</div>
   <div class="card">
     <div class="add-form-row"><div class="form-group"><label class="form-label">スタッフ名</label><input class="form-input" id="newStaff" placeholder="例：田中"></div><button class="add-btn" onclick="addStaff()">追加</button></div>
@@ -1434,6 +1434,16 @@ function syncFromCloud(silent){
   });
 }
 
+function saveCloudKeyOnly(){
+  var el=document.getElementById('cloudKey'); if(!el) return;
+  var v=el.value.trim();
+  if(!v){ showToast('⚠️ キーを入力してください'); return; }
+  state.cloudKey=v; state.cloudKeyCustom=true;
+  try{ saveLocal(); }catch(e){}
+  var st=document.getElementById('cloudConfigStatus'); if(st) st.textContent='✅ 保存しました。同期しています…';
+  updateCloudStatus();
+  setTimeout(function(){ syncFromCloud(); },300);
+}
 function saveCloudConfig(){
   state.cloudUrl = document.getElementById('cloudUrl').value.trim();
   state.cloudKey = document.getElementById('cloudKey').value.trim();
@@ -1958,6 +1968,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '🔑 管理タブに「接続キー」欄が付きました。同期エラーが出ている場合は、店長から共有されたキーを貼って保存してください（1回だけ）',
   '🔁 顧客名を選ぶと「前回の内容をコピー」ボタンが出ます。常連さまの入力が数タップで完了',
   '⏱ 「仮登録」ボタン新設。忙しい時は担当と金額だけ10秒で登録→あとで日報タブから詳細入力',
   '💸 割引ボタンが「10・20・30・40・50%」になりました',
@@ -5806,7 +5817,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "19.4";
+var APP_VERSION = "19.5";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
