@@ -340,6 +340,13 @@
 <div class="page" id="page-records">
   <button onclick="syncFromCloud()" style="width:100%;padding:11px;margin-bottom:10px;background:#3DA892;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">🔄 同期して最新にする</button>
   <button onclick="pushDeletionsToCloud()" style="width:100%;padding:9px;margin-bottom:10px;background:#fff;color:#E05555;border:1.5px solid #E05555;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer">🧹 この端末で削除した日報を全端末に反映</button>
+  <!-- 🔍 打ち込んだ顧客をすぐ確認（v19.8） -->
+  <div style="background:#fff;border:2px solid #2C7A6E;border-radius:12px;padding:12px;margin-bottom:12px">
+    <div style="font-size:14px;font-weight:800;color:#1A4F47;margin-bottom:8px">🔍 打ち込んだお客様をすぐ確認</div>
+    <input id="custSearchBox" type="search" oninput="custSearchInput(this.value)" placeholder="お客様の名前でさがす（ひらがなでもOK）" style="width:100%;box-sizing:border-box;padding:12px;border:1.5px solid #C8E0DC;border-radius:10px;font-size:16px;color:#1A4F47;background:#F8FAFA">
+    <div id="custSearchResult"></div>
+    <div id="enteredTodayChips" style="margin-top:10px"></div>
+  </div>
   <div id="salesTrend" style="margin-bottom:10px"></div>
   <div class="section-title">TODAY</div>
   <div id="todayStats" class="dash-grid"></div>
@@ -347,9 +354,6 @@
 
   <div class="section-title">🏆 本日のスタッフ別 売上速報</div>
   <div id="speedReport"></div>
-
-  <div class="section-title">📋 みんなの報告</div>
-  <div id="dailyReports" style="margin-bottom:10px"></div>
 
   <div class="section-title">📋 入力した日報を見る</div>
 
@@ -1958,11 +1962,9 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
-  '🔁 顧客名を選ぶと「前回の内容をコピー」ボタンが出ます。常連さまの入力が数タップで完了',
-  '⏱ 「仮登録」ボタン新設。忙しい時は担当と金額だけ10秒で登録→あとで日報タブから詳細入力',
-  '💸 割引ボタンが「10・20・30・40・50%」になりました',
-  '📊 メニューがよく使う順に並ぶようになりました',
-  '🔎 検索はひらがな・カタカナどちらでもOKになりました'
+  '🔍 日報タブのいちばん上に「お客様すぐ検索」が付きました。名前を打つと（ひらがなでもOK）その方の日報がその場に出ます。下までスクロールして探さなくてOK！',
+  '✅ 「今日入力ずみ」のお客様の名前も日報タブの上に並びます。打ったかどうか一目でわかり、名前をタップするとその日報にとべます',
+  '📋 日報タブの「みんなの報告」はなくなりました。報告はいままで通り「報告」タブで見られます'
 ];
 function showWhatsNew(){
   try{
@@ -5819,7 +5821,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "19.7";
+var APP_VERSION = "19.8";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
@@ -6073,7 +6075,81 @@ function getCustListPeriodLabel(){
   return '📅 今日';
 }
 
+/* ===== 🔍 顧客クイック検索＆今日入力ずみ一覧（v19.8） ===== */
+var custSearchQ = '';
+function custSearchInput(v){ custSearchQ = String(v||''); renderCustSearch(); }
+function custSearchClear(){
+  custSearchQ = '';
+  var b = document.getElementById('custSearchBox'); if(b) b.value = '';
+  renderCustSearch();
+}
+function renderCustSearch(){
+  var el = document.getElementById('custSearchResult'); if(!el) return;
+  var q = custSearchQ.trim();
+  if(!q){ el.innerHTML = ''; return; }
+  var qn = kanaNorm(q);
+  var hits = [];
+  for(var i=0;i<state.records.length;i++){
+    var r = state.records[i];
+    if(kanaNorm(String(r.customerName||'')).indexOf(qn) >= 0) hits.push(r);
+  }
+  hits.sort(function(a,b){ return new Date(b.time)-new Date(a.time); });
+  var total = hits.length, MAX = 30;
+  var s = '<div style="margin-top:8px;font-size:12px;color:#64748B;font-weight:700;display:flex;justify-content:space-between;align-items:center"><span>🔍 「'+h(q)+'」の日報：'+total+'件（全期間から検索）</span><button onclick="custSearchClear()" style="padding:4px 10px;border:1px solid #C8E0DC;background:#fff;color:#64748B;border-radius:8px;font-size:11px;cursor:pointer">✕ けす</button></div>';
+  if(!total){
+    s += '<div style="margin-top:6px;padding:10px;background:#FFF3E0;border-radius:8px;font-size:13px;color:#E65100;font-weight:700">この名前の日報はまだ入力されていません</div>';
+    el.innerHTML = s; return;
+  }
+  for(var i=0;i<Math.min(total,MAX);i++){
+    var r = hits[i], d = new Date(r.time);
+    var wd = ['日','月','火','水','木','金','土'][d.getDay()];
+    var ds = (d.getFullYear()!==(new Date()).getFullYear() ? d.getFullYear()+'年' : '') + (d.getMonth()+1)+'/'+d.getDate()+'('+wd+')';
+    s += '<div onclick="custSearchJump('+r.id+')" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 10px;margin-top:6px;background:#F8FAFA;border:1px solid #C8E0DC;border-radius:9px;cursor:pointer">'
+      +'<div style="min-width:0"><b style="font-size:14px;color:#1A4F47">'+h(r.customerName||'(名前なし)')+' 様</b>'
+      +'<span style="font-size:12px;color:#64748B;margin-left:8px">'+ds+'　'+h(r.staff||'—')+'</span></div>'
+      +'<div style="white-space:nowrap"><b style="font-size:13px;color:#2C7A6E">¥'+num(r.total)+'</b><span style="font-size:11px;color:#94a3b8;margin-left:6px">タップで開く ▶</span></div></div>';
+  }
+  if(total>MAX) s += '<div style="margin-top:6px;font-size:11px;color:#94a3b8;text-align:center">新しい順に'+MAX+'件まで表示しています</div>';
+  el.innerHTML = s;
+}
+function custSearchJump(id){
+  var r = null;
+  for(var i=0;i<state.records.length;i++){ if(String(state.records[i].id)===String(id)){ r = state.records[i]; break; } }
+  if(!r) return;
+  state.custListMonth = 'date:'+recYMD(r);
+  state.todayStaffFilter = '全員';
+  try{ saveLocal(); }catch(e){}
+  if(typeof renderCustomerList==='function') renderCustomerList();
+  setTimeout(function(){
+    var el = document.getElementById('rec'+r.id);
+    if(el){
+      el.scrollIntoView({block:'center'});
+      var old = el.style.boxShadow;
+      el.style.boxShadow = '0 0 0 3px #F0A500';
+      setTimeout(function(){ el.style.boxShadow = old || ''; }, 1800);
+    }
+  }, 150);
+}
+function renderEnteredTodayChips(){
+  var el = document.getElementById('enteredTodayChips'); if(!el) return;
+  var n = new Date();
+  var todayYMD = n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
+  var hits = [];
+  for(var i=0;i<state.records.length;i++){ if(recYMD(state.records[i])===todayYMD) hits.push(state.records[i]); }
+  hits.sort(function(a,b){ return new Date(b.time)-new Date(a.time); });
+  if(!hits.length){ el.innerHTML = '<div style="font-size:12px;color:#94a3b8">✅ 今日の入力はまだありません</div>'; return; }
+  var s = '<div style="font-size:12px;color:#1A4F47;font-weight:800;margin-bottom:6px">✅ 今日入力ずみ '+hits.length+'件（名前タップでその日報へ）</div><div style="display:flex;gap:6px;flex-wrap:wrap">';
+  for(var i=0;i<hits.length;i++){
+    var r = hits[i], d = new Date(r.time);
+    var tm = d.getHours()+':'+(d.getMinutes()<10?'0':'')+d.getMinutes();
+    s += '<button onclick="custSearchJump('+r.id+')" style="padding:6px 11px;border:1.5px solid #2C7A6E;background:#EAF5F3;color:#1A4F47;border-radius:16px;font-size:12px;font-weight:700;cursor:pointer">'+h(r.customerName||'(名前なし)')+'<span style="color:#64748B;font-weight:600;margin-left:4px">'+tm+'</span></button>';
+  }
+  s += '</div>';
+  el.innerHTML = s;
+}
+
 function renderCustomerList(){
+  try{ renderEnteredTodayChips(); renderCustSearch(); }catch(e){}
   // 「あとから日報を入れる」の日付欄は既定で今日を入れておく（iOSで空のまま押せてしまう問題を防ぐ）
   try{ var _dp=document.getElementById('custListDatePicker'); if(_dp && !_dp.value){ var _n=new Date(); _dp.value=_n.getFullYear()+'-'+String(_n.getMonth()+1).padStart(2,'0')+'-'+String(_n.getDate()).padStart(2,'0'); } }catch(e){}
   // 月選択を更新
@@ -6196,7 +6272,7 @@ function renderCustomerList(){
       pnames += h(pp.name)+'×'+pp.qty+' ';
     }
 
-    chtml += '<div class="customer-chip" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">';
+    chtml += '<div class="customer-chip" id="rec'+r.id+'" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">';
     chtml += '<div style="flex:1;min-width:0">';
     chtml += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">'+staffPill+'<span style="font-size:12px;color:#64748B;font-weight:700">🕐 '+ts+'</span></div>';
     if(r.customerName) chtml += '<div style="font-size:15px;font-weight:700;color:#1A4F47">'+h(r.customerName)+' 様</div>';
