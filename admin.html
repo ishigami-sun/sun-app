@@ -1528,11 +1528,20 @@ function updateCloudStatus(){
 // 再送対象の更新系アクション（読み取り系 getAll 等は再送しない）
 function _isMutation(action){ return action==='addRecord'||action==='deleteRecord'||action==='saveMasters'||action==='bulkImport'; }
 // 送信失敗を再送キューへ（上限付き。恒久失敗の無限リトライ／サーバー連打を防ぐ）
+function _queueAdd(action, payload, tries){
+  // マスタ送信(saveMasters)は毎回の同期で送り直すため、再送キューには積まない
+  // （全マスタを含む大きな payload が積み上がり、端末の保存容量を食い潰していた）
+  if(action!=='addRecord' && action!=='deleteRecord') return false;
+  var id = payload && ((payload.record&&payload.record.id!=null)?payload.record.id:(payload.id!=null?payload.id:null));
+  if(id!=null){ syncQueue=(syncQueue||[]).filter(function(it){ var p=it&&it.payload; var iid=p&&((p.record&&p.record.id!=null)?p.record.id:(p.id!=null?p.id:null)); return !(it.action===action && String(iid)===String(id)); }); }
+  syncQueue.push({action:action, payload:payload, _tries:tries||0});
+  if(syncQueue.length>200) syncQueue=syncQueue.slice(-200);
+  return true;
+}
 function _enqueueRetry(action, payload, tries){
   var t=(tries||0)+1;
   if(t>6){ try{ if(_isMutation(action)) showToast('⚠️ クラウド送信に繰り返し失敗しました。通信環境をご確認ください'); }catch(e){} return; }
-  syncQueue.push({action:action, payload:payload, _tries:t});
-  saveLocal();
+  if(_queueAdd(action, payload, t)) saveLocal();
 }
 // クラウドAPI呼び出し
 function callCloud(action, payload, callback, _tries){
@@ -1542,9 +1551,9 @@ function callCloud(action, payload, callback, _tries){
     return;
   }
   if(!isOnline){
-    syncQueue.push({action:action, payload:payload, _tries:_tries});
-    saveLocal();
-    if(callback) callback({ok:false, error:'offline', queued:true});
+    var _q=_queueAdd(action, payload, _tries);
+    if(_q) saveLocal();
+    if(callback) callback({ok:false, error:'offline', queued:_q});
     return;
   }
   var data = Object.assign({key:state.cloudKey, action:action}, payload);
@@ -1558,7 +1567,8 @@ function callCloud(action, payload, callback, _tries){
     .then(function(res){
       if(res && res.ok===false && _isMutation(action)){
         // サーバーがアプリレベルで失敗を返した → 更新系は再送（上限付き）。黙って失わない
-        _enqueueRetry(action, payload, _tries);
+        // ただし合言葉違いは再送しても通らない（日報は state.records に残り、設定後の同期で送られる）
+        if(!/unauthorized|forbidden/i.test(String(res.error||''))) _enqueueRetry(action, payload, _tries);
         if(callback) callback(res);
         return;
       }
@@ -1767,6 +1777,7 @@ function pushAndSync(cb, silent){
       var merged=cloud.filter(function(c){ return !delSet[String(c.id)]; });
       var have={}; for(var i=0;i<merged.length;i++) have[String(merged[i].id)]=true;
       for(var i=0;i<toPush.length;i++){ if(!have[String(toPush[i].id)]) merged.push(toPush[i]); }
+      if(LOCAL_RECORD_DAYS>0){ var _cut2=Date.now()-LOCAL_RECORD_DAYS*86400000, _keep={}; for(var _k=0;_k<toPush.length;_k++) _keep[String(toPush[_k].id)]=1; merged=merged.filter(function(r){ var t=new Date(r&&r.time).getTime(); return !(t>0 && t<_cut2 && !_keep[String(r.id)]); }); }
       state.records=merged;
       try{ saveLocal(); }catch(e){}
       if(typeof renderAll==='function') renderAll();
@@ -1807,6 +1818,7 @@ function syncFromCloud(silent, cb){
       var _localOnly = [];
       for(var _li=0;_li<(state.records||[]).length;_li++){ var _lr=state.records[_li]; if(_lr && !_cloudIds[String(_lr.id)] && !deletedSet[_lr.id] && _pendingIds[String(_lr.id)]) _localOnly.push(_lr); }
       state.records = _cloudRecs.concat(_localOnly);
+      if(LOCAL_RECORD_DAYS>0){ var _cut=Date.now()-LOCAL_RECORD_DAYS*86400000; state.records=state.records.filter(function(r){ var t=new Date(r&&r.time).getTime(); return !(t>0 && t<_cut && _cloudIds[String(r.id)]); }); }
       // マスタも同期（ローカルが多い場合は上書きしない）
       if(res.masters){
         // 先に削除履歴(tombstone)を統合し、以降のマージで削除済みを除外・復活させない
@@ -1880,7 +1892,38 @@ function migrateToCloud(){
 
 // ローカル保存（即時）
 var _quotaWarned=false;
-function saveLocal(){try{ if(state.deletedIds && state.deletedIds.length>2000){ state.deletedIds=state.deletedIds.slice(-1000); } state._syncQueue=syncQueue; /* 未送信キューも一緒に永続化（リロードで消えないように） */ localStorage.setItem('sun_cloud_admin',JSON.stringify(state));}catch(e){ if(e && (e.name==='QuotaExceededError'||/quota/i.test(String(e&&e.message||e))) && !_quotaWarned){ _quotaWarned=true; try{ showToast('⚠️ 端末の保存容量がいっぱいです。オンライン時に「同期」してから、不要な過去データの整理をご検討ください'); }catch(x){} } } _costCache={};}
+var LOCAL_RECORD_DAYS = 0; // ローカルに保持する日報の日数（0=全件）。クラウドが正本なので端末には直近分だけあればよい
+function _shrinkForQuota(level){
+  // 容量超過時の自動回復。level1: 再送キューの掃除 / level2: 古い日報を端末から外す（クラウドには残る）
+  try{
+    if(level===1){
+      var before=(syncQueue||[]).length;
+      syncQueue=(syncQueue||[]).filter(function(it){ return it && (it.action==='addRecord'||it.action==='deleteRecord'); }).slice(-100);
+      state._syncQueue=syncQueue;
+      return syncQueue.length<before;
+    }
+    if(level===2 && LOCAL_RECORD_DAYS>0){
+      var cut=Date.now()-LOCAL_RECORD_DAYS*86400000, n0=(state.records||[]).length;
+      state.records=(state.records||[]).filter(function(r){ var t=new Date(r&&r.time).getTime(); return !(t>0 && t<cut); });
+      return state.records.length<n0;
+    }
+  }catch(e){}
+  return false;
+}
+function saveLocal(){
+  try{ if(state.deletedIds && state.deletedIds.length>2000){ state.deletedIds=state.deletedIds.slice(-1000); } }catch(e){}
+  state._syncQueue=syncQueue; /* 未送信キューも一緒に永続化（リロードで消えないように） */
+  for(var lv=0; lv<=2; lv++){
+    try{ localStorage.setItem('sun_cloud_admin',JSON.stringify(state)); _costCache={}; return; }
+    catch(e){
+      var isQuota = e && (e.name==='QuotaExceededError' || /quota/i.test(String(e&&e.message||e)));
+      if(!isQuota){ _costCache={}; return; }
+      _shrinkForQuota(lv+1);   // 軽くしてもう一度
+    }
+  }
+  if(!_quotaWarned){ _quotaWarned=true; try{ showToast('⚠️ 端末の保存容量がいっぱいです。オンライン時に「同期」してから、不要な過去データの整理をご検討ください'); }catch(x){} }
+  _costCache={};
+}
 // 保存 = ローカル即時保存
 function save(){ saveLocal(); saveMastersToCloud(); }
 // 入力中の保存をまとめる（表示は即時、localStorage書込み＋マスタのクラウド送信を400msに集約）
@@ -1939,7 +1982,7 @@ function _pushMastersNow(cb){
   } catch(e){}
 }
 
-function load(){try{var d=localStorage.getItem('sun_cloud_admin');if(d){var p=JSON.parse(d);for(var k in p)state[k]=p[k];}}catch(e){} try{ if(Array.isArray(state._syncQueue)) syncQueue=state._syncQueue; /* 前回セッションの未送信キューを復元 */ }catch(e){}}
+function load(){try{var d=localStorage.getItem('sun_cloud_admin');if(d){var p=JSON.parse(d);for(var k in p)state[k]=p[k];}}catch(e){} try{ if(Array.isArray(state._syncQueue)) syncQueue=state._syncQueue.filter(function(it){ return it && (it.action==='addRecord'||it.action==='deleteRecord'); }).slice(-200); /* 前回セッションの未送信キューを復元（日報以外は捨てる） */ }catch(e){}}
 
 function generateCOTA(){
   var nums=['1番','3番','5番','7番','9番'];
@@ -2351,6 +2394,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '💾 localStorage容量超過(QuotaExceeded)の根本対策：再送キューにsaveMastersを積まない・同一日報は1件・上限200、起動時にキューを掃除、容量超過時は自動で軽量化して再保存。staff版は直近150日の日報のみ端末に保持（クラウドが正本）。同一オリジンでadmin/staffが保存領域を共有するためadmin側も恩恵あり',
   '🔧 callCloudがok:false応答でもlastSyncを更新していたため帯が誤って緑になる不具合を修正。自動syncAllは直近1分以内に成功していれば省略（サーバー負荷対策）。バックアップに報告(reports)・削除履歴・ヒポポタマス入力を含め、復元にも対応',
   '📡 管理タブに「誰の端末が届いているか」を追加。スタッフごとに最後にクラウドへ届いた日報の日付と直近7日の件数を表示し、設定できていない端末を見つけられます',
   '🔑 設定リンクの貼り付けをprompt()から専用ダイアログに変更（実入力欄＋クリップボード読み取りボタン）。LINE内ブラウザでリンクを開く必要がなくなり、ホーム画面アプリに設定が入らない問題を回避',
@@ -6637,7 +6681,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "21.2";
+var APP_VERSION = "21.3";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
