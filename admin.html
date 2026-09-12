@@ -1730,7 +1730,7 @@ function syncAll(silent){
     try{ updateCloudStatus(); }catch(e){}
     if(!silent && typeof showToast==='function'){
       if(ok) showToast('✅ 最新にしました（日報 '+((state.records||[]).length)+'件）');
-      else showToast('⚠️ つながりませんでした（'+syncFailHint()+'）もう一度タップすると直し方が出ます');
+      else showToast('⚠️ つながりませんでした（'+syncFailHint()+'）'+(state.lastSyncError?' ['+String(state.lastSyncError).slice(0,70)+']':''));
     }
   };
   try{
@@ -5248,9 +5248,13 @@ function buildStaffSetupLink(){
     return;
   }
   var okNow = !!state.lastFullSync || (!!state.lastSync && !state.lastSyncError);
+  var tail=function(u){ u=String(u||''); return u.length>14?('…'+u.slice(-14)):u; };
+  var urlNote = syncUrlMismatch()
+    ? '<div style="padding:9px 11px;background:#FDECEA;border-left:4px solid #C62828;border-radius:7px;font-size:12px;color:#C62828;font-weight:700;margin-bottom:8px">⚠️ この端末の保存先はアプリ標準と違います。<br>この端末：'+h(tail(state.cloudUrl))+'<br>アプリ標準：'+h(tail(CLOUD_URL))+'<br>スタッフのアプリは「アプリ標準」につなぎに行くため、標準側が古いとつながりません。この表示が出たら石上さんはClaudeに知らせてください。</div>'
+    : '<div style="font-size:11px;color:#2E7D32;margin-bottom:6px">保存先：アプリ標準と一致（'+h(tail(CLOUD_URL))+'）</div>';
   var origin = location.origin + location.pathname.replace(/[^\/]*$/, '');
   var link = origin + 'staff.html#k=' + encodeURIComponent(state.cloudKey);
-  var s='';
+  var s=urlNote;
   s += okNow
     ? '<div style="padding:9px 11px;background:#E8F5E9;border-left:4px solid #2E7D32;border-radius:7px;font-size:12px;color:#1B5E20;font-weight:700;margin-bottom:8px">✅ この端末は同期できています。このリンクの設定は正しいです。</div>'
     : '<div style="padding:9px 11px;background:#FFF3E0;border-left:4px solid #E65100;border-radius:7px;font-size:12px;color:#E65100;font-weight:700;margin-bottom:8px">⚠️ この端末もまだ同期できていません。先にこの端末の同期を直してからリンクを配ってください。</div>';
@@ -6633,7 +6637,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "21.1";
+var APP_VERSION = "21.2";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
