@@ -1,5 +1,5 @@
 {
-  "version": "21.5",
+  "version": "21.6",
   "releaseDate": "2026-09-12",
-  "notes": "admin版の設定リンクカードにQRコードを表示（qrcode-generatorをローカル埋め込み、外部通信なし）。スタッフはカメラで読んでリンクをタップするだけで接続設定が完了。staff/admin両方を21.5に統一。"
+  "notes": "接続設定の正規化を追加。通信前と起動時にcloudUrl（GAS WebアプリURL形式のみ抽出、不正ならアプリ標準へ）とcloudKey（空白除去）を整える。SafariでfetchがSyntaxError（不正URL）になる問題の対策。staff/admin両方を21.6に統一。"
 }
