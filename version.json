@@ -1,5 +1,5 @@
 {
-  "version": "21.6",
+  "version": "21.7",
   "releaseDate": "2026-09-12",
-  "notes": "接続設定の正規化を追加。通信前と起動時にcloudUrl（GAS WebアプリURL形式のみ抽出、不正ならアプリ標準へ）とcloudKey（空白除去）を整える。SafariでfetchがSyntaxError（不正URL）になる問題の対策。staff/admin両方を21.6に統一。"
+  "notes": "callCloudでサーバー応答がJSONでない場合（Googleログイン画面・GASエラーページ等）に、HTTP状態・種類の判定・本文先頭・送信先URL末尾をエラーとして表示。SyntaxError原因の特定用。staff/admin両方を21.7に統一。"
 }
