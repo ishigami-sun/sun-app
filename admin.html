@@ -469,6 +469,12 @@
   <div id="staffLinkBox" style="margin-top:10px"></div>
 </div>
 
+<div class="card" style="margin-bottom:14px;border:2px solid #7B1FA2;background:#FBF7FF">
+  <div class="section-title" style="margin:0 0 8px">📡 誰の端末が届いているか</div>
+  <div style="font-size:12px;color:#64748B;margin-bottom:8px;line-height:1.7">スタッフごとに「クラウドに届いている最後の日報」を表示します。何日も届いていない人は、その人の端末がまだ設定できていない可能性があります。</div>
+  <div id="syncStatusByStaff"></div>
+</div>
+
 <div class="card" style="margin-bottom:14px;border:2px solid #F0A500;background:#FFFCF5">
   <div class="section-title" style="margin:0 0 8px">💾 バックアップ（月末にやること）</div>
   <div style="font-size:12px;color:#64748B;margin-bottom:10px;line-height:1.7">月が終わったら、まず上部の緑の帯をタップして<b>同期</b>し、その後この<b>バックアップ</b>を保存してください。保存したファイルはエアレジの「会計明細」CSVと一緒に送れば、入力もれの洗い出しと給与用の数字を作れます。</div>
@@ -2339,6 +2345,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '📡 管理タブに「誰の端末が届いているか」を追加。スタッフごとに最後にクラウドへ届いた日報の日付と直近7日の件数を表示し、設定できていない端末を見つけられます',
   '🔑 設定リンクの貼り付けをprompt()から専用ダイアログに変更（実入力欄＋クリップボード読み取りボタン）。LINE内ブラウザでリンクを開く必要がなくなり、ホーム画面アプリに設定が入らない問題を回避',
   '🔗 管理タブに「スタッフ用の設定リンクを作る」を追加。この端末が実際に同期できている接続設定からリンクを生成しコピーできます（キーを手で書き写す必要がなく、古いキーを配る事故を防げます）',
   '🔧 同期失敗の原因切り分けを追加（認証エラー／保存先URLが標準と不一致／通信）。lastSyncErrorを保持してバナーに表示し、タップで設定リンクの貼り直しやURLの標準化に誘導。staleの判定にstate.lastSyncを含め、同期中のタップにも応答',
@@ -5169,7 +5176,7 @@ function switchTab(tab){
   var idx=['input','records','reports','dashboard','sales','goals','pnl','admin','manual','academy','attend','inventory'].indexOf(tab);
   if(idx>=0) tabs[idx].classList.add('active');
   if(tab==='goals'){ if(typeof renderGoals==='function') renderGoals(); }
-  if(tab==='admin'){ updateSessionInfo(); loadStaffPinManagement(); try{ renderPayrollExport(); }catch(e){} }
+  if(tab==='admin'){ updateSessionInfo(); loadStaffPinManagement(); try{ renderPayrollExport(); }catch(e){} try{ renderSyncStatusByStaff(); }catch(e){} }
   if(tab==='records') renderRecords();
   if(tab==='reports'){ if(typeof renderReportsTab==='function') renderReportsTab(); if(typeof updateReportStaffSelect==='function') try{ updateReportStaffSelect(); }catch(e){} try{ syncAll(true); }catch(e){} }
   if(tab==='dashboard') renderDashboard();
@@ -5180,6 +5187,46 @@ function switchTab(tab){
   if(tab==='pnl') renderPnl();
 }
 
+/* ===== 📡 スタッフ別の同期状況（v21.0）
+   各端末に直接は問い合わせられないので、「その人の日報が最後にクラウドへ届いた日」で判断する ===== */
+function renderSyncStatusByStaff(){
+  var el=document.getElementById('syncStatusByStaff'); if(!el) return;
+  var roster=state.staff||[]; var recs=state.records||[];
+  var today=recYMD({time:new Date().toISOString()});
+  var last={}, cnt7={};
+  var d7=new Date(); d7.setDate(d7.getDate()-7); var ymd7=recYMD({time:d7.toISOString()});
+  for(var i=0;i<recs.length;i++){
+    var r=recs[i], b=staffBase(r.staff); if(!b) continue;
+    var y=recYMD(r); if(!y) continue;
+    if(!last[b]||y>last[b]) last[b]=y;
+    if(y>=ymd7) cnt7[b]=(cnt7[b]||0)+1;
+  }
+  var rows=[];
+  for(var j=0;j<roster.length;j++){
+    var name=roster[j], b2=staffBase(name);
+    var ld=last[b2]||'';
+    var days= ld ? Math.round((new Date(today)-new Date(ld))/86400000) : null;
+    var col, label;
+    if(!ld){ col='#94a3b8'; label='日報なし'; }
+    else if(days<=2){ col='#2E7D32'; label='届いている'; }
+    else if(days<=6){ col='#E65100'; label=days+'日前から届いていない'; }
+    else { col='#C62828'; label=days+'日前から届いていない ⚠️'; }
+    rows.push({name:name, ld:ld, days:days, col:col, label:label, n7:cnt7[b2]||0});
+  }
+  rows.sort(function(a,b){ return (b.days==null?-1:b.days)-(a.days==null?-1:a.days); });
+  var s='<table style="width:100%;border-collapse:collapse;font-size:12px">'
+   +'<tr style="background:#F3E5F5"><th style="border:1px solid #CE93D8;padding:5px;text-align:left">スタッフ</th><th style="border:1px solid #CE93D8;padding:5px">最後に届いた日報</th><th style="border:1px solid #CE93D8;padding:5px">直近7日</th><th style="border:1px solid #CE93D8;padding:5px">状態</th></tr>';
+  for(var k=0;k<rows.length;k++){
+    var x=rows[k];
+    var ldTxt = x.ld ? (parseInt(x.ld.slice(5,7),10)+'/'+parseInt(x.ld.slice(8,10),10)) : '—';
+    s+='<tr><td style="border:1px solid #E1BEE7;padding:5px;font-weight:700">'+h(x.name)+'</td>'
+     +'<td style="border:1px solid #E1BEE7;padding:5px;text-align:center">'+ldTxt+'</td>'
+     +'<td style="border:1px solid #E1BEE7;padding:5px;text-align:center">'+x.n7+'件</td>'
+     +'<td style="border:1px solid #E1BEE7;padding:5px;font-weight:800;color:'+x.col+'">'+x.label+'</td></tr>';
+  }
+  s+='</table><div style="font-size:11px;color:#94a3b8;margin-top:6px">※休みの日が続いている人は届いていなくて正常です。出勤しているのに届いていない人だけ確認してください。</div>';
+  el.innerHTML=s;
+}
 /* ===== 🔗 スタッフ用の設定リンク生成（v20.8）
    この端末が実際に同期できている接続設定（キー）からリンクを組み立てる。
    キーをチャット等に書き写す必要がなくなり、「渡したキーが古い」事故を防ぐ ===== */
@@ -6575,7 +6622,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "20.9";
+var APP_VERSION = "21.0";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
