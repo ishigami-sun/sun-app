@@ -235,7 +235,7 @@
     <button class="tab-btn" onclick="switchTab('attend')">🕐 出勤簿</button>
     <button class="tab-btn" onclick="switchTab('inventory')">📦 在庫</button>
   </nav>
-  <div id="cloudStatus" onclick="try{cloudStatusTap()}catch(e){}" style="margin-top:8px;padding:8px 10px;border-radius:8px;font-size:11px;text-align:center;background:rgba(255,255,255,0.15);color:#fff;display:none;cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,0.2)">
+  <div id="cloudStatus" onclick="try{cloudStatusTap()}catch(e){}" style="margin-top:8px;padding:13px 12px;border-radius:11px;font-size:13px;font-weight:700;line-height:1.5;text-align:center;background:rgba(255,255,255,0.15);color:#fff;display:none;cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,0.25)">
     <span id="cloudStatusText">🔄 接続中...</span>
   </div>
 </header>
@@ -332,14 +332,11 @@
     </div>
     <button class="submit-btn" onclick="submitRecord()">✅ 日報を登録する</button>
     <button onclick="quickDraftRecord()" style="width:100%;margin-top:8px;padding:12px;background:#fff;color:#E65100;border:2px solid #F0A500;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer">⏱ 仮登録（担当と金額だけ・あとで詳細）</button>
-    <button onclick="pushAndSync()" style="width:100%;margin-top:10px;padding:13px;background:#fff;color:#2C7A6E;border:2px solid #2C7A6E;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">📤 打ち終わったら更新（みんなの端末に反映）</button>
   </div>
 </div>
 
 <!-- ===== 日報 ===== -->
 <div class="page" id="page-records">
-  <button onclick="syncFromCloud()" style="width:100%;padding:11px;margin-bottom:10px;background:#3DA892;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">🔄 同期して最新にする</button>
-  <button onclick="pushDeletionsToCloud()" style="width:100%;padding:9px;margin-bottom:10px;background:#fff;color:#E05555;border:1.5px solid #E05555;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer">🧹 この端末で削除した日報を全端末に反映</button>
   <!-- 🔍 打ち込んだ顧客をすぐ確認（v19.8） -->
   <div style="background:#fff;border:2px solid #2C7A6E;border-radius:12px;padding:12px;margin-bottom:12px">
     <div style="font-size:14px;font-weight:800;color:#1A4F47;margin-bottom:8px">🔍 打ち込んだお客様をすぐ確認</div>
@@ -435,7 +432,7 @@
     <div class="section-title">🎯 月間目標（確定）</div>
     <div id="goalsFixedContent"></div>
   </div>
-  <div class="page" id="page-admin"><div class="card" style="margin-bottom:14px"><div class="section-title" style="margin:0 0 8px">☁️ クラウド同期</div><button class="add-btn" style="width:100%;background:#3DA892" onclick="syncFromCloud()">🔄 今すぐ同期する</button><div style="font-size:11px;color:var(--text-light);margin-top:6px;text-align:center">他の端末で入力した日報を最新にします</div></div><div class="card" style="margin-bottom:14px"><button class="add-btn" style="width:100%;background:#E05555" onclick="logoutSession()">🔒 ログアウト</button><div style="font-size:11px;color:var(--text-light);margin-top:6px;text-align:center" id="sessionInfo"></div></div>
+  <div class="page" id="page-admin"><div class="card" style="margin-bottom:14px"><button class="add-btn" style="width:100%;background:#E05555" onclick="logoutSession()">🔒 ログアウト</button><div style="font-size:11px;color:var(--text-light);margin-top:6px;text-align:center" id="sessionInfo"></div></div>
   <div class="section-title">スタッフ管理</div>
   <div class="card">
     <div class="add-form-row"><div class="form-group"><label class="form-label">スタッフ名</label><input class="form-input" id="newStaff" placeholder="例：田中"></div><button class="add-btn" onclick="addStaff()">追加</button></div>
@@ -1240,7 +1237,7 @@ window.addEventListener('offline', function(){ isOnline=false; updateCloudStatus
 /* ===== 🔑 設定リンク貼り付けセットアップ（v19.9） ===== */
 function cloudStatusTap(){
   if(!state.cloudUrl || !state.cloudKey){ pasteSetupLink(); return; }
-  syncFromCloud();
+  syncAll();
 }
 function pasteSetupLink(){
   var t = prompt('石上さんから届いた「設定リンク」を、そのまま貼り付けてください\n（入力欄を長押し→ペースト）');
@@ -1284,7 +1281,7 @@ function updateCloudStatus(){
       else if(ago<3600) msg+=' ・ '+Math.floor(ago/60)+'分前に同期';
       else msg+=' ・ '+Math.floor(ago/3600)+'時間前に同期';
     }
-    txt.innerHTML=msg+'　<b style="opacity:0.95">🔄 タップで同期</b>';
+    txt.innerHTML=msg+'<br><b style="opacity:0.98">🔄 ここをタップ＝同期（打った日報を全員へ／最新を取り込む）</b>';
   }
 }
 
@@ -1399,11 +1396,40 @@ function dedupeRecordsById(){
   }
   return removed;
 }
-function pushAndSync(){
-  if(!state.cloudUrl||!state.cloudKey){ showToast('⚠️ クラウド未設定'); return; }
-  showToast('🔄 反映中…そのままお待ちください');
+/* ===== 🔄 同期はここ1か所で全部やる（v20.2）
+   ①この端末の報告・マスタを送る → ②未送信の日報と削除をクラウドへ反映 → ③全員の最新を取り込む
+   画面上部のバナーをタップするとこれが走る。各タブの同期ボタンは廃止した ===== */
+var _syncAllBusy=false;
+function syncAll(silent){
+  if(!state.cloudUrl || !state.cloudKey){
+    if(typeof pasteSetupLink==='function'){ pasteSetupLink(); }
+    else if(!silent && typeof showToast==='function'){ showToast('⚠️ 同期の設定がされていません'); }
+    return;
+  }
+  if(_syncAllBusy) return;
+  _syncAllBusy=true;
+  if(!silent && typeof showToast==='function') showToast('🔄 同期中…そのままお待ちください');
+  var fin=function(){ _syncAllBusy=false; };
+  try{
+    _pushMastersNow(function(){
+      try{
+        pushAndSync(function(){
+          try{ syncFromCloud(silent); }catch(e){}
+          setTimeout(fin, 1500);
+        }, true);
+      }catch(e){ fin(); }
+    });
+  }catch(e){ fin(); }
+  // 通信が詰まっても操作不能にならないように保険
+  setTimeout(function(){ _syncAllBusy=false; }, 20000);
+}
+// バージョン文字列を数値化（"20.10" > "20.2" を正しく比較）
+function _verNum(v){ var p=String(v||'').split('.'); return (parseInt(p[0],10)||0)*10000 + (parseInt(p[1],10)||0); }
+function pushAndSync(cb, silent){
+  if(!state.cloudUrl||!state.cloudKey){ if(!silent) showToast('⚠️ クラウド未設定'); if(cb) cb(); return; }
+  if(!silent) showToast('🔄 反映中…そのままお待ちください');
   callCloud('getAll', {}, function(res){
-    if(!res||!res.ok){ showToast('⚠️ 反映できませんでした。通信を確認して再度お試しください'); return; }
+    if(!res||!res.ok){ if(!silent) showToast('⚠️ 反映できませんでした。通信を確認して再度お試しください'); if(cb) cb(); return; }
     var cloud=res.records||[];
     var cloudIds={}; for(var i=0;i<cloud.length;i++) cloudIds[String(cloud[i].id)]=true;
     var delSet={}; var dids=state.deletedIds||[]; for(var i=0;i<dids.length;i++) delSet[String(dids[i])]=true;
@@ -1416,7 +1442,8 @@ function pushAndSync(){
       state.records=merged;
       try{ saveLocal(); }catch(e){}
       if(typeof renderAll==='function') renderAll();
-      showToast('✅ 反映完了！（日報 '+state.records.length+'件）');
+      if(!silent) showToast('✅ 反映完了！（日報 '+state.records.length+'件）');
+      if(cb) cb();
     }
     var pending=toPush.length+toDelete.length;
     if(pending===0){ finish(); return; }
@@ -2006,6 +2033,8 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '🔄 同期ボタンをひとつにまとめました。画面いちばん上の緑の帯（🔄 ここをタップ＝同期）を押すだけで、打った日報を全員に送る・みんなの最新を取り込む、が一度に終わります。入力タブと日報タブにあった同期ボタンはなくなりました',
+  '📢 報告タブを開くと自動で最新の報告を読み込むようになりました',
   '🧹 電波が悪い時にまれに同じ日報が2件表示されることがありましたが、自動で1件にまとまるようになりました（入力し直しは不要です）',
   '🔑 同期がまだの端末は、上の「🔑 同期の設定が必要です」をタップ→石上さんから届いたリンクを貼り付けるだけで設定できるようになりました',
   '🔍 日報タブのいちばん上に「お客様すぐ検索」が付きました。名前を打つと（ひらがなでもOK）その方の日報がその場に出ます。下までスクロールして探さなくてOK！',
@@ -4535,7 +4564,7 @@ function switchTab(tab){
   if(idx>=0) tabs[idx].classList.add('active');
   if(tab==='admin') updateSessionInfo();
   if(tab==='records') renderRecords();
-  if(tab==='reports'){ if(typeof renderReportsTab==='function') renderReportsTab(); if(typeof updateReportStaffSelect==='function') try{ updateReportStaffSelect(); }catch(e){} }
+  if(tab==='reports'){ if(typeof renderReportsTab==='function') renderReportsTab(); if(typeof updateReportStaffSelect==='function') try{ updateReportStaffSelect(); }catch(e){} try{ syncAll(true); }catch(e){} }
   if(tab==='dashboard') renderDashboard();
   if(tab==='sales'){ if(typeof renderSales==='function') renderSales(); }
   if(tab==='academy'){ if(typeof renderAcademyVideos==='function') renderAcademyVideos(); if(typeof renderEduAdmin==='function') renderEduAdmin(); }
@@ -5867,7 +5896,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "20.0";
+var APP_VERSION = "20.2";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
@@ -5881,8 +5910,11 @@ function checkForUpdate(){
         try {
           var data = JSON.parse(xhr.responseText);
           var latestVersion = data.version || '';
-          if(latestVersion && latestVersion !== APP_VERSION){
-            showUpdateBanner(latestVersion);
+          // 「新しい時だけ」出す。更新を試したバージョンは同セッションで再表示しない
+          // （公開ファイルのバージョン差でバナーが出続けるのを防ぐ）
+          if(latestVersion && _verNum(latestVersion) > _verNum(APP_VERSION)){
+            var _tried=''; try{ _tried=sessionStorage.getItem('sun_upd_tried')||''; }catch(e){}
+            if(_tried !== latestVersion) showUpdateBanner(latestVersion);
           }
         } catch(e){}
       }
@@ -5901,6 +5933,7 @@ function showUpdateBanner(newVer){
   banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:linear-gradient(135deg,#FF9800,#F57C00);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;z-index:9999;box-shadow:0 2px 8px rgba(0,0,0,0.2);cursor:pointer;animation:slideDown 0.4s ease';
   banner.innerHTML = '<div style="display:flex;align-items:center;gap:10px"><span style="font-size:18px">🎉</span><div><div style="font-size:13px;font-weight:700">新しいバージョン v' + newVer + ' があります</div><div style="font-size:11px;opacity:0.95">タップして更新</div></div></div><div style="background:#fff;color:#F57C00;padding:6px 14px;border-radius:18px;font-weight:700;font-size:12px">更新</div>';
   banner.onclick = function(){
+    try{ sessionStorage.setItem('sun_upd_tried', newVer); }catch(e){}
     banner.innerHTML = '<div style="display:flex;align-items:center;gap:10px;width:100%;justify-content:center"><span style="font-size:18px">🔄</span><div style="font-size:13px;font-weight:700">更新中...</div></div>';
     setTimeout(function(){
       try { 
