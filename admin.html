@@ -1736,6 +1736,10 @@ function syncAll(silent){
     _syncAllBusy=false;
     if(ok){ state.lastFullSync=Date.now(); state.lastSyncError=''; }
     else { state.lastSyncError=String(err||'通信エラー'); }
+    if(!ok && typeof adoptAdminConfigIfAny==='function' && !_adoptTried && syncAuthFailed()){
+      _adoptTried=true;
+      if(adoptAdminConfigIfAny()){ setTimeout(function(){ try{ syncAll(silent); }catch(e){} }, 400); return; }
+    }
     try{ saveLocal(); }catch(e){}
     try{ updateCloudStatus(); }catch(e){}
     if(!silent && typeof showToast==='function'){
@@ -2394,6 +2398,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '📨 管理タブを開くとスタッフ用の設定リンクが自動で表示され、「スタッフに送る」でLINE等へ案内文ごと共有できます。staff版は同一端末のadmin設定を自動取り込み（unauthorized時）',
   '💾 localStorage容量超過(QuotaExceeded)の根本対策：再送キューにsaveMastersを積まない・同一日報は1件・上限200、起動時にキューを掃除、容量超過時は自動で軽量化して再保存。staff版は直近150日の日報のみ端末に保持（クラウドが正本）。同一オリジンでadmin/staffが保存領域を共有するためadmin側も恩恵あり',
   '🔧 callCloudがok:false応答でもlastSyncを更新していたため帯が誤って緑になる不具合を修正。自動syncAllは直近1分以内に成功していれば省略（サーバー負荷対策）。バックアップに報告(reports)・削除履歴・ヒポポタマス入力を含め、復元にも対応',
   '📡 管理タブに「誰の端末が届いているか」を追加。スタッフごとに最後にクラウドへ届いた日報の日付と直近7日の件数を表示し、設定できていない端末を見つけられます',
@@ -5231,7 +5236,7 @@ function switchTab(tab){
   var idx=['input','records','reports','dashboard','sales','goals','pnl','admin','manual','academy','attend','inventory'].indexOf(tab);
   if(idx>=0) tabs[idx].classList.add('active');
   if(tab==='goals'){ if(typeof renderGoals==='function') renderGoals(); }
-  if(tab==='admin'){ updateSessionInfo(); loadStaffPinManagement(); try{ renderPayrollExport(); }catch(e){} try{ renderSyncStatusByStaff(); }catch(e){} }
+  if(tab==='admin'){ updateSessionInfo(); loadStaffPinManagement(); try{ renderPayrollExport(); }catch(e){} try{ renderSyncStatusByStaff(); }catch(e){} try{ buildStaffSetupLink(); }catch(e){} }
   if(tab==='records') renderRecords();
   if(tab==='reports'){ if(typeof renderReportsTab==='function') renderReportsTab(); if(typeof updateReportStaffSelect==='function') try{ updateReportStaffSelect(); }catch(e){} try{ syncAll(true); }catch(e){} }
   if(tab==='dashboard') renderDashboard();
@@ -5303,9 +5308,28 @@ function buildStaffSetupLink(){
     ? '<div style="padding:9px 11px;background:#E8F5E9;border-left:4px solid #2E7D32;border-radius:7px;font-size:12px;color:#1B5E20;font-weight:700;margin-bottom:8px">✅ この端末は同期できています。このリンクの設定は正しいです。</div>'
     : '<div style="padding:9px 11px;background:#FFF3E0;border-left:4px solid #E65100;border-radius:7px;font-size:12px;color:#E65100;font-weight:700;margin-bottom:8px">⚠️ この端末もまだ同期できていません。先にこの端末の同期を直してからリンクを配ってください。</div>';
   s += '<textarea id="staffLinkText" readonly onclick="this.select()" style="width:100%;box-sizing:border-box;height:86px;padding:9px;border:1.5px solid #90CAF9;border-radius:8px;font-size:12px;font-family:monospace;color:#0D47A1;background:#fff">'+h(link)+'</textarea>';
-  s += '<button class="add-btn" style="width:100%;margin-top:8px;background:#2C7A6E" onclick="copyStaffSetupLink()">📋 リンクをコピー</button>';
+  s += '<button class="add-btn" style="width:100%;margin-top:8px;padding:14px;font-size:15px;background:#06C755" onclick="shareStaffSetupLink()">📨 スタッフに送る（LINEなどを選ぶ）</button>';
+  s += '<button class="add-btn" style="width:100%;margin-top:8px;background:#2C7A6E" onclick="copyStaffSetupLink()">📋 リンクだけコピー</button>';
   s += '<div style="font-size:11px;color:#64748B;margin-top:8px;line-height:1.7"><b>スタッフへの伝え方</b><br>「リンクを<b>長押しして「Safariで開く」</b>を選んでね。上の帯が緑になればOK」<br><span style="color:#C62828">※LINEの中で開くとホーム画面のアプリに反映されません</span></div>';
   box.innerHTML=s;
+}
+function staffSetupMessage(){
+  var t=document.getElementById('staffLinkText'); var link=t?t.value:'';
+  return 'SUNアプリの同期の設定をお願いします（1分）\n\n'
+    +'①このメッセージを長押し → コピー\n'
+    +'②いつも日報を打っているSUNの画面を開く\n'
+    +'③いちばん上の帯をタップ\n'
+    +'④「コピーした内容を自動で入れる」→「設定する」\n'
+    +'⑤上の帯が緑になったら完了\n\n'
+    +link+'\n\n'
+    +'※帯がすでに緑の人はそのままでOK\n※このリンクはお店の人以外に送らないでください';
+}
+function shareStaffSetupLink(){
+  var msg=staffSetupMessage();
+  try{
+    if(navigator.share){ navigator.share({text:msg}).catch(function(){}); return; }
+  }catch(e){}
+  try{ navigator.clipboard.writeText(msg).then(function(){ showToast('📋 案内文ごとコピーしました。LINEに貼って送ってください'); }); }catch(e){ copyStaffSetupLink(); }
 }
 function copyStaffSetupLink(){
   var t=document.getElementById('staffLinkText'); if(!t) return;
@@ -6681,7 +6705,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "21.3";
+var APP_VERSION = "21.4";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
