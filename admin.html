@@ -3844,9 +3844,29 @@ function _enqueueRetry(action, payload, tries){
   if(t>6){ try{ if(_isMutation(action)) showToast('⚠️ クラウド送信に繰り返し失敗しました。通信環境をご確認ください'); }catch(e){} return; }
   if(_queueAdd(action, payload, t)) saveLocal();
 }
+// 保存先URLを正しい形に整える（手入力・貼り付けで混じった空白/改行/余計な文字を除去）
+// GASのWebアプリURLの形だけを取り出す。取り出せなければ空を返す
+function _cleanCloudUrl(u){
+  var s=String(u||'');
+  var m=s.match(/https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec/);
+  return m?m[0]:'';
+}
+// 接続設定を正規化。壊れていればアプリ標準に戻す。変更があれば true
+function normalizeCloudConfig(){
+  var changed=false;
+  try{
+    var k=String(state.cloudKey||'').replace(/\s+/g,'');
+    if(k!==state.cloudKey){ state.cloudKey=k; changed=true; }
+    var u=_cleanCloudUrl(state.cloudUrl);
+    if(!u){ u=CLOUD_URL; state.cloudUrlCustom=false; }
+    if(u!==state.cloudUrl){ state.cloudUrl=u; changed=true; }
+  }catch(e){}
+  return changed;
+}
 // クラウドAPI呼び出し
 function callCloud(action, payload, callback, _tries){
   _tries=_tries||0;
+  try{ if(normalizeCloudConfig()) saveLocal(); }catch(e){}
   if(!state.cloudUrl||!state.cloudKey){
     if(callback) callback({ok:false, error:'未設定'});
     return;
@@ -3987,6 +4007,7 @@ function syncUrlMismatch(){
 }
 // 同期が失敗した時に、原因として一番ありそうなことを短く返す
 function syncFailHint(){
+  if(/SyntaxError|did not match|Invalid URL|Type error/i.test(String(state.lastSyncError||''))) return '保存先の設定を自動で直しました。もう一度タップしてください';
   if(syncAuthFailed()) return '接続の合言葉が違うようです';
   if(syncUrlMismatch()) return '保存先の設定が古いようです';
   return '電波かサーバーの状態が原因のようです';
@@ -4699,6 +4720,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '🔧 cloudUrl/cloudKeyを通信前に正規化（空白・改行除去、GAS URL形式の抽出、不正時はCLOUD_URLへ）。SafariのSyntaxError: The string did not match the expected pattern（不正URLでfetchが拒否）への対策',
   '📷 スタッフ用の設定リンクをQRコードでも表示。スタッフは石上さんの画面をカメラで読んでリンクをタップするだけ（QRは端末内で生成、外部サービスに鍵は送りません）',
   '📨 管理タブを開くとスタッフ用の設定リンクが自動で表示され、「スタッフに送る」でLINE等へ案内文ごと共有できます。staff版は同一端末のadmin設定を自動取り込み（unauthorized時）',
   '💾 localStorage容量超過(QuotaExceeded)の根本対策：再送キューにsaveMastersを積まない・同一日報は1件・上限200、起動時にキューを掃除、容量超過時は自動で軽量化して再保存。staff版は直近150日の日報のみ端末に保持（クラウドが正本）。同一オリジンでadmin/staffが保存領域を共有するためadmin側も恩恵あり',
@@ -8400,6 +8422,7 @@ function showToast(msg){
 }
 
 init();
+try{ if(normalizeCloudConfig()) saveLocal(); }catch(e){}
 // URLの #k=… でアクセスすると接続キーを自動保存（管理者が各端末で1回開くだけ。キーは履歴に残らないよう即消去）
 try{
   if(location.hash && location.hash.indexOf('#k=')===0){
@@ -9018,7 +9041,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "21.5";
+var APP_VERSION = "21.6";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
