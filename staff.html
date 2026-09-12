@@ -1231,7 +1231,7 @@ var state = {
 // クラウド同期のキュー（オフライン対応）
 var syncQueue = [];
 var isOnline = navigator.onLine;
-window.addEventListener('online', function(){ isOnline=true; processSyncQueue(); updateCloudStatus(); });
+window.addEventListener('online', function(){ isOnline=true; processSyncQueue(); updateCloudStatus(); try{ setTimeout(function(){ if(state.cloudUrl&&state.cloudKey) syncAll(true); }, 1500); }catch(e){} });
 window.addEventListener('offline', function(){ isOnline=false; updateCloudStatus(); });
 
 /* ===== 🔑 設定リンク貼り付けセットアップ（v19.9） ===== */
@@ -1263,17 +1263,33 @@ function updateCloudStatus(){
   var el=document.getElementById('cloudStatus');
   var txt=document.getElementById('cloudStatusText');
   if(!el||!txt) return;
+  _ensureSyncNagStyle();
   if(!state.cloudUrl || !state.cloudKey){
     el.style.display='block';
-    el.style.background='rgba(244,67,54,0.25)';
+    el.style.background='rgba(244,67,54,0.35)';
+    el.style.animation='syncNag 1.3s ease-in-out infinite';
     txt.innerHTML='🔑 同期の設定が必要です — <b>ここをタップ</b>して、石上さんから届いたリンクを貼り付けてください';
   } else if(!isOnline){
     el.style.display='block';
     el.style.background='rgba(255,152,0,0.25)';
-    txt.innerHTML='📵 オフライン - 復旧時に自動同期します';
+    el.style.animation='';
+    var _pw=syncPendingCount();
+    txt.innerHTML='📵 オフライン'+(_pw>0?(' — '+_pw+'件は電波が戻り次第そのまま送られます'):' - 復旧時に自動同期します');
+  } else if(syncPendingCount()>0){
+    // まだ送れていないものがある＝ここだけは押してほしいので点滅させる
+    el.style.display='block';
+    el.style.background='rgba(244,67,54,0.45)';
+    el.style.animation='syncNag 1.1s ease-in-out infinite';
+    txt.innerHTML='⚠️ <b>'+syncPendingCount()+'件がまだ全員に届いていません</b><br><b>ここをタップして送ってください</b>';
+  } else if(syncIsStale()){
+    el.style.display='block';
+    el.style.background='rgba(255,152,0,0.40)';
+    el.style.animation='syncNag 1.7s ease-in-out infinite';
+    txt.innerHTML='🔄 <b>しばらく同期していません</b><br><b>ここをタップして最新にしてください</b>';
   } else {
     el.style.display='block';
     el.style.background='rgba(76,175,80,0.25)';
+    el.style.animation='';
     var msg='☁️ クラウド接続中';
     if(state.lastSync){
       var ago=Math.floor((Date.now()-state.lastSync)/1000);
@@ -1396,6 +1412,46 @@ function dedupeRecordsById(){
   }
   return removed;
 }
+/* ===== 🔔 同期の自動化と催促（v20.5）
+   スタッフに「同期ボタンを押す」ことを覚えさせるのではなく、
+   ①勝手に同期する（起動時・5分ごと・画面に戻った時・通信復帰時・日報登録後）
+   ②それでも送れていない時だけ、上部バナーを点滅させて押してもらう ===== */
+// まだクラウドへ送れていない更新の件数（オフライン等で貯まったもの）
+function syncPendingCount(){
+  var n=0;
+  try{
+    var q=(typeof syncQueue!=='undefined' && syncQueue) ? syncQueue : [];
+    for(var i=0;i<q.length;i++){ if(q[i] && _isMutation(q[i].action)) n++; }
+  }catch(e){}
+  return n;
+}
+function _ensureSyncNagStyle(){
+  try{
+    if(document.getElementById('syncNagStyle')) return;
+    var s=document.createElement('style');
+    s.id='syncNagStyle';
+    s.textContent='@keyframes syncNag{0%,100%{opacity:1}50%{opacity:.5}}';
+    document.head.appendChild(s);
+  }catch(e){}
+}
+// 最後に「全部そろえる同期」が成功してからの経過が長いか
+function syncIsStale(){
+  var last=state.lastFullSync||0;
+  return !last || (Date.now()-last) > 60*60*1000;   // 1時間
+}
+// 自動同期をしかける（初期化時に1回だけ呼ぶ）
+function installAutoSync(){
+  try{
+    // 画面に戻ってきた時（他の人の入力を反映し、自分の未送信を送る）
+    document.addEventListener('visibilitychange', function(){
+      if(document.visibilityState!=='visible') return;
+      try{ updateCloudStatus(); }catch(e){}
+      if(!isOnline) return;
+      if(!state.cloudUrl || !state.cloudKey) return;
+      if(Date.now()-(state.lastFullSync||0) > 2*60*1000){ try{ syncAll(true); }catch(e){} }
+    });
+  }catch(e){}
+}
 /* ===== 🔄 同期はここ1か所で全部やる（v20.2）
    ①この端末の報告・マスタを送る → ②未送信の日報と削除をクラウドへ反映 → ③全員の最新を取り込む
    画面上部のバナーをタップするとこれが走る。各タブの同期ボタンは廃止した ===== */
@@ -1411,6 +1467,8 @@ function syncAll(silent){
   if(!silent && typeof showToast==='function') showToast('🔄 同期中…そのままお待ちください');
   var fin=function(ok){
     _syncAllBusy=false;
+    if(ok){ state.lastFullSync=Date.now(); try{ saveLocal(); }catch(e){} }
+    try{ updateCloudStatus(); }catch(e){}
     if(!silent && typeof showToast==='function'){
       showToast(ok ? ('✅ 最新にしました（日報 '+((state.records||[]).length)+'件）')
                    : '⚠️ 同期できませんでした。通信を確認してもう一度お試しください');
@@ -1799,9 +1857,10 @@ function init(){
   if(state.cloudUrl && state.cloudKey){
     // 前回オフラインで貯まった未送信キューをまず送信（復元済み）
     if(isOnline && syncQueue.length){ setTimeout(function(){ try{ processSyncQueue(); }catch(e){} }, 300); }
-    setTimeout(function(){ syncFromCloud(true); }, 500);
-    // 5分ごとに自動同期
-    setInterval(function(){ if(isOnline) syncFromCloud(true); }, 5*60*1000);
+    setTimeout(function(){ try{ syncAll(true); }catch(e){} }, 500);
+    // 5分ごとに自動同期（取り込みだけでなく未送信の送信も行う）
+    setInterval(function(){ if(isOnline){ try{ syncAll(true); }catch(e){} } }, 5*60*1000);
+    try{ installAutoSync(); }catch(e){}
   }
   updateCloudStatus();
   // クラウド設定欄に既存値を入れる
@@ -2048,6 +2107,8 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '🔔 同期が自動になりました。アプリを開いた時・他のアプリから戻ってきた時・日報を登録した直後・電波が戻った時に、自動で全員へ送って最新を取り込みます。同期ボタンを押し忘れても大丈夫です',
+  '⚠️ それでも送れていないものがある時だけ、いちばん上の帯が赤く点滅して「○件がまだ全員に届いていません」と出ます。その時だけ帯をタップしてください',
   '📢 報告が全員に反映されない不具合を修正しました。これまで、同期していない端末から報告を送ると、他の人が書いた報告が消えてしまうことがありました。今は必ず「みんなのぶんを取り込んでから送る」ようになっています',
   '🔄 同期ボタンをひとつにまとめました。画面いちばん上の緑の帯（🔄 ここをタップ＝同期）を押すだけで、打った日報を全員に送る・みんなの最新を取り込む、が一度に終わります。入力タブと日報タブにあった同期ボタンはなくなりました',
   '📢 報告タブを開くと自動で最新の報告を読み込むようになりました',
@@ -2722,6 +2783,8 @@ function submitRecord(){
   });
   renderAll();
   switchTab('records');
+  // 登録したらそのまま全員へ届けるところまで自動でやる（同期ボタンを押し忘れても大丈夫にする）
+  try{ setTimeout(function(){ if(state.cloudUrl&&state.cloudKey&&isOnline) syncAll(true); }, 2500); }catch(e){}
 }
 // 本日の報告（任意・1日1回・日報とは別送信）
 function submitDailyReport(){
@@ -5912,7 +5975,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "20.4";
+var APP_VERSION = "20.5";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
