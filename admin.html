@@ -1562,7 +1562,9 @@ function callCloud(action, payload, callback, _tries){
         if(callback) callback(res);
         return;
       }
-      state.lastSync=Date.now();
+      // サーバーが ok:false（合言葉違い等）を返した時は「通信できた時刻」を更新しない
+      // （更新すると上部の帯が緑になり、同期できていないのに出来たように見えてしまう）
+      if(!(res && res.ok===false)) state.lastSync=Date.now();
       saveLocal();
       updateCloudStatus();
       if(callback) callback(res);
@@ -1711,6 +1713,10 @@ function syncAll(silent){
     return;
   }
   if(_syncAllBusy) return;
+  // 自動同期（silent）は直近1分以内に成功していれば省略する。
+  // 今日は全端末が一斉に自動同期を始めるため、サーバーへの連続アクセスを抑える。
+  // 手動タップ（silent=false）はいつでも実行する
+  if(silent && state.lastFullSync && (Date.now()-state.lastFullSync) < 60*1000) return;
   _syncAllBusy=true;
   if(!silent && typeof showToast==='function') showToast('🔄 同期中…そのままお待ちください');
   var _finDone=false;
@@ -2345,6 +2351,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '🔧 callCloudがok:false応答でもlastSyncを更新していたため帯が誤って緑になる不具合を修正。自動syncAllは直近1分以内に成功していれば省略（サーバー負荷対策）。バックアップに報告(reports)・削除履歴・ヒポポタマス入力を含め、復元にも対応',
   '📡 管理タブに「誰の端末が届いているか」を追加。スタッフごとに最後にクラウドへ届いた日報の日付と直近7日の件数を表示し、設定できていない端末を見つけられます',
   '🔑 設定リンクの貼り付けをprompt()から専用ダイアログに変更（実入力欄＋クリップボード読み取りボタン）。LINE内ブラウザでリンクを開く必要がなくなり、ホーム画面アプリに設定が入らない問題を回避',
   '🔗 管理タブに「スタッフ用の設定リンクを作る」を追加。この端末が実際に同期できている接続設定からリンクを生成しコピーできます（キーを手で書き写す必要がなく、古いキーを配る事故を防げます）',
@@ -3464,7 +3471,8 @@ function backupData(){
   var data={ _app:'sun-app', _ver:(typeof APP_VERSION!=='undefined'?APP_VERSION:''), _date:new Date().toISOString(),
     records:state.records||[], staff:state.staff||[], menus:state.menus||[], products:state.products||[],
     payments:state.payments||[], paymentMaster:state.paymentMaster||[], mediaList:state.mediaList||[],
-    goals:state.goals||{}, tickets:state.tickets||{}, regClose:state.regClose||{} };
+    goals:state.goals||{}, tickets:state.tickets||{}, regClose:state.regClose||{},
+    reports:state.reports||[], deletedMasters:state.deletedMasters||{}, hpsTowel:state.hpsTowel||{} };
   try{
     var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
     var url=URL.createObjectURL(blob);
@@ -3491,6 +3499,9 @@ function restoreDataFile(input){
       if(d.goals) state.goals=d.goals;
       if(d.tickets) state.tickets=d.tickets;
       if(d.regClose) state.regClose=d.regClose;
+      if(Array.isArray(d.reports)) state.reports=d.reports;
+      if(d.deletedMasters) state.deletedMasters=d.deletedMasters;
+      if(d.hpsTowel) state.hpsTowel=d.hpsTowel;
       try{ saveLocal(); }catch(e){}
       if(typeof renderAll==='function') renderAll();
       if(typeof showToast==='function') showToast('✅ 復元しました（日報 '+state.records.length+'件）');
@@ -6622,7 +6633,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "21.0";
+var APP_VERSION = "21.1";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
