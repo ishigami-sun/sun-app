@@ -1579,7 +1579,7 @@ function syncAll(silent){
     try{ updateCloudStatus(); }catch(e){}
     if(!silent && typeof showToast==='function'){
       if(ok) showToast('✅ 最新にしました（日報 '+((state.records||[]).length)+'件）');
-      else showToast('⚠️ つながりませんでした（'+syncFailHint()+'）もう一度タップすると直し方が出ます');
+      else showToast('⚠️ つながりませんでした（'+syncFailHint()+'）'+(state.lastSyncError?' ['+String(state.lastSyncError).slice(0,70)+']':''));
     }
   };
   try{
@@ -6093,7 +6093,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "21.1";
+var APP_VERSION = "21.2";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
