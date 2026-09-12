@@ -3711,11 +3711,17 @@ function extractSetupKey(text){
   if(m2) return m2[1].trim();
   return '';
 }
-function applySetupKey(key){
+// 貼り付けた文字列から保存先URL（&u=…）を取り出す。無ければ空
+function extractSetupUrl(text){
+  try{ var m=String(text||'').match(/[&?]u=([^&\s"'<>]+)/); if(m) return _cleanCloudUrl(decodeURIComponent(m[1])); }catch(e){}
+  return '';
+}
+function applySetupKey(key, url){
   state.cloudKey = key;
   state.cloudKeyCustom = true;
-  // 保存先もアプリ標準に戻す（昔手入力した古いURLが残っていると届かないため）
-  state.cloudUrl = CLOUD_URL; state.cloudUrlCustom = false;
+  // 保存先はリンクに含まれていればそれを、無ければアプリ標準（昔手入力した古いURLは上書きする）
+  var u = _cleanCloudUrl(url||'');
+  state.cloudUrl = u || CLOUD_URL; state.cloudUrlCustom = !!(u && u!==CLOUD_URL);
   state.lastSyncError = '';
   try{ saveLocal(); }catch(e){}
   try{ updateCloudStatus(); }catch(e){}
@@ -3767,12 +3773,13 @@ function submitSetupKey(){
   var inp=document.getElementById('setupKeyInput');
   var msg=document.getElementById('setupKeyMsg');
   var key=extractSetupKey(inp?inp.value:'');
+  var url=extractSetupUrl(inp?inp.value:'');
   if(!key){
     if(msg){ msg.style.color='#C62828'; msg.textContent='読み取れませんでした。石上さんのメッセージを全部コピーして貼り付けてください'; }
     return;
   }
   closeSetupDialog();
-  applySetupKey(key);
+  applySetupKey(key, url);
 }
 function updateCloudStatus(){
   var el=document.getElementById('cloudStatus');
@@ -7638,7 +7645,8 @@ function buildStaffSetupLink(){
     ? '<div style="padding:9px 11px;background:#FDECEA;border-left:4px solid #C62828;border-radius:7px;font-size:12px;color:#C62828;font-weight:700;margin-bottom:8px">⚠️ この端末の保存先はアプリ標準と違います。<br>この端末：'+h(tail(state.cloudUrl))+'<br>アプリ標準：'+h(tail(CLOUD_URL))+'<br>スタッフのアプリは「アプリ標準」につなぎに行くため、標準側が古いとつながりません。この表示が出たら石上さんはClaudeに知らせてください。</div>'
     : '<div style="font-size:11px;color:#2E7D32;margin-bottom:6px">保存先：アプリ標準と一致（'+h(tail(CLOUD_URL))+'）</div>';
   var origin = location.origin + location.pathname.replace(/[^\/]*$/, '');
-  var link = origin + 'staff.html#k=' + encodeURIComponent(state.cloudKey);
+  // 合言葉に加えて、この端末が実際に使えている保存先も含める（標準と違う端末でも同じ設定が渡る）
+  var link = origin + 'staff.html#k=' + encodeURIComponent(state.cloudKey) + '&u=' + encodeURIComponent(state.cloudUrl||CLOUD_URL);
   var s=urlNote;
   s += okNow
     ? '<div style="padding:9px 11px;background:#E8F5E9;border-left:4px solid #2E7D32;border-radius:7px;font-size:12px;color:#1B5E20;font-weight:700;margin-bottom:8px">✅ この端末は同期できています。このリンクの設定は正しいです。</div>'
@@ -8438,10 +8446,13 @@ try{ if(normalizeCloudConfig()) saveLocal(); }catch(e){}
 // URLの #k=… でアクセスすると接続キーを自動保存（管理者が各端末で1回開くだけ。キーは履歴に残らないよう即消去）
 try{
   if(location.hash && location.hash.indexOf('#k=')===0){
-    var _hk=decodeURIComponent(location.hash.slice(3)).trim();
+    // 形式: #k=合言葉  または  #k=合言葉&u=保存先URL（管理者版が生成するリンクは保存先も含む）
+    var _raw=location.hash.slice(3), _amp=_raw.indexOf('&');
+    var _hk=decodeURIComponent(_amp>=0?_raw.slice(0,_amp):_raw).trim();
+    var _hu=''; try{ var _um=_raw.match(/[&?]u=([^&]+)/); if(_um) _hu=_cleanCloudUrl(decodeURIComponent(_um[1])); }catch(e){}
     if(_hk){ state.cloudKey=_hk; state.cloudKeyCustom=true;
-      // 保存先も標準に戻す（昔手入力した古いURLが残っている端末も一発で直るように）
-      try{ state.cloudUrl=CLOUD_URL; state.cloudUrlCustom=false; state.lastSyncError=''; }catch(e){}
+      // 保存先はリンクに含まれていればそれを、無ければアプリ標準を使う
+      try{ state.cloudUrl=_hu||CLOUD_URL; state.cloudUrlCustom=!!(_hu && _hu!==CLOUD_URL); state.lastSyncError=''; }catch(e){}
       try{ saveLocal(); }catch(e){}
       try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){ location.hash=''; }
       try{ updateCloudStatus(); }catch(e){}
@@ -9053,7 +9064,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "21.7";
+var APP_VERSION = "21.8";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
