@@ -465,6 +465,13 @@
 
 <!-- ===== 管理 ===== -->
 <div class="page" id="page-admin">
+<div class="card" style="margin-bottom:14px;border:2px solid #2C7A6E">
+  <div class="section-title" style="margin:0 0 8px">💴 給与エクセル用の集計（物販・ヒポポタマス）</div>
+  <div style="font-size:12px;color:#64748B;margin-bottom:10px;line-height:1.7">給与計算のエクセルに打ち込む数字をまとめます。<b>物販（H列・I列）はアプリから自動集計</b>。<b>ヒポポタマスのタオル（P列）は毎月届く請求書の金額を入力</b>してください（アプリでは扱っていないため）。売上（B列）はエアレジを見てご自身で入力してください。</div>
+  <select id="payrollMonth" onchange="renderPayrollExport()" style="width:100%;padding:11px;border:2px solid #C8E0DC;border-radius:10px;background:#fff;font-size:14px;font-weight:700;color:#1A4F47;margin-bottom:12px"></select>
+  <div id="payrollExport"></div>
+</div>
+
 <div class="card" style="margin-bottom:14px">
   <div class="section-title" style="margin:0 0 8px">🧾 エアレジ照合（月次）</div>
   <div style="font-size:12px;color:#64748B;margin-bottom:8px;line-height:1.6">エアレジからエクスポートした「<b>会計明細</b>」CSVを選ぶと、日報と自動で突き合わせて入力漏れ・差異を洗い出します（日付ズレ・まとめ会計・遅れ入力は自動で対応付け）。</div>
@@ -1597,6 +1604,7 @@ function syncFromCloud(silent){
         if(typeof renderAcademyVideos==='function'){ try{ renderAcademyVideos(); if(typeof renderEduAdmin==='function') renderEduAdmin(); }catch(e){} }
         if(res.masters.expenses){ state.expenses = mergeByMonthKey(state.expenses, res.masters.expenses); }
         if(res.masters.payroll){ state.payroll = mergeByMonthKey(state.payroll, res.masters.payroll); }
+        if(res.masters.hpsTowel){ state.hpsTowel = mergeByMonthKey(state.hpsTowel, res.masters.hpsTowel); }
         if(res.masters.staffTypes){ state.staffTypes = Object.assign({}, res.masters.staffTypes, state.staffTypes||{}); }
       }
       saveLocal();
@@ -1696,6 +1704,7 @@ function _pushMastersNow(cb){
       inventory: state.inventory || [],
       invCategories: state.invCategories || [],
       payroll: state.payroll || {},
+      hpsTowel: state.hpsTowel || {},
       reports: state.reports || [],
       deletedMasters: state.deletedMasters || {}
     }}, cb||function(){});
@@ -2113,6 +2122,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '💴 管理タブに「給与エクセル用の集計」を追加。月を選ぶと各スタッフの店販売値(H列)・原価(I列)が自動で出ます。ヒポポタマスのタオル(P列)は請求書の金額を入力すると保存され、店販歩合・HPS歩合の検算もできます',
   '🧹 送信リトライで同じ日報がクラウドに2行できる問題の防御：同一IDの日報は自動で1件に除去されます（8月10件・9月2件の水増しが自動解消）',
   '🔑 未設定端末は上部バナーをタップ→設定リンクを貼り付けるだけでキー設定が完了するようになりました（LINE内ブラウザで開いてしまう問題の対策）',
   '🔍 日報タブ最上部に顧客名クイック検索（ひらがな・カタカナ対応、全期間から検索）。結果をタップするとその日報にジャンプします',
@@ -4931,7 +4941,7 @@ function switchTab(tab){
   var idx=['input','records','reports','dashboard','sales','goals','pnl','admin','manual','academy','attend','inventory'].indexOf(tab);
   if(idx>=0) tabs[idx].classList.add('active');
   if(tab==='goals'){ if(typeof renderGoals==='function') renderGoals(); }
-  if(tab==='admin'){ updateSessionInfo(); loadStaffPinManagement(); }
+  if(tab==='admin'){ updateSessionInfo(); loadStaffPinManagement(); try{ renderPayrollExport(); }catch(e){} }
   if(tab==='records') renderRecords();
   if(tab==='reports'){ if(typeof renderReportsTab==='function') renderReportsTab(); if(typeof updateReportStaffSelect==='function') try{ updateReportStaffSelect(); }catch(e){} }
   if(tab==='dashboard') renderDashboard();
@@ -4940,6 +4950,136 @@ function switchTab(tab){
   if(tab==='attend'){ if(typeof renderAttendance==='function') renderAttendance(); }
   if(tab==='inventory'){ if(typeof renderInventory==='function') renderInventory(); }
   if(tab==='pnl') renderPnl();
+}
+
+/* ===== 💴 給与エクセル用の集計（v20.1）
+   給与計算エクセル（R◯.◯月度シート）に打ち込む数字を用意する。
+   H列=店販売値(税込) / I列=原価 → アプリの物販データから自動集計
+   P列=ヒポポタマスのタオル売上(税込) → HPSの請求書を見て手入力（アプリ外のデータ）
+   歩合の計算式はエクセルと同一にしてある（照合用） ===== */
+var PAYROLL_ROWS=[
+  {app:'花岡', xls:'桂川みのり', row:7},
+  {app:'堀井', xls:'堀井雄大',  row:8},
+  {app:'東',   xls:'東千華',    row:9},
+  {app:'梅田', xls:'梅田龍平',  row:10},
+  {app:'カノン', xls:'植村海音', row:11},
+  {app:'林',   xls:'林尚輝',    row:12}
+];
+// エクセルの店販歩合率（J列の利益で決まる）
+function payrollRate(j){ if(!j) return 0; if(j<30000) return 0.2; if(j<50000) return 0.3; if(j<80000) return 0.35; return 0.4; }
+function hpsMap(ym){
+  if(!state.hpsTowel || typeof state.hpsTowel!=='object') state.hpsTowel={};
+  if(!state.hpsTowel[ym]) state.hpsTowel[ym]={};
+  return state.hpsTowel[ym];
+}
+function setHpsTowel(ym, app, val){
+  var v=parseInt(String(val).replace(/[^0-9]/g,''),10); if(isNaN(v)||v<0) v=0;
+  var m=hpsMap(ym); m[app]=v; m.updatedAt=new Date().toISOString();
+  try{ save(); }catch(e){ try{ saveLocal(); }catch(e2){} }
+  renderPayrollExport();
+}
+function payrollMonthList(){
+  var set={};
+  for(var i=0;i<state.records.length;i++){ var y=recYMD(state.records[i]); if(y) set[y.slice(0,7)]=1; }
+  var n=new Date(); var cur=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');
+  set[cur]=1;
+  return Object.keys(set).sort().reverse();
+}
+function payrollDefaultMonth(){
+  var n=new Date(); var d=new Date(n.getFullYear(), n.getMonth()-1, 1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+}
+function renderPayrollExport(){
+  var el=document.getElementById('payrollExport'); if(!el) return;
+  var sel=document.getElementById('payrollMonth');
+  var months=payrollMonthList();
+  if(sel && !sel.dataset.filled){
+    var def=payrollDefaultMonth();
+    if(months.indexOf(def)<0) def=months[0];
+    var o='';
+    for(var i=0;i<months.length;i++){
+      var p=months[i].split('-');
+      o+='<option value="'+months[i]+'"'+(months[i]===def?' selected':'')+'>'+p[0]+'年'+parseInt(p[1],10)+'月度</option>';
+    }
+    sel.innerHTML=o; sel.dataset.filled='1';
+  }
+  var ym=(sel&&sel.value)||payrollDefaultMonth();
+
+  // --- 月の物販・施術をスタッフ別に集計（姓ベースなので肩書き変更に強い） ---
+  var agg={};
+  function slot(s){ if(!agg[s]) agg[s]={sell:0,profit:0,menuInc:0,n:0}; return agg[s]; }
+  for(var i=0;i<state.records.length;i++){
+    var r=state.records[i];
+    if(recYMD(r).slice(0,7)!==ym) continue;
+    var ms=r.menus||[];
+    for(var j=0;j<ms.length;j++){ var st=staffBase(ms[j].menuStaff||r.staff); if(st) slot(st).menuInc+=menuLineInc(ms[j]); }
+    var ps=r.products||[];
+    for(var k=0;k<ps.length;k++){
+      var st2=staffBase(ps[k].productStaff||r.staff); if(!st2) continue;
+      var sl=slot(st2); sl.sell+=prodLineSell(ps[k]); sl.profit+=prodLineProfit(ps[k]); sl.n+=(ps[k].qty||1);
+    }
+  }
+  var towel=hpsMap(ym);
+
+  var s='';
+  s+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:560px">';
+  s+='<tr style="background:#EAF5F3"><th style="border:1px solid #C8E0DC;padding:6px">エクセルの氏名</th>'
+   +'<th style="border:1px solid #C8E0DC;padding:6px">H列<br>店販売値(税込)</th>'
+   +'<th style="border:1px solid #C8E0DC;padding:6px">I列<br>原価</th>'
+   +'<th style="border:1px solid #C8E0DC;padding:6px">P列<br>タオル税込<br><span style="font-weight:400;font-size:10px">請求書から入力</span></th>'
+   +'<th style="border:1px solid #C8E0DC;padding:6px">参考<br>店販歩合</th>'
+   +'<th style="border:1px solid #C8E0DC;padding:6px">参考<br>HPS歩合</th></tr>';
+  var totSell=0, totCost=0, totTowel=0;
+  for(var pi=0;pi<PAYROLL_ROWS.length;pi++){
+    var row=PAYROLL_ROWS[pi];
+    var a=agg[row.app]||{sell:0,profit:0,menuInc:0,n:0};
+    var sell=Math.round(a.sell), cost=Math.round(a.sell-a.profit);
+    var j=sell-cost, rate=payrollRate(j), tpay=Math.floor(j*rate);
+    var tw=towel[row.app]||0;
+    var q=tw/1.1, inc=Math.ceil(q*0.1), hps=Math.round(inc*0.8*10)/10;
+    totSell+=sell; totCost+=cost; totTowel+=tw;
+    s+='<tr>'
+     +'<td style="border:1px solid #C8E0DC;padding:6px"><b>'+h(row.xls)+'</b><br><span style="font-size:10px;color:#94a3b8">'+(row.row)+'行目／アプリ：'+h(row.app)+'</span></td>'
+     +'<td style="border:1px solid #C8E0DC;padding:6px;text-align:right;font-weight:800;color:#1A4F47">'+num(sell)+'</td>'
+     +'<td style="border:1px solid #C8E0DC;padding:6px;text-align:right;font-weight:800;color:#1A4F47">'+num(cost)+'</td>'
+     +'<td style="border:1px solid #C8E0DC;padding:6px;text-align:right"><input type="number" inputmode="numeric" value="'+(tw||'')+'" placeholder="0" onchange="setHpsTowel(\''+ym+'\',\''+row.app+'\',this.value)" style="width:92px;padding:6px;border:1.5px solid #F0A500;border-radius:7px;font-size:13px;font-weight:700;text-align:right;color:#1A4F47"></td>'
+     +'<td style="border:1px solid #C8E0DC;padding:6px;text-align:right;color:#64748B">'+num(tpay)+'<br><span style="font-size:10px">利益'+num(j)+'×'+Math.round(rate*100)+'%</span></td>'
+     +'<td style="border:1px solid #C8E0DC;padding:6px;text-align:right;color:#64748B">'+num(hps)+'</td></tr>';
+  }
+  s+='<tr style="background:#F8FAFA;font-weight:800"><td style="border:1px solid #C8E0DC;padding:6px">合計</td>'
+   +'<td style="border:1px solid #C8E0DC;padding:6px;text-align:right">'+num(totSell)+'</td>'
+   +'<td style="border:1px solid #C8E0DC;padding:6px;text-align:right">'+num(totCost)+'</td>'
+   +'<td style="border:1px solid #C8E0DC;padding:6px;text-align:right">'+num(totTowel)+'</td>'
+   +'<td colspan="2" style="border:1px solid #C8E0DC;padding:6px;font-size:10px;font-weight:400;color:#64748B">タオル合計は請求書の「総計」と一致するか確認</td></tr>';
+  s+='</table></div>';
+
+  // 給与対象外（参考）
+  var others=[];
+  for(var key in agg){
+    var hit=false;
+    for(var pj=0;pj<PAYROLL_ROWS.length;pj++) if(PAYROLL_ROWS[pj].app===key) hit=true;
+    if(!hit && agg[key].sell>0) others.push(key);
+  }
+  if(others.length){
+    s+='<div style="margin-top:10px;font-size:11px;color:#64748B">参考（エクセルの店販歩合の対象外）：';
+    for(var oi=0;oi<others.length;oi++) s+=h(others[oi])+' 物販'+num(Math.round(agg[others[oi]].sell))+'円　';
+    s+='</div>';
+  }
+  // アシスタントのヘッドスパ等（C列の参考）
+  s+='<div style="margin-top:10px;padding:9px 11px;background:#F0F7F6;border-left:3px solid #2C7A6E;border-radius:6px;font-size:11px;color:#1A4F47;line-height:1.8">'
+   +'<b>参考：アシスタントの施術売上（エクセルC列「ﾍｯﾄﾞｽﾊﾟ他」の目安）</b><br>'
+   +'梅田 '+num(Math.round((agg['梅田']||{menuInc:0}).menuInc))+'円（税込）／ 植村(カノン) '+num(Math.round((agg['カノン']||{menuInc:0}).menuInc))+'円（税込）<br>'
+   +'<span style="color:#64748B">※エクセルは税抜で入力されています。エアレジの数字と合わせてご判断ください。</span></div>';
+
+  // エクセル貼り付け用
+  var tsv='氏名\tH店販売値\tI原価\tPタオル税込\n';
+  for(var ti=0;ti<PAYROLL_ROWS.length;ti++){
+    var rw=PAYROLL_ROWS[ti], ag=agg[rw.app]||{sell:0,profit:0};
+    tsv+=rw.xls+'\t'+Math.round(ag.sell)+'\t'+Math.round(ag.sell-ag.profit)+'\t'+(towel[rw.app]||0)+'\n';
+  }
+  s+='<div style="margin-top:12px"><div style="font-size:11px;color:#64748B;font-weight:700;margin-bottom:4px">📋 エクセル貼り付け用（パソコンでコピーして貼り付け）</div>'
+   +'<textarea readonly onclick="this.select()" style="width:100%;box-sizing:border-box;height:110px;padding:8px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:11px;font-family:monospace;color:#1A2E2A">'+h(tsv)+'</textarea></div>';
+  el.innerHTML=s;
 }
 
 /* === P&L (損益計算書) === */
@@ -6174,7 +6314,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "20.0";
+var APP_VERSION = "20.1";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
