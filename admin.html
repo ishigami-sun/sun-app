@@ -235,7 +235,7 @@
     <button class="tab-btn" onclick="switchTab('attend')">🕐 出勤簿</button>
     <button class="tab-btn" onclick="switchTab('inventory')">📦 在庫</button>
   </nav>
-  <div id="cloudStatus" onclick="try{syncFromCloud()}catch(e){}" style="margin-top:8px;padding:8px 10px;border-radius:8px;font-size:11px;text-align:center;background:rgba(255,255,255,0.15);color:#fff;display:none;cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,0.2)">
+  <div id="cloudStatus" onclick="try{cloudStatusTap()}catch(e){}" style="margin-top:8px;padding:8px 10px;border-radius:8px;font-size:11px;text-align:center;background:rgba(255,255,255,0.15);color:#fff;display:none;cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,0.2)">
     <span id="cloudStatusText">🔄 接続中...</span>
   </div>
 </header>
@@ -1360,6 +1360,31 @@ var isOnline = navigator.onLine;
 window.addEventListener('online', function(){ isOnline=true; processSyncQueue(); updateCloudStatus(); });
 window.addEventListener('offline', function(){ isOnline=false; updateCloudStatus(); });
 
+/* ===== 🔑 設定リンク貼り付けセットアップ（v19.9） ===== */
+function cloudStatusTap(){
+  if(!state.cloudUrl || !state.cloudKey){ pasteSetupLink(); return; }
+  syncFromCloud();
+}
+function pasteSetupLink(){
+  var t = prompt('石上さんから届いた「設定リンク」を、そのまま貼り付けてください\n（入力欄を長押し→ペースト）');
+  if(t===null) return;
+  var s = String(t).trim();
+  var key = '';
+  var m = s.match(/#k=([^\s#&?]+)/);
+  if(m){ try{ key = decodeURIComponent(m[1]); }catch(e){ key = m[1]; } }
+  else { var m2 = s.match(/(SUN-[A-Za-z0-9_-]{8,})/); if(m2) key = m2[1]; }
+  if(!key){
+    alert('うまく読み取れませんでした。\n石上さんから届いたメッセージのリンクを「全部コピー」して、もう一度貼り付けてください。');
+    return;
+  }
+  state.cloudKey = key;
+  state.cloudKeyCustom = true;
+  if(!state.cloudUrl){ state.cloudUrl = CLOUD_URL; }
+  try{ saveLocal(); }catch(e){}
+  try{ updateCloudStatus(); }catch(e){}
+  if(typeof showToast==='function') showToast('✅ 設定できました！同期しています…');
+  setTimeout(function(){ try{ syncFromCloud(); }catch(e){} }, 400);
+}
 function updateCloudStatus(){
   var el=document.getElementById('cloudStatus');
   var txt=document.getElementById('cloudStatusText');
@@ -1367,7 +1392,7 @@ function updateCloudStatus(){
   if(!state.cloudUrl || !state.cloudKey){
     el.style.display='block';
     el.style.background='rgba(244,67,54,0.25)';
-    txt.innerHTML='🔑 接続キー未設定 — 管理タブ「クラウド設定」のSECRET_KEY欄にキーを入力してください';
+    txt.innerHTML='🔑 接続キー未設定 — <b>ここをタップ</b>して設定リンクを貼り付け（または管理タブ「クラウド設定」にキー入力）';
   } else if(!isOnline){
     el.style.display='block';
     el.style.background='rgba(255,152,0,0.25)';
@@ -2069,6 +2094,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '🔑 未設定端末は上部バナーをタップ→設定リンクを貼り付けるだけでキー設定が完了するようになりました（LINE内ブラウザで開いてしまう問題の対策）',
   '🔍 日報タブ最上部に顧客名クイック検索（ひらがな・カタカナ対応、全期間から検索）。結果をタップするとその日報にジャンプします',
   '✅ 「今日入力ずみ」のお客様チップを日報タブ上部に表示（タップでその日報へ）',
   '📋 日報タブの「みんなの報告」欄は撤去しました（報告タブに集約）'
@@ -6128,7 +6154,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "19.8";
+var APP_VERSION = "19.9";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
