@@ -5867,7 +5867,10 @@ init();
 try{
   if(location.hash && location.hash.indexOf('#k=')===0){
     var _hk=decodeURIComponent(location.hash.slice(3)).trim();
-    if(_hk){ state.cloudKey=_hk; state.cloudKeyCustom=true; try{ saveLocal(); }catch(e){}
+    if(_hk){ state.cloudKey=_hk; state.cloudKeyCustom=true;
+      // 保存先も標準に戻す（昔手入力した古いURLが残っている端末も一発で直るように）
+      try{ state.cloudUrl=CLOUD_URL; state.cloudUrlCustom=false; state.lastSyncError=''; }catch(e){}
+      try{ saveLocal(); }catch(e){}
       try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){ location.hash=''; }
       try{ updateCloudStatus(); }catch(e){}
       try{ showToast('🔑 接続キーを設定しました'); }catch(e){}
@@ -6478,7 +6481,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "20.6";
+var APP_VERSION = "20.7";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
