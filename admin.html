@@ -462,6 +462,13 @@
 
 <!-- ===== 管理 ===== -->
 <div class="page" id="page-admin">
+<div class="card" style="margin-bottom:14px;border:2px solid #1565C0;background:#F5F9FF">
+  <div class="section-title" style="margin:0 0 8px">🔗 スタッフ用の設定リンクを作る</div>
+  <div style="font-size:12px;color:#64748B;margin-bottom:10px;line-height:1.7">この端末が<b>いま実際に同期できている設定</b>から、スタッフに渡すリンクを作ります。スタッフの端末で1回開くだけで、合言葉と保存先が正しく設定されます。<br><b style="color:#C62828">お店の人以外には渡さないでください。</b></div>
+  <button class="add-btn" style="width:100%;padding:14px;font-size:15px;font-weight:800;background:#1565C0" onclick="buildStaffSetupLink()">🔗 リンクを作る</button>
+  <div id="staffLinkBox" style="margin-top:10px"></div>
+</div>
+
 <div class="card" style="margin-bottom:14px;border:2px solid #F0A500;background:#FFFCF5">
   <div class="section-title" style="margin:0 0 8px">💾 バックアップ（月末にやること）</div>
   <div style="font-size:12px;color:#64748B;margin-bottom:10px;line-height:1.7">月が終わったら、まず上部の緑の帯をタップして<b>同期</b>し、その後この<b>バックアップ</b>を保存してください。保存したファイルはエアレジの「会計明細」CSVと一緒に送れば、入力もれの洗い出しと給与用の数字を作れます。</div>
@@ -2277,6 +2284,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '🔗 管理タブに「スタッフ用の設定リンクを作る」を追加。この端末が実際に同期できている接続設定からリンクを生成しコピーできます（キーを手で書き写す必要がなく、古いキーを配る事故を防げます）',
   '🔧 同期失敗の原因切り分けを追加（認証エラー／保存先URLが標準と不一致／通信）。lastSyncErrorを保持してバナーに表示し、タップで設定リンクの貼り直しやURLの標準化に誘導。staleの判定にstate.lastSyncを含め、同期中のタップにも応答',
   '🔔 同期を自動化（起動時・5分ごと・画面復帰時・通信復帰時・日報登録直後にsyncAllを実行）。未送信が残っている場合のみ上部バナーを赤く点滅させて操作を促します',
   '🐛 報告が最新にならない根本原因を修正。saveMastersは配列を丸ごと置換するため、古い報告一覧を持つ端末の送信が他端末の報告を消していました。取得→マージ→送信の順序を強制し、syncAllも取り込みを先に実行するよう変更',
@@ -5116,6 +5124,36 @@ function switchTab(tab){
   if(tab==='pnl') renderPnl();
 }
 
+/* ===== 🔗 スタッフ用の設定リンク生成（v20.8）
+   この端末が実際に同期できている接続設定（キー）からリンクを組み立てる。
+   キーをチャット等に書き写す必要がなくなり、「渡したキーが古い」事故を防ぐ ===== */
+function buildStaffSetupLink(){
+  var box=document.getElementById('staffLinkBox'); if(!box) return;
+  if(!state.cloudKey){
+    box.innerHTML='<div style="padding:10px;background:#FDECEA;border:1.5px solid #E05555;border-radius:8px;font-size:12px;color:#C62828;font-weight:700">この端末に接続キーが設定されていません。先に管理タブ「クラウド設定」で設定してください。</div>';
+    return;
+  }
+  var okNow = !!state.lastFullSync || (!!state.lastSync && !state.lastSyncError);
+  var origin = location.origin + location.pathname.replace(/[^\/]*$/, '');
+  var link = origin + 'staff.html#k=' + encodeURIComponent(state.cloudKey);
+  var s='';
+  s += okNow
+    ? '<div style="padding:9px 11px;background:#E8F5E9;border-left:4px solid #2E7D32;border-radius:7px;font-size:12px;color:#1B5E20;font-weight:700;margin-bottom:8px">✅ この端末は同期できています。このリンクの設定は正しいです。</div>'
+    : '<div style="padding:9px 11px;background:#FFF3E0;border-left:4px solid #E65100;border-radius:7px;font-size:12px;color:#E65100;font-weight:700;margin-bottom:8px">⚠️ この端末もまだ同期できていません。先にこの端末の同期を直してからリンクを配ってください。</div>';
+  s += '<textarea id="staffLinkText" readonly onclick="this.select()" style="width:100%;box-sizing:border-box;height:86px;padding:9px;border:1.5px solid #90CAF9;border-radius:8px;font-size:12px;font-family:monospace;color:#0D47A1;background:#fff">'+h(link)+'</textarea>';
+  s += '<button class="add-btn" style="width:100%;margin-top:8px;background:#2C7A6E" onclick="copyStaffSetupLink()">📋 リンクをコピー</button>';
+  s += '<div style="font-size:11px;color:#64748B;margin-top:8px;line-height:1.7"><b>スタッフへの伝え方</b><br>「リンクを<b>長押しして「Safariで開く」</b>を選んでね。上の帯が緑になればOK」<br><span style="color:#C62828">※LINEの中で開くとホーム画面のアプリに反映されません</span></div>';
+  box.innerHTML=s;
+}
+function copyStaffSetupLink(){
+  var t=document.getElementById('staffLinkText'); if(!t) return;
+  var done=function(){ if(typeof showToast==='function') showToast('📋 コピーしました。LINEに貼って送ってください'); };
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(t.value).then(done, function(){ t.select(); done(); }); return; }
+  }catch(e){}
+  try{ t.select(); document.execCommand('copy'); }catch(e){}
+  done();
+}
 /* ===== 💴 給与エクセル用の集計（v20.1）
    給与計算エクセル（R◯.◯月度シート）に打ち込む数字を用意する。
    H列=店販売値(税込) / I列=原価 → アプリの物販データから自動集計
@@ -6481,7 +6519,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "20.7";
+var APP_VERSION = "20.8";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
