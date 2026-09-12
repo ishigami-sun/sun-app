@@ -1409,17 +1409,28 @@ function syncAll(silent){
   if(_syncAllBusy) return;
   _syncAllBusy=true;
   if(!silent && typeof showToast==='function') showToast('🔄 同期中…そのままお待ちください');
-  var fin=function(){ _syncAllBusy=false; };
+  var fin=function(ok){
+    _syncAllBusy=false;
+    if(!silent && typeof showToast==='function'){
+      showToast(ok ? ('✅ 最新にしました（日報 '+((state.records||[]).length)+'件）')
+                   : '⚠️ 同期できませんでした。通信を確認してもう一度お試しください');
+    }
+  };
   try{
-    _pushMastersNow(function(){
+    // ①先にクラウドの最新を取り込む（報告を含む。送信より必ず先に行う）
+    syncFromCloud(true, function(ok1){
+      if(!ok1){ fin(false); return; }
       try{
-        pushAndSync(function(){
-          try{ syncFromCloud(silent); }catch(e){}
-          setTimeout(fin, 1500);
-        }, true);
-      }catch(e){ fin(); }
+        // ②マージ済みのマスタ・報告を送る（他端末のぶんを消さない）
+        _pushMastersNow(function(){
+          try{
+            // ③未送信の日報と削除をクラウドへ反映し、記録を最新化
+            pushAndSync(function(){ fin(true); }, true);
+          }catch(e){ fin(false); }
+        });
+      }catch(e){ fin(false); }
     });
-  }catch(e){ fin(); }
+  }catch(e){ fin(false); }
   // 通信が詰まっても操作不能にならないように保険
   setTimeout(function(){ _syncAllBusy=false; }, 20000);
 }
@@ -1453,9 +1464,10 @@ function pushAndSync(cb, silent){
   });
 }
 
-function syncFromCloud(silent){
+function syncFromCloud(silent, cb){
   if(!state.cloudUrl||!state.cloudKey){
     if(!silent) showToast('⚠️ クラウド未設定');
+    if(cb) cb(false);
     return;
   }
   if(!silent) showToast('🔄 同期中...');
@@ -1502,8 +1514,10 @@ function syncFromCloud(silent){
       saveLocal();
       renderAll();
       if(!silent) showToast('✅ 同期完了！日報 '+state.records.length+'件');
+      if(cb) cb(true);
     } else {
       if(!silent) showToast('⚠️ 同期失敗: '+(res.error||''));
+      if(cb) cb(false);
     }
   });
 }
@@ -1557,10 +1571,11 @@ if(typeof window!=='undefined'){ try{ window.addEventListener('pagehide', flushS
 // マスタをクラウドに保存する共通関数
 function saveMastersToCloud(cb){
   if(!state.cloudUrl || !state.cloudKey || typeof callCloud !== 'function') return;
-  // ①まず即時送信（自分の報告・変更を最速でクラウドへ届ける）
-  // ②その後クラウドの最新報告を取り込みマージして再送（他端末の報告を上書きで消さない）
-  _pushMastersNow(cb);
-  _pullReportsThenPush(function(){ _pushMastersNow(); });
+  // 【重要】saveMasters はクラウド側の配列を丸ごと置き換える。
+  // 先に送ってしまうと、同期していない端末の古い報告一覧で
+  // 他の端末が書いた報告をクラウドから消してしまう（報告が最新にならない原因）。
+  // そのため必ず「クラウドから取得 → 自分のぶんとマージ → 送信」の順で行う。
+  _pullReportsThenPush(function(){ _pushMastersNow(cb); });
 }
 function _pullReportsThenPush(next){
   try{
@@ -2033,6 +2048,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '📢 報告が全員に反映されない不具合を修正しました。これまで、同期していない端末から報告を送ると、他の人が書いた報告が消えてしまうことがありました。今は必ず「みんなのぶんを取り込んでから送る」ようになっています',
   '🔄 同期ボタンをひとつにまとめました。画面いちばん上の緑の帯（🔄 ここをタップ＝同期）を押すだけで、打った日報を全員に送る・みんなの最新を取り込む、が一度に終わります。入力タブと日報タブにあった同期ボタンはなくなりました',
   '📢 報告タブを開くと自動で最新の報告を読み込むようになりました',
   '🧹 電波が悪い時にまれに同じ日報が2件表示されることがありましたが、自動で1件にまとまるようになりました（入力し直しは不要です）',
@@ -5896,7 +5912,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "20.3";
+var APP_VERSION = "20.4";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
