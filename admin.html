@@ -462,6 +462,13 @@
 
 <!-- ===== 管理 ===== -->
 <div class="page" id="page-admin">
+<div class="card" style="margin-bottom:14px;border:2px solid #F0A500;background:#FFFCF5">
+  <div class="section-title" style="margin:0 0 8px">💾 バックアップ（月末にやること）</div>
+  <div style="font-size:12px;color:#64748B;margin-bottom:10px;line-height:1.7">月が終わったら、まず上部の緑の帯をタップして<b>同期</b>し、その後この<b>バックアップ</b>を保存してください。保存したファイルはエアレジの「会計明細」CSVと一緒に送れば、入力もれの洗い出しと給与用の数字を作れます。</div>
+  <button class="add-btn" style="width:100%;padding:15px;font-size:16px;font-weight:800;background:linear-gradient(135deg,#FF9800,#F57C00)" onclick="backupData()">💾 バックアップを保存する</button>
+  <div style="font-size:11px;color:#94a3b8;margin-top:7px;text-align:center">スマホの「ファイル」アプリ等に保存されます</div>
+</div>
+
 <div class="card" style="margin-bottom:14px;border:2px solid #2C7A6E">
   <div class="section-title" style="margin:0 0 8px">💴 給与エクセル用の集計（物販・ヒポポタマス）</div>
   <div style="font-size:12px;color:#64748B;margin-bottom:10px;line-height:1.7">給与計算のエクセルに打ち込む数字をまとめます。<b>物販（H列・I列）はアプリから自動集計</b>。<b>ヒポポタマスのタオル（P列）は毎月届く請求書の金額を入力</b>してください（アプリでは扱っていないため）。売上（B列）はエアレジを見てご自身で入力してください。</div>
@@ -566,7 +573,7 @@
   </div>
   <div class="section-title">データ管理</div>
   <div class="card">
-    <button class="add-btn" style="width:100%;margin-bottom:8px" onclick="backupData()">💾 バックアップを保存（ファイル）</button>
+    <div style="font-size:12px;color:#64748B;margin-bottom:8px;text-align:center">バックアップの保存は、この管理タブのいちばん上のボタンからどうぞ。</div>
     <label class="add-btn" style="width:100%;margin-bottom:8px;display:block;text-align:center;cursor:pointer;background:#5B8A83">📂 バックアップから復元<input type="file" accept="application/json,.json" onchange="restoreDataFile(this)" style="display:none"></label>
     <p style="font-size:11px;color:var(--text-light);text-align:center;margin-bottom:10px">※スマホの「ファイル」アプリ等に保存されます。復元は今のデータを上書きします。</p>
     <button class="submit-btn" style="background:linear-gradient(135deg,#E05555,#FF7B7B);margin-bottom:8px" onclick="clearRecords()">🗑 日報データをリセット</button>
@@ -2149,6 +2156,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '💾 バックアップのボタンを管理タブのいちばん上に移動（月末の手順つき）。奥まで探さなくてよくなりました',
   '🔄 同期を画面上部のバナー1か所に集約（送信＋削除反映＋取り込みを一括）。入力タブ・日報タブの同期ボタンは撤去しました',
   '🐛 公開バージョンと画面のバージョンがズレると更新バナーが出続ける不具合を修正（新しい時のみ表示＋更新を試したら再表示しない）',
   '📢 報告タブを開くと自動でクラウドから最新の報告を取り込みます',
@@ -6344,7 +6352,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "20.2";
+var APP_VERSION = "20.3";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
