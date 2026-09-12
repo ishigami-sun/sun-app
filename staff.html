@@ -1235,6 +1235,23 @@ window.addEventListener('online', function(){ isOnline=true; processSyncQueue();
 window.addEventListener('offline', function(){ isOnline=false; updateCloudStatus(); });
 
 /* ===== 🔑 設定リンク貼り付けセットアップ（v19.9） ===== */
+// 合言葉を伏せ字にして表示（先頭5文字＋末尾3文字＋長さ）。突き合わせ用で、値そのものは出さない
+function _maskKey(k){ k=String(k||''); if(!k) return '(なし)'; if(k.length<=8) return k[0]+'…'+k.slice(-1)+'('+k.length+')'; return k.slice(0,5)+'…'+k.slice(-3)+'('+k.length+')'; }
+function _urlTail(u){ u=String(u||''); return u?('…'+u.slice(-10)):'(なし)'; }
+// この端末の staff / admin 両方の接続設定の状態を1行にまとめる（原因の切り分け用）
+function syncDiagLine(){
+  var me='この端末: 合言葉 '+_maskKey(state.cloudKey)+' / 保存先 '+_urlTail(state.cloudUrl)+' / 標準 '+_urlTail(CLOUD_URL);
+  var other='';
+  try{
+    var otherKey = (localStorage.getItem('sun_cloud_admin') && typeof state.cloudKey!=='undefined' && document.title.indexOf('管理')<0) ? 'sun_cloud_admin' : 'sun_cloud_staff';
+    if(otherKey==='sun_cloud_staff' && !localStorage.getItem('sun_cloud_staff')) otherKey='';
+    if(otherKey){
+      var o=JSON.parse(localStorage.getItem(otherKey)||'{}');
+      other=' ／ '+(otherKey==='sun_cloud_admin'?'admin版':'staff版')+': 合言葉 '+_maskKey(o.cloudKey)+' / 保存先 '+_urlTail(o.cloudUrl)+' / '+(o.lastSyncError?('エラー中['+String(o.lastSyncError).slice(0,20)+']'):'エラーなし')+(o.lastFullSync?(' / 最終成功 '+new Date(o.lastFullSync).getHours()+'時'+String(new Date(o.lastFullSync).getMinutes()).padStart(2,'0')+'分'):' / 成功記録なし');
+    }
+  }catch(e){}
+  return me+other;
+}
 function cloudStatusTap(){
   if(!state.cloudUrl || !state.cloudKey){ pasteSetupLink(); return; }
   // 同期中に押しても無反応だと壊れて見えるので、必ず反応を返す
@@ -1371,7 +1388,7 @@ function updateCloudStatus(){
     el.style.display='block';
     el.style.background='rgba(244,67,54,0.45)';
     el.style.animation='syncNag 1.3s ease-in-out infinite';
-    txt.innerHTML='⚠️ <b>つながりません（合言葉が違うようです）</b><br><b>ここをタップして、石上さんから届いた設定リンクを貼り直してください</b>';
+    txt.innerHTML='⚠️ <b>つながりません（合言葉が違うようです）</b><br><b>ここをタップして、石上さんから届いた設定リンクを貼り直してください</b>'+'<br><span style="font-size:10px;opacity:.9;font-weight:400">'+h(syncDiagLine())+'</span>';
   } else if(state.lastSyncError && syncUrlMismatch()){
     el.style.display='block';
     el.style.background='rgba(244,67,54,0.40)';
@@ -1654,7 +1671,7 @@ function syncAll(silent){
     try{ updateCloudStatus(); }catch(e){}
     if(!silent && typeof showToast==='function'){
       if(ok) showToast('✅ 最新にしました（日報 '+((state.records||[]).length)+'件）');
-      else showToast('⚠️ つながりませんでした（'+syncFailHint()+'）'+(state.lastSyncError?' ['+String(state.lastSyncError).slice(0,70)+']':''));
+      else showToast('⚠️ つながりませんでした（'+syncFailHint()+'）'+(state.lastSyncError?' ['+String(state.lastSyncError).slice(0,40)+']':'')+' ◆ '+syncDiagLine());
     }
   };
   try{
@@ -6209,7 +6226,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "21.8";
+var APP_VERSION = "21.9";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
