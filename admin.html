@@ -1505,6 +1505,24 @@ function delSetOf(cat){ var d=state.deletedMasters; return (d&&d[cat])?d[cat]:{}
 function mergeDeletedMasters(cloudDel){ if(!cloudDel||typeof cloudDel!=='object') return; var d=_delMasters(); for(var cat in cloudDel){ var m=cloudDel[cat]; if(!m) continue; if(!d[cat]) d[cat]={}; if(Array.isArray(m)){ for(var i=0;i<m.length;i++) d[cat][String(m[i])]=1; } else { for(var k in m){ if(m[k]) d[cat][String(k)]=1; } } } }
 // 月キー(経費/給与など)の巻き戻り防止: 両方にキーがあれば updatedAt の新しい方を採用（updatedAtが無い場合はローカル維持＝従来動作）
 function mergeByMonthKey(localMap, cloudMap){ localMap=(localMap&&typeof localMap==='object')?localMap:{}; cloudMap=(cloudMap&&typeof cloudMap==='object')?cloudMap:{}; var out={},k; for(k in cloudMap) out[k]=cloudMap[k]; for(k in localMap){ if(!(k in out)){ out[k]=localMap[k]; continue; } var lv=localMap[k], cv=out[k]; var lu=(lv&&lv.updatedAt)?(new Date(lv.updatedAt).getTime()||0):0; var cu=(cv&&cv.updatedAt)?(new Date(cv.updatedAt).getTime()||0):0; out[k]=(lu>=cu)?lv:cv; } return out; }
+/* ===== 🧹 同一IDの日報重複を除去（v20.0）
+   電波が悪い時の送信リトライで、同じ日報がクラウドに2行保存されることがある。
+   idは登録時に採番される一意な値なので、同じidが2件あれば必ず同一の日報＝1件だけ残す ===== */
+function dedupeRecordsById(){
+  var list = state.records || [];
+  var seen = {}, out = [], removed = 0;
+  for(var i=0;i<list.length;i++){
+    var r = list[i];
+    var k = (r && r.id != null) ? String(r.id) : ('__noid_'+i);
+    if(seen[k]){ removed++; continue; }
+    seen[k] = 1; out.push(r);
+  }
+  if(removed > 0){
+    state.records = out;
+    try{ saveLocal(); }catch(e){}
+  }
+  return removed;
+}
 function pushAndSync(){
   if(!state.cloudUrl||!state.cloudKey){ showToast('⚠️ クラウド未設定'); return; }
   showToast('🔄 反映中…そのままお待ちください');
@@ -1887,6 +1905,7 @@ function recYMD(r){
 function defaultTaxMode(n){ return /HOT|ホットペッパー/i.test(n||'') ? 'inc' : 'exc'; } // HOT=税込 / その他=税抜（自動判定）
 
 function renderAll(){
+  try{ dedupeRecordsById(); }catch(e){}
   try{ renderPrevCopyBanner(); renderDraftWarn(); renderInputShortageWarn(); }catch(e){}
   renderStaffButtons(); renderMediaButtons(); renderPaymentButtons(); renderClientType();
   renderTaxMode(); renderMenuList(); renderProductList();
@@ -2094,6 +2113,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '🧹 送信リトライで同じ日報がクラウドに2行できる問題の防御：同一IDの日報は自動で1件に除去されます（8月10件・9月2件の水増しが自動解消）',
   '🔑 未設定端末は上部バナーをタップ→設定リンクを貼り付けるだけでキー設定が完了するようになりました（LINE内ブラウザで開いてしまう問題の対策）',
   '🔍 日報タブ最上部に顧客名クイック検索（ひらがな・カタカナ対応、全期間から検索）。結果をタップするとその日報にジャンプします',
   '✅ 「今日入力ずみ」のお客様チップを日報タブ上部に表示（タップでその日報へ）',
@@ -6154,7 +6174,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "19.9";
+var APP_VERSION = "20.0";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
