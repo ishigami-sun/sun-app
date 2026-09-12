@@ -3884,7 +3884,19 @@ function callCloud(action, payload, callback, _tries){
     body:JSON.stringify(data),
     headers:{'Content-Type':'text/plain;charset=utf-8'},
     redirect:'follow'
-  }).then(function(r){ return r.json(); })
+  }).then(function(r){
+      // JSON以外（GoogleのログインHTML・エラーページ等）が返った時に中身を残す
+      return r.text().then(function(t){
+        try{ return JSON.parse(t); }
+        catch(e){
+          var head=String(t||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,120);
+          var kind = /accounts\.google\.com|ログイン|Sign in/i.test(String(t||'')) ? '（Googleのログイン画面が返っています＝GASの公開設定が「全員」になっていません）'
+                   : /Script function not found|スクリプト関数が見つかりません/i.test(String(t||'')) ? '（GASにdoPostが無いか、デプロイが古い）'
+                   : '';
+          return {ok:false, _nonjson:true, error:'サーバー応答がJSONではありません [HTTP '+r.status+'] '+kind+' 先頭: '+head+' ／ 送信先末尾: …'+String(state.cloudUrl||'').slice(-16)};
+        }
+      });
+    })
     .then(function(res){
       if(res && res.ok===false && _isMutation(action)){
         // サーバーがアプリレベルで失敗を返した → 更新系は再送（上限付き）。黙って失わない
@@ -9041,7 +9053,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "21.6";
+var APP_VERSION = "21.7";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
