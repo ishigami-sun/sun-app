@@ -1390,18 +1390,21 @@ function cloudStatusTap(){
   }
   syncAll();
 }
-function pasteSetupLink(){
-  var t = prompt('石上さんから届いた「設定リンク」を、そのまま貼り付けてください\n（入力欄を長押し→ペースト）');
-  if(t===null) return;
-  var s = String(t).trim();
-  var key = '';
-  var m = s.match(/#k=([^\s#&?]+)/);
-  if(m){ try{ key = decodeURIComponent(m[1]); }catch(e){ key = m[1]; } }
-  else { var m2 = s.match(/(SUN-[A-Za-z0-9_-]{8,})/); if(m2) key = m2[1]; }
-  if(!key){
-    alert('うまく読み取れませんでした。\n石上さんから届いたメッセージのリンクを「全部コピー」して、もう一度貼り付けてください。');
-    return;
-  }
+/* ===== 🔑 設定リンクの貼り付け（v20.9）
+   LINEの中でリンクを開くとホーム画面のアプリに設定が入らない。
+   ブラウザを切り替えずに済むよう、アプリ内の入力欄に貼り付ける方式にする。
+   （prompt()は貼り付けが操作しづらいため、実際の入力欄を出す） ===== */
+// 貼り付けた文字列から合言葉を取り出す（リンクごと・キー単体・前後に文章ありでもOK）
+function extractSetupKey(text){
+  var s = String(text||'').trim();
+  if(!s) return '';
+  var m = s.match(/#k=([^\s#&?"'<>]+)/);
+  if(m){ try{ return decodeURIComponent(m[1]).trim(); }catch(e){ return m[1].trim(); } }
+  var m2 = s.match(/(SUN-[A-Za-z0-9_-]{8,})/);
+  if(m2) return m2[1].trim();
+  return '';
+}
+function applySetupKey(key){
   state.cloudKey = key;
   state.cloudKeyCustom = true;
   // 保存先もアプリ標準に戻す（昔手入力した古いURLが残っていると届かないため）
@@ -1410,7 +1413,59 @@ function pasteSetupLink(){
   try{ saveLocal(); }catch(e){}
   try{ updateCloudStatus(); }catch(e){}
   if(typeof showToast==='function') showToast('✅ 設定できました！同期しています…');
-  setTimeout(function(){ try{ syncFromCloud(); }catch(e){} }, 400);
+  setTimeout(function(){ try{ syncAll(); }catch(e){} }, 400);
+}
+function closeSetupDialog(){ var o=document.getElementById('setupOverlay'); if(o) o.remove(); }
+function pasteSetupLink(){
+  closeSetupDialog();
+  var ov=document.createElement('div');
+  ov.id='setupOverlay';
+  ov.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:18px';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:430px;width:100%;padding:18px;box-shadow:0 10px 40px rgba(0,0,0,0.35)">'
+    +'<div style="font-size:17px;font-weight:900;color:#1A4F47;margin-bottom:6px">🔑 同期の設定</div>'
+    +'<div style="font-size:13px;color:#475569;line-height:1.85;margin-bottom:12px">'
+    +'①LINEで届いた<b>メッセージを長押し → コピー</b><br>'
+    +'②下の欄をタップして<b>長押し → ペースト</b><br>'
+    +'③「設定する」を押す<br>'
+    +'<span style="color:#94a3b8;font-size:12px">※リンクを開く必要はありません。ここに貼るだけでOK</span></div>'
+    +'<input id="setupKeyInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ここに貼り付け" '
+    +'style="width:100%;box-sizing:border-box;padding:14px;border:2px solid #2C7A6E;border-radius:10px;font-size:16px;color:#1A2E2A">'
+    +'<button onclick="pasteFromClipboard()" style="width:100%;margin-top:9px;padding:12px;background:#fff;color:#1565C0;border:2px solid #1565C0;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">📋 コピーした内容を自動で入れる</button>'
+    +'<div id="setupKeyMsg" style="font-size:12px;font-weight:700;margin-top:9px;min-height:16px"></div>'
+    +'<div style="display:flex;gap:8px;margin-top:10px">'
+    +'<button onclick="closeSetupDialog()" style="flex:1;padding:14px;border:2px solid #C8E0DC;background:#fff;color:#64748B;border-radius:10px;font-weight:700;cursor:pointer">やめる</button>'
+    +'<button onclick="submitSetupKey()" style="flex:1.4;padding:14px;border:none;background:#2C7A6E;color:#fff;border-radius:10px;font-weight:800;font-size:15px;cursor:pointer">設定する</button>'
+    +'</div></div>';
+  document.body.appendChild(ov);
+  try{ setTimeout(function(){ var i=document.getElementById('setupKeyInput'); if(i) i.focus(); }, 120); }catch(e){}
+}
+// クリップボードから直接読み取る（iOSでは許可を求められる。失敗しても手で貼れる）
+function pasteFromClipboard(){
+  var msg=document.getElementById('setupKeyMsg');
+  var inp=document.getElementById('setupKeyInput');
+  function ng(){ if(msg){ msg.style.color='#E65100'; msg.textContent='自動で入れられませんでした。上の欄を長押しして「ペースト」してください'; } }
+  try{
+    if(navigator.clipboard && navigator.clipboard.readText){
+      navigator.clipboard.readText().then(function(t){
+        if(!t){ ng(); return; }
+        if(inp) inp.value=t;
+        if(msg){ msg.style.color='#2E7D32'; msg.textContent='✅ 入りました。「設定する」を押してください'; }
+      }, ng);
+      return;
+    }
+  }catch(e){}
+  ng();
+}
+function submitSetupKey(){
+  var inp=document.getElementById('setupKeyInput');
+  var msg=document.getElementById('setupKeyMsg');
+  var key=extractSetupKey(inp?inp.value:'');
+  if(!key){
+    if(msg){ msg.style.color='#C62828'; msg.textContent='読み取れませんでした。石上さんのメッセージを全部コピーして貼り付けてください'; }
+    return;
+  }
+  closeSetupDialog();
+  applySetupKey(key);
 }
 function updateCloudStatus(){
   var el=document.getElementById('cloudStatus');
@@ -2284,6 +2339,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '🔑 設定リンクの貼り付けをprompt()から専用ダイアログに変更（実入力欄＋クリップボード読み取りボタン）。LINE内ブラウザでリンクを開く必要がなくなり、ホーム画面アプリに設定が入らない問題を回避',
   '🔗 管理タブに「スタッフ用の設定リンクを作る」を追加。この端末が実際に同期できている接続設定からリンクを生成しコピーできます（キーを手で書き写す必要がなく、古いキーを配る事故を防げます）',
   '🔧 同期失敗の原因切り分けを追加（認証エラー／保存先URLが標準と不一致／通信）。lastSyncErrorを保持してバナーに表示し、タップで設定リンクの貼り直しやURLの標準化に誘導。staleの判定にstate.lastSyncを含め、同期中のタップにも応答',
   '🔔 同期を自動化（起動時・5分ごと・画面復帰時・通信復帰時・日報登録直後にsyncAllを実行）。未送信が残っている場合のみ上部バナーを赤く点滅させて操作を促します',
@@ -6519,7 +6575,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "20.8";
+var APP_VERSION = "20.9";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
