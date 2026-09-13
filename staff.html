@@ -987,7 +987,9 @@ var TAX_RATE = 0.1;
 
 
 // ============ PIN認証 ============
-var CLOUD_URL = "https://script.google.com/macros/s/AKfycbxTy4rrPDjLwrP7JH1HoctOOqltzrC5WvYU6VRKmpaab2YBrWtRTckUBl0Ac4GM2s_SgA/exec";
+var CLOUD_URL = "https://script.google.com/macros/s/AKfycbwLWfMK2hj0siOJL5JL0bJ9IRcagFrlN-MqvmyNR-S3Kig0QTYT5pT8gqbxBU1Lt6tAIg/exec";
+// 過去の保存先。端末にこれが残っていたら自動で新しい保存先へ切り替える
+var OLD_CLOUD_URLS = ["https://script.google.com/macros/s/AKfycbytWfE31hbXzNNdPbx2NkwgIMudBCslNWJIP7LIfcvMt8hfg-FvB3VUZD73VHsKFHYi/exec", "https://script.google.com/macros/s/AKfycbxTy4rrPDjLwrP7JH1HoctOOqltzrC5WvYU6VRKmpaab2YBrWtRTckUBl0Ac4GM2s_SgA/exec"];
 var CLOUD_KEY = ""; // セキュリティ対応：キーはコードに置かない。各端末の管理タブで入力（localStorageに保存）
 var loginState = { selectedStaff:'', pin:'', setupPin:'', setupPhase:1, firstPin:'' };
 
@@ -1453,6 +1455,8 @@ function normalizeCloudConfig(){
     if(k!==state.cloudKey){ state.cloudKey=k; changed=true; }
     var u=_cleanCloudUrl(state.cloudUrl);
     if(!u){ u=CLOUD_URL; state.cloudUrlCustom=false; }
+    // 古い保存先（前のデプロイ）が残っていたら新しい保存先へ移す
+    try{ if(typeof OLD_CLOUD_URLS!=='undefined' && OLD_CLOUD_URLS.indexOf(u)>=0){ u=CLOUD_URL; state.cloudUrlCustom=false; state.lastSyncError=''; } }catch(e){}
     if(u!==state.cloudUrl){ state.cloudUrl=u; changed=true; }
   }catch(e){}
   return changed;
@@ -2340,6 +2344,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '✅ 「合言葉が違う」でつながらなかった問題を直しました。保存先を新しいものに切り替え、古い保存先が残っている端末も自動で切り替わります。アプリを開き直すだけでOKです',
   '🔧 保存先の設定に余計な文字や改行が混じっていても、自動で正しい形に直してつなぐようにしました',
   '🔧 同じ携帯に管理者版が入っている場合、つながらない時は管理者版の接続設定を自動で取り込んで直します（操作不要）',
   '💾 「端末の保存容量がいっぱいです」が出て設定や日報が保存できなくなる問題を修正しました。溜まっていた送信待ちを自動で整理し、端末には直近5か月分の日報だけを置くようにしました（それより前の分はクラウドにあります）',
@@ -6226,7 +6231,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "21.9";
+var APP_VERSION = "22.0";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
