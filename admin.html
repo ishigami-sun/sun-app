@@ -4799,6 +4799,8 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '👤 日報タブの「担当者でしぼる」に「担当者なし」を追加。レジから取り込んだ日報など担当者が空のものだけを表示して割り当てられます',
+  '📥 エアレジ照合の結果から「入力漏れ」をボタン1つで日報に取り込めるようにしました。金額・明細はレジの記録どおりに入るので売上の数字が正確になります。担当者は空で入るのであとから割り当ててください（取引Noで二重取り込みを防止）',
   '👁 閲覧専用モードを追加（admin.html?view=1）。税理士など社外の方に数字を見てもらう用で、入力・管理タブを隠し、編集・削除・設定は通信の入口で遮断します。管理タブから閲覧専用リンクをコピーできます',
   '💰 管理タブに「人件費の見通し」を追加。給与明細から固定給と歩合の計算式を登録し、日報の数字から支給見込・会社負担込みの総額・人件費率を表示。「あと少しで物販歩合率が上がる人」も出ます',
   '✅ CLOUD_URLを9/13の新デプロイに切替。旧デプロイURLが端末に残っていても normalizeCloudConfig が自動で新URLへ移行。CLOUD_KEYが空のときに端末の合言葉を消さないよう init を修正',
@@ -5713,6 +5715,87 @@ function renderGoals(){
 }
 
 /* ===== 🧾 エアレジ会計明細CSV照合（月次） ===== */
+/* ===== 📥 エアレジの入力漏れを日報に取り込む（v22.4）
+   照合で「レジに会計があるのに日報が無い」と出たものを、日報として作る。
+   金額と明細（商品ごとの価格）はレジの記録そのままなので、売上の数字は正確になる。
+   担当者だけはレジに記録が無いため空にしておき、あとから割り当ててもらう。
+   取引Noを控えるので、同じ会計を二重に取り込むことはない ===== */
+function _airMenuByPrice(){
+  if(window._airMenuIdx) return window._airMenuIdx;
+  var m={};
+  (state.menus||[]).forEach(function(x){ if(x&&x.price>0 && !m[x.price]) m[x.price]={type:'menu',item:x}; });
+  (state.products||[]).forEach(function(p){ if(!p||!p.sell) return; var e=Math.round(p.sell/1.1); if(!m[e]) m[e]={type:'product',item:p}; });
+  window._airMenuIdx=m; return m;
+}
+function _airHasNo(no){
+  if(!no) return false;
+  for(var i=0;i<(state.records||[]).length;i++){ if(String(state.records[i].airNo||'')===String(no)) return true; }
+  return false;
+}
+// レジの明細行（税抜単価の並び）から、日報のメニュー・物販を組み立てる
+function _airBuildLines(t){
+  var idx=_airMenuByPrice(), menus=[], products=[], known=0;
+  (t.lines||[]).forEach(function(v){
+    var hit=idx[v];
+    if(hit && hit.type==='menu'){
+      known+=v;
+      menus.push({id:hit.item.id||0,name:hit.item.name,price:hit.item.price,qty:1,inputPrice:v,taxMode:'exc',extraAmount:0,discountPct:0,basePrice:v,menuStaff:''});
+    } else if(hit && hit.type==='product'){
+      known+=v;
+      products.push({id:hit.item.id||0,name:hit.item.name,sell:hit.item.sell,cost:hit.item.cost||0,qty:1,discountPct:0,productStaff:''});
+    }
+  });
+  // 明細から組み立てた金額とレジの実収額の差は「調整」1行にまとめ、合計は必ずレジに合わせる
+  var built=menus.reduce(function(a,m){return a+Math.round(m.inputPrice*1.1);},0)+products.reduce(function(a,p){return a+(p.sell||0);},0);
+  var diff=(t.amt||0)-built;
+  if(diff!==0 || (!menus.length && !products.length)){
+    menus.push({id:0,name:'【レジ取込】調整',price:0,qty:1,inputPrice:diff,taxMode:'inc',extraAmount:0,discountPct:0,basePrice:diff,menuStaff:''});
+  }
+  return {menus:menus, products:products};
+}
+function importAirregiMissing(){
+  var L=window._airregiLast;
+  if(!L||!L.missing||!L.missing.length){ showToast('⚠️ 取り込む対象がありません'); return; }
+  var targets=L.missing.filter(function(t){ return !_airHasNo(t.no); });
+  if(!targets.length){ showToast('✅ すべて取り込み済みです'); return; }
+  var sum=targets.reduce(function(a,t){return a+(t.amt||0);},0);
+  if(!confirm('レジにあって日報に無い '+targets.length+'件（¥'+num(sum)+'）を日報に取り込みます。\n\n'
+    +'・金額と内容はレジの記録どおりです\n'
+    +'・担当者は空のままなので、あとで割り当ててください\n'
+    +'・同じ会計を二重に取り込むことはありません\n\nよろしいですか？')) return;
+  var made=0, base=Date.now();
+  targets.forEach(function(t,i){
+    var p=String(t.day||'').split('-');
+    var hm=String(t.time||'12:00').split(':');
+    var dt=new Date(parseInt(p[0],10),parseInt(p[1],10)-1,parseInt(p[2],10),parseInt(hm[0],10)||12,parseInt(hm[1],10)||0,0);
+    var L2=_airBuildLines(t);
+    var mAmt=L2.menus.reduce(function(a,m){ return a+menuLineInc(m); },0);
+    var pSell=L2.products.reduce(function(a,x){ return a+prodLineSell(x); },0);
+    var pProf=L2.products.reduce(function(a,x){ return a+prodLineProfit(x); },0);
+    var total=mAmt+pSell, exc=Math.round(total/1.1);
+    var rec={ id:base+i, airNo:t.no||'', time:dt.toISOString(), staff:'',
+      customerName:'', clientType:'リピーター', media:'', payment:'',
+      taxMode:'inc', paymentFeeRate:0, paymentFeeAmount:0,
+      menus:L2.menus, products:L2.products,
+      menuAmount:mAmt, productSell:pSell, productProfit:pProf,
+      total:total, totalExc:exc, taxAmount:total-exc, clientCount:1 };
+    state.records.push(rec); made++;
+    try{ callCloud('addRecord',{record:rec},function(){}); }catch(e){}
+  });
+  try{ saveLocal(); }catch(e){}
+  try{ renderAll(); }catch(e){}
+  showToast('📥 '+made+'件を日報に取り込みました。担当者を割り当ててください');
+}
+// 担当者が空の日報の件数（取り込み後に割り当てが必要なもの）
+function unassignedCount(ym){
+  var n=0;
+  for(var i=0;i<(state.records||[]).length;i++){
+    var r=state.records[i];
+    if(ym && recYMD(r).slice(0,7)!==ym) continue;
+    if(!String(r.staff||'').trim()) n++;
+  }
+  return n;
+}
 function runAirregiCheck(file){
   if(!file) return;
   var el=document.getElementById('airregiResult');
@@ -5745,13 +5828,21 @@ function airregiReconcile(txt){
   for(var i=0;i<hdr.length;i++) ix[hdr[i].trim()]=i;
   function gv(row,name){ var k=ix[name]; return (k==null)?'':(row[k]||'').trim(); }
   var txs=[];
+  var _airLineOwner=null;
   for(var i=1;i<lines.length;i++){
     var row=_csvParseLine(lines[i]);
-    var kd=gv(row,'会計日'); if(!kd) continue; // 商品明細行はスキップ
+    var kd=gv(row,'会計日');
+    if(!kd){ // 商品明細行：直前の会計に単価(税抜)を足す
+      var pv=parseInt(gv(row,'価格')||'0',10);
+      if(pv>0 && _airLineOwner) _airLineOwner.lines.push(pv);
+      continue;
+    }
     var day=(gv(row,'来店日')||kd).replace(/\//g,'-');
     var fixedS=gv(row,'修正後合計'); var totS=gv(row,'合計');
     var amt=Math.round(parseFloat(fixedS!==''?fixedS:totS)||0);
-    txs.push({ day:day, time:gv(row,'会計時間').slice(0,5), amt:amt, m:null });
+    txs.push({ day:day, time:gv(row,'会計時間').slice(0,5), amt:amt, m:null, no:gv(row,'取引No'), lines:[] });
+    _airLineOwner=txs[txs.length-1];
+    var pv0=parseInt(gv(row,'価格')||'0',10); if(pv0>0) _airLineOwner.lines.push(pv0);
   }
   if(!txs.length){ if(el) el.innerHTML='<div style="font-size:12px;color:#C62828;padding:6px">⚠️ 会計データが見つかりませんでした</div>'; return; }
   // 日報側を日付でグループ化
@@ -5845,7 +5936,12 @@ function airregiReconcile(txt){
     +'<b style="color:#E65100">② 日報のみ（レジ会計なし）：'+sunOnly.length+'件 ¥'+num(sunTot)+'</b><br>'
     +'<b style="color:#B8860B">③ 金額不一致：'+nearPairs.length+'件</b></div>';
   if(missing.length){
-    html+='<div style="font-size:12px;font-weight:800;color:#C62828;margin:6px 0 4px">① 入力漏れ疑い（レジに会計あり・日報なし）→ 日報を追加入力してください</div>';
+    html+='<div style="font-size:12px;font-weight:800;color:#C62828;margin:6px 0 4px">① 入力漏れ疑い（レジに会計あり・日報なし）</div>';
+    html+='<button onclick="importAirregiMissing()" style="width:100%;padding:13px;margin-bottom:6px;background:#C62828;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">📥 この'+missing.length+'件を日報に取り込む（金額はレジどおり・担当者はあとで割り当て）</button>';
+    html+='<div style="font-size:11.5px;color:#8a6d4a;background:#FFF9E6;border:1px solid #F0D000;border-radius:8px;padding:9px 11px;margin-bottom:8px;line-height:1.9">'
+      +'<b>取り込んだあとにやること</b><br>'
+      +'①日報タブ →「担当者でしぼる」の<b>「担当者なし」</b>を選び、1件ずつ担当者を入れる（入れるまで給与の集計には入りません）<br>'
+      +'②下の<b>②日報のみ</b>は、レジに無い日報です。誤入力や重複の可能性があるので確認して直すか消してください。これを残したままだとアプリの売上がレジより多くなります</div>';
     html+='<div style="max-height:220px;overflow:auto;border:1px solid #F1D0CD;border-radius:8px;margin-bottom:8px">';
     missing.forEach(function(t){ html+='<div style="display:flex;justify-content:space-between;padding:6px 10px;border-bottom:1px solid #FBEAE8;font-size:12px"><span>'+h(t.day.slice(5))+'　'+h(t.time)+'</span><b>¥'+num(t.amt)+'</b></div>'; });
     html+='</div>';
@@ -9289,7 +9385,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "22.3";
+var APP_VERSION = "22.5";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
@@ -9529,14 +9625,14 @@ function renderCustomerList(){
   var filterEl = document.getElementById('todayStaffFilter');
   if(filterEl){
     var staffsInList = ['全員'];
-    var seenStaff = {};
+    var seenStaff = {}; var _noStaff = 0;
     for(var i=0;i<filteredByPeriod.length;i++){
       var rs = String(filteredByPeriod[i].staff || '').trim();
-      if(rs && !seenStaff[rs]){
-        seenStaff[rs] = true;
-        staffsInList.push(rs);
-      }
+      if(!rs){ _noStaff++; continue; }
+      if(!seenStaff[rs]){ seenStaff[rs] = true; staffsInList.push(rs); }
     }
+    // 担当者が空の日報（レジから取り込んだ分など）を絞り込めるようにする
+    if(_noStaff > 0) staffsInList.push('担当者なし('+_noStaff+')');
     if(!state.todayStaffFilter) state.todayStaffFilter = '全員';
     var fhtml = '';
     for(var fi=0;fi<staffsInList.length;fi++){
@@ -9560,9 +9656,11 @@ function renderCustomerList(){
   var filteredRecs = filteredByPeriod;
   if(state.todayStaffFilter && state.todayStaffFilter !== '全員'){
     var filterName = String(state.todayStaffFilter).trim();
-    filteredRecs = filteredByPeriod.filter(function(r){ 
-      return String(r.staff || '').trim() === filterName; 
-    });
+    if(filterName.indexOf('担当者なし')===0){
+      filteredRecs = filteredByPeriod.filter(function(r){ return !String(r.staff || '').trim(); });
+    } else {
+      filteredRecs = filteredByPeriod.filter(function(r){ return String(r.staff || '').trim() === filterName; });
+    }
   }
   
   var custEl = document.getElementById('todayCustomerList');
