@@ -4834,6 +4834,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '👤 日報タブで「担当者なし」を選ぶと、一覧の上に<b>まとめて担当者を割り当てるボタン</b>が出るようになりました。レジから取り込んだ日報を1件ずつ開かなくても、名前を押すだけで全部入ります（すでに担当者が入っている日報は変わりません）',
   '🛟 日報消失の根本原因を修正（重大）。syncFromCloudはクラウドに無いローカル日報を「今セッションの再送キューに載っているものだけ」残していたが、unauthorizedは再送キューに積まない仕様のため、接続設定が壊れている間に入力した日報がキューに載らず、設定修復後の最初の同期でstate.recordsごと消えていた。クラウドで確認できた日報に_cs印を付け、印の無いものは消さずに保持・再送するよう変更',
   '⚠️ 未送信件数を再送キューだけでなく「_cs印の無い日報」からも数えるようにし、届いていない日報がある端末では必ず赤い帯が出るようにしました',
   '🧾 エアレジ取込みで、伝票名からわかる分は担当者も自動で入れるようにしました（例：伝票名「ネイル」→いつもネイルを入力している人）。過去の日報で8割以上その人、という時だけ自動で入れ、はっきりしない分は今まで通り「担当者なし」で残ります',
@@ -5765,6 +5766,36 @@ function _airMenuByPrice(){
   (state.products||[]).forEach(function(p){ if(!p||!p.sell) return; var e=Math.round(p.sell/1.1); if(!m[e]) m[e]={type:'product',item:p}; });
   window._airMenuIdx=m; return m;
 }
+// 「担当者なし」で絞り込んだ日報に、まとめて担当者を入れる（v22.8）
+// 対象は「いま画面に出ていて、かつ担当者が空のもの」だけ。
+// すでに担当者が入っている日報には触れない。
+function bulkAssignStaff(name){
+  name=String(name||'').trim();
+  if(!name) return;
+  var ids=(window._unassignedIds||[]);
+  if(!ids.length){ showToast('⚠️ 対象がありません'); return; }
+  var pick={}; for(var k=0;k<ids.length;k++) pick[String(ids[k])]=1;
+  var targets=[];
+  for(var i=0;i<(state.records||[]).length;i++){
+    var r=state.records[i];
+    if(!pick[String(r.id)]) continue;
+    if(String(r.staff||'').trim()) continue;   // すでに入っているものは変えない
+    targets.push(r);
+  }
+  if(!targets.length){ showToast('⚠️ 担当者が空の日報がありません'); return; }
+  if(!confirm('いま出ている担当者なしの '+targets.length+'件を、まとめて「'+name+'」にします。\n\n'
+    +'・すでに担当者が入っている日報は変わりません\n'
+    +'・あとから1件ずつ直せます\n\nよろしいですか？')) return;
+  targets.forEach(function(r){
+    r.staff=name;
+    (r.menus||[]).forEach(function(m){ if(!String(m.menuStaff||'').trim()) m.menuStaff=name; });
+    (r.products||[]).forEach(function(p){ if(!String(p.productStaff||'').trim()) p.productStaff=name; });
+    try{ callCloud('addRecord',{record:r},function(){}); }catch(e){}
+  });
+  try{ saveLocal(); }catch(e){}
+  try{ renderAll(); }catch(e){}
+  showToast('✅ '+targets.length+'件を「'+name+'」にしました');
+}
 function _airHasNo(no){
   if(!no) return false;
   for(var i=0;i<(state.records||[]).length;i++){ if(String(state.records[i].airNo||'')===String(no)) return true; }
@@ -6009,7 +6040,7 @@ function airregiReconcile(txt){
     html+='<button onclick="importAirregiMissing()" style="width:100%;padding:13px;margin-bottom:6px;background:#C62828;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">📥 この'+missing.length+'件を日報に取り込む（金額はレジどおり・担当者はあとで割り当て）</button>';
     html+='<div style="font-size:11.5px;color:#8a6d4a;background:#FFF9E6;border:1px solid #F0D000;border-radius:8px;padding:9px 11px;margin-bottom:8px;line-height:1.9">'
       +'<b>取り込んだあとにやること</b><br>'
-      +'①日報タブ →「担当者でしぼる」の<b>「担当者なし」</b>を選び、1件ずつ担当者を入れる（入れるまで給与の集計には入りません）<br>'
+      +'①日報タブ →「担当者でしぼる」の<b>「担当者なし」</b>を選ぶ。上に出る<b>「まとめて担当者に割り当てる」</b>で一気に入れられます（入れるまで給与の集計には入りません）<br>'
       +'②下の<b>②日報のみ</b>は、レジに無い日報です。誤入力や重複の可能性があるので確認して直すか消してください。これを残したままだとアプリの売上がレジより多くなります</div>';
     html+='<div style="max-height:220px;overflow:auto;border:1px solid #F1D0CD;border-radius:8px;margin-bottom:8px">';
     missing.forEach(function(t){ html+='<div style="display:flex;justify-content:space-between;padding:6px 10px;border-bottom:1px solid #FBEAE8;font-size:12px"><span>'+h(t.day.slice(5))+'　'+h(t.time)+'</span><b>¥'+num(t.amt)+'</b></div>'; });
@@ -9454,7 +9485,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "22.7";
+var APP_VERSION = "22.8";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
@@ -9727,7 +9758,9 @@ function renderCustomerList(){
     var filterName = String(state.todayStaffFilter).trim();
     if(filterName.indexOf('担当者なし')===0){
       filteredRecs = filteredByPeriod.filter(function(r){ return !String(r.staff || '').trim(); });
+      window._unassignedIds = filteredRecs.map(function(r){ return r.id; });
     } else {
+      window._unassignedIds = [];
       filteredRecs = filteredByPeriod.filter(function(r){ return String(r.staff || '').trim() === filterName; });
     }
   }
@@ -9747,6 +9780,19 @@ function renderCustomerList(){
   filteredRecs.sort(function(a,b){ return new Date(b.time)-new Date(a.time); });
   
   var chtml = '';
+  // 「担当者なし」で絞り込んでいる時は、まとめて担当者を入れられるようにする
+  // （レジから取り込んだ日報を1件ずつ開かなくてよくするため）
+  if(String(state.todayStaffFilter||'').indexOf('担当者なし')===0 && filteredRecs.length){
+    chtml += '<div style="background:#FFF8E1;border:2px solid #F0A500;border-radius:12px;padding:12px;margin-bottom:12px">';
+    chtml += '<div style="font-size:13px;font-weight:800;color:#8A5A00;margin-bottom:4px">👤 いま出ている '+filteredRecs.length+'件を、まとめて担当者に割り当てる</div>';
+    chtml += '<div style="font-size:11px;color:#8A6A2A;margin-bottom:9px;line-height:1.6">名前を押すと、この'+filteredRecs.length+'件すべての担当者がその人になります。あとから1件ずつ直せます。ちがう人の分が混ざっている時は、先に期間や並びで絞ってから押してください。</div>';
+    chtml += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+    for(var _bi=0;_bi<(state.staff||[]).length;_bi++){
+      var _bn=state.staff[_bi];
+      chtml += '<button onclick="bulkAssignStaff('+JSON.stringify(_bn).replace(/"/g,'&quot;')+')" style="padding:8px 14px;border-radius:18px;border:1.5px solid #F0A500;background:#fff;color:#8A5A00;font-size:12px;font-weight:700;cursor:pointer">'+h(_bn)+'</button>';
+    }
+    chtml += '</div></div>';
+  }
   for(var i=0;i<filteredRecs.length;i++){
     var r = filteredRecs[i];
     if(state.editInlineId && String(r.id)===String(state.editInlineId)){ chtml += '<div id="inlineEditor" style="margin-bottom:10px"></div>'; continue; }
