@@ -3589,6 +3589,7 @@ function logoutSession(){
   location.reload();
 }
 function cloudCall(action, payload, callback){
+  if(typeof IS_VIEW_ONLY!=='undefined' && IS_VIEW_ONLY && !VIEW_ONLY_READS[action]){ if(callback) callback({ok:false, error:'閲覧専用モードのため変更できません'}); return; }
   if(typeof isOnline !== 'undefined' && !isOnline){
     if(callback) callback({ok:false, error:'offline'});
     return;
@@ -3898,10 +3899,39 @@ function normalizeCloudConfig(){
   }catch(e){}
   return changed;
 }
+/* ===== 👁 閲覧専用モード（v22.3）
+   admin.html?view=1 で開くと、見るだけのモードになる。
+   税理士など社外の方に数字を見てもらうときに、誤操作でデータが壊れないようにするためのもの。
+   ボタンを隠すだけでなく、通信の入口(callCloud)で読み取り以外を止める ===== */
+var IS_VIEW_ONLY = (function(){ try{ return /(^|[?&])view=1(&|$)/.test(location.search); }catch(e){ return false; } })();
+var VIEW_ONLY_READS = { getAll:1 };
+function applyViewOnlyMode(){
+  if(!IS_VIEW_ONLY) return;
+  try{
+    document.body.classList.add('viewonly');
+    // 入力・管理タブは開かせない
+    var hide=['input','admin','attend','inventory','academy'];
+    var order=['input','records','reports','dashboard','sales','goals','pnl','admin','manual','academy','attend','inventory'];
+    var tabs=document.querySelectorAll('.tab-btn');
+    for(var i=0;i<order.length;i++){ if(hide.indexOf(order[i])>=0 && tabs[i]) tabs[i].style.display='none'; }
+    var st=document.createElement('style');
+    st.textContent='body.viewonly button[onclick^="editRecord"],body.viewonly button[onclick^="deleteRecord"],'
+      +'body.viewonly button[onclick^="clearRecords"],body.viewonly [onclick^="restoreDataFile"],'
+      +'body.viewonly button[onclick^="buildStaffSetupLink"],body.viewonly #staffLinkBox,'
+      +'body.viewonly .submit-btn,body.viewonly #page-admin,body.viewonly #page-input{display:none!important}';
+    document.head.appendChild(st);
+    var b=document.createElement('div');
+    b.style.cssText='position:sticky;top:0;z-index:900;background:#1565C0;color:#fff;padding:9px 14px;font-size:13px;font-weight:700;text-align:center';
+    b.textContent='👁 閲覧専用モード — 数字を見るだけの画面です。編集・削除はできません';
+    document.body.insertBefore(b, document.body.firstChild);
+    try{ switchTab('sales'); }catch(e){}
+  }catch(e){}
+}
 // クラウドAPI呼び出し
 function callCloud(action, payload, callback, _tries){
   _tries=_tries||0;
   try{ if(normalizeCloudConfig()) saveLocal(); }catch(e){}
+  if(IS_VIEW_ONLY && !VIEW_ONLY_READS[action]){ if(callback) callback({ok:false, error:'閲覧専用モードのため変更できません'}); return; }
   if(!state.cloudUrl||!state.cloudKey){
     if(callback) callback({ok:false, error:'未設定'});
     return;
@@ -4769,6 +4799,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '👁 閲覧専用モードを追加（admin.html?view=1）。税理士など社外の方に数字を見てもらう用で、入力・管理タブを隠し、編集・削除・設定は通信の入口で遮断します。管理タブから閲覧専用リンクをコピーできます',
   '💰 管理タブに「人件費の見通し」を追加。給与明細から固定給と歩合の計算式を登録し、日報の数字から支給見込・会社負担込みの総額・人件費率を表示。「あと少しで物販歩合率が上がる人」も出ます',
   '✅ CLOUD_URLを9/13の新デプロイに切替。旧デプロイURLが端末に残っていても normalizeCloudConfig が自動で新URLへ移行。CLOUD_KEYが空のときに端末の合言葉を消さないよう init を修正',
   '🔧 cloudUrl/cloudKeyを通信前に正規化（空白・改行除去、GAS URL形式の抽出、不正時はCLOUD_URLへ）。SafariのSyntaxError: The string did not match the expected pattern（不正URLでfetchが拒否）への対策',
@@ -7696,6 +7727,10 @@ function buildStaffSetupLink(){
   s += qrHtml;
   s += '<textarea id="staffLinkText" readonly onclick="this.select()" style="width:100%;box-sizing:border-box;height:86px;padding:9px;border:1.5px solid #90CAF9;border-radius:8px;font-size:12px;font-family:monospace;color:#0D47A1;background:#fff">'+h(link)+'</textarea>';
   s += '<button class="add-btn" style="width:100%;margin-top:8px;padding:14px;font-size:15px;background:#06C755" onclick="shareStaffSetupLink()">📨 スタッフに送る（LINEなどを選ぶ）</button>';
+  s += '<div style="margin-top:14px;padding-top:12px;border-top:1px dashed #90CAF9"><div style="font-size:12px;font-weight:800;color:#1565C0;margin-bottom:5px">👁 税理士など社外の方に見てもらう場合</div>'
+    +'<div style="font-size:11px;color:#64748B;line-height:1.8;margin-bottom:7px">下のリンクは<b>閲覧専用</b>で開きます。編集・削除・設定はできません（アプリ側で通信ごと止めています）。<b>ただし数字は全部見えます。</b>信頼できる相手にだけ渡してください。</div>'
+    +'<textarea id="viewLinkText" readonly onclick="this.select()" style="width:100%;box-sizing:border-box;height:70px;padding:8px;border:1.5px solid #90CAF9;border-radius:8px;font-size:11px;font-family:monospace;color:#0D47A1;background:#fff">'+h(origin+'admin.html?view=1#k='+encodeURIComponent(state.cloudKey)+'&u='+encodeURIComponent(state.cloudUrl||CLOUD_URL))+'</textarea>'
+    +'<button class="add-btn" style="width:100%;margin-top:7px;background:#1565C0" onclick="copyViewLink()">📋 閲覧専用リンクをコピー</button></div>';
   s += '<button class="add-btn" style="width:100%;margin-top:8px;background:#2C7A6E" onclick="copyStaffSetupLink()">📋 リンクだけコピー</button>';
   s += '<div style="font-size:11px;color:#64748B;margin-top:8px;line-height:1.7"><b>スタッフへの伝え方</b><br>「リンクを<b>長押しして「Safariで開く」</b>を選んでね。上の帯が緑になればOK」<br><span style="color:#C62828">※LINEの中で開くとホーム画面のアプリに反映されません</span></div>';
   box.innerHTML=s;
@@ -7717,6 +7752,13 @@ function shareStaffSetupLink(){
     if(navigator.share){ navigator.share({text:msg}).catch(function(){}); return; }
   }catch(e){}
   try{ navigator.clipboard.writeText(msg).then(function(){ showToast('📋 案内文ごとコピーしました。LINEに貼って送ってください'); }); }catch(e){ copyStaffSetupLink(); }
+}
+function copyViewLink(){
+  var t=document.getElementById('viewLinkText'); if(!t) return;
+  var done=function(){ if(typeof showToast==='function') showToast('📋 閲覧専用リンクをコピーしました'); };
+  try{ if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t.value).then(done,function(){t.select();done();}); return; } }catch(e){}
+  try{ t.select(); document.execCommand('copy'); }catch(e){}
+  done();
 }
 function copyStaffSetupLink(){
   var t=document.getElementById('staffLinkText'); if(!t) return;
@@ -8625,6 +8667,7 @@ function showToast(msg){
 
 init();
 try{ if(normalizeCloudConfig()) saveLocal(); }catch(e){}
+try{ applyViewOnlyMode(); }catch(e){}
 // URLの #k=… でアクセスすると接続キーを自動保存（管理者が各端末で1回開くだけ。キーは履歴に残らないよう即消去）
 try{
   if(location.hash && location.hash.indexOf('#k=')===0){
@@ -9246,7 +9289,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "22.2";
+var APP_VERSION = "22.3";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
