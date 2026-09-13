@@ -3416,7 +3416,9 @@ function toggleAcademy(n){var b=document.getElementById('acaBody_'+n);var a=docu
 var TAX_RATE = 0.1;
 
 
-var CLOUD_URL = "https://script.google.com/macros/s/AKfycbxTy4rrPDjLwrP7JH1HoctOOqltzrC5WvYU6VRKmpaab2YBrWtRTckUBl0Ac4GM2s_SgA/exec";
+var CLOUD_URL = "https://script.google.com/macros/s/AKfycbwLWfMK2hj0siOJL5JL0bJ9IRcagFrlN-MqvmyNR-S3Kig0QTYT5pT8gqbxBU1Lt6tAIg/exec";
+// 過去の保存先。端末にこれが残っていたら自動で新しい保存先へ切り替える
+var OLD_CLOUD_URLS = ["https://script.google.com/macros/s/AKfycbytWfE31hbXzNNdPbx2NkwgIMudBCslNWJIP7LIfcvMt8hfg-FvB3VUZD73VHsKFHYi/exec", "https://script.google.com/macros/s/AKfycbxTy4rrPDjLwrP7JH1HoctOOqltzrC5WvYU6VRKmpaab2YBrWtRTckUBl0Ac4GM2s_SgA/exec"];
 var CLOUD_KEY = ""; // セキュリティ対応：キーはコードに置かない。各端末の管理タブで入力（localStorageに保存）
 var loginState = { selectedStaff:'', pin:'', setupPin:'', setupPhase:1, firstPin:'' };
 
@@ -3883,6 +3885,8 @@ function normalizeCloudConfig(){
     if(k!==state.cloudKey){ state.cloudKey=k; changed=true; }
     var u=_cleanCloudUrl(state.cloudUrl);
     if(!u){ u=CLOUD_URL; state.cloudUrlCustom=false; }
+    // 古い保存先（前のデプロイ）が残っていたら新しい保存先へ移す
+    try{ if(typeof OLD_CLOUD_URLS!=='undefined' && OLD_CLOUD_URLS.indexOf(u)>=0){ u=CLOUD_URL; state.cloudUrlCustom=false; state.lastSyncError=''; } }catch(e){}
     if(u!==state.cloudUrl){ state.cloudUrl=u; changed=true; }
   }catch(e){}
   return changed;
@@ -4756,6 +4760,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '✅ CLOUD_URLを9/13の新デプロイに切替。旧デプロイURLが端末に残っていても normalizeCloudConfig が自動で新URLへ移行。CLOUD_KEYが空のときに端末の合言葉を消さないよう init を修正',
   '🔧 cloudUrl/cloudKeyを通信前に正規化（空白・改行除去、GAS URL形式の抽出、不正時はCLOUD_URLへ）。SafariのSyntaxError: The string did not match the expected pattern（不正URLでfetchが拒否）への対策',
   '📷 スタッフ用の設定リンクをQRコードでも表示。スタッフは石上さんの画面をカメラで読んでリンクをタップするだけ（QRは端末内で生成、外部サービスに鍵は送りません）',
   '📨 管理タブを開くとスタッフ用の設定リンクが自動で表示され、「スタッフに送る」でLINE等へ案内文ごと共有できます。staff版は同一端末のadmin設定を自動取り込み（unauthorized時）',
@@ -9081,7 +9086,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "21.9";
+var APP_VERSION = "22.0";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
