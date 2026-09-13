@@ -4834,6 +4834,8 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '📅 日報の編集に<b>来店日・時刻・担当者</b>を追加（staff/admin両方）。これまで日付だけは後から直せませんでした',
+  '🔎 エアレジ照合に「④ 日付が最終日になっているかもしれない日報」を追加。期間の最終日に付いている日報のうち、入力漏れの会計と金額が完全一致するものを候補として一覧表示します。別のお客様とたまたま同額のことがあるため<b>自動修正はしません</b>（実データで検証したところ自動修正では正しい日報まで動かしてしまうため、候補提示に留めています）。同日・同額が複数ある場合の対応付けも、会計時間がいちばん近い日報を選ぶよう改善',
   '👤 日報タブで「担当者なし」を選ぶと、一覧の上に<b>まとめて担当者を割り当てるボタン</b>が出るようになりました。レジから取り込んだ日報を1件ずつ開かなくても、名前を押すだけで全部入ります（すでに担当者が入っている日報は変わりません）',
   '🛟 日報消失の根本原因を修正（重大）。syncFromCloudはクラウドに無いローカル日報を「今セッションの再送キューに載っているものだけ」残していたが、unauthorizedは再送キューに積まない仕様のため、接続設定が壊れている間に入力した日報がキューに載らず、設定修復後の最初の同期でstate.recordsごと消えていた。クラウドで確認できた日報に_cs印を付け、印の無いものは消さずに保持・再送するよう変更',
   '⚠️ 未送信件数を再送キューだけでなく「_cs印の無い日報」からも数えるようにし、届いていない日報がある端末では必ず赤い帯が出るようにしました',
@@ -5796,6 +5798,13 @@ function bulkAssignStaff(name){
   try{ renderAll(); }catch(e){}
   showToast('✅ '+targets.length+'件を「'+name+'」にしました');
 }
+// 2つの日付(YYYY-MM-DD)の日数差
+function _airDayDiff(a,b){
+  var pa=String(a).split('-'), pb=String(b).split('-');
+  var da=new Date(parseInt(pa[0],10),parseInt(pa[1],10)-1,parseInt(pa[2],10));
+  var db=new Date(parseInt(pb[0],10),parseInt(pb[1],10)-1,parseInt(pb[2],10));
+  return Math.round((db-da)/86400000);
+}
 function _airHasNo(no){
   if(!no) return false;
   for(var i=0;i<(state.records||[]).length;i++){ if(String(state.records[i].airNo||'')===String(no)) return true; }
@@ -5950,17 +5959,25 @@ function airregiReconcile(txt){
   for(var i=0;i<state.records.length;i++){
     var r=state.records[i];
     var d0=recYMD(r); if(!d0) continue;
-    (sunByDay[d0]=sunByDay[d0]||[]).push({ total:r.total||0, staff:r.staff||'', day:d0, m:null });
+    var _dt0=new Date(r.time);
+    (sunByDay[d0]=sunByDay[d0]||[]).push({ id:r.id, name:r.customerName||'', total:r.total||0, staff:r.staff||'', day:d0, tm:(isNaN(_dt0.getTime())?-1:(_dt0.getHours()*60+_dt0.getMinutes())), m:null });
   }
   var regByDay={};
   txs.forEach(function(t){ (regByDay[t.day]=regByDay[t.day]||[]).push(t); });
   var days=Object.keys(regByDay).sort();
   // パス1: 同日・金額完全一致
+  // 同じ金額の候補が複数ある時は「レジの会計時間にいちばん近い日報」を選ぶ
+  function _regMin(t){ var p=String(t.time||'').split(':'); var hh=parseInt(p[0],10), mi=parseInt(p[1],10); return isNaN(hh)?-1:(hh*60+(isNaN(mi)?0:mi)); }
   days.forEach(function(day){
     regByDay[day].forEach(function(t){
       if(t.m) return;
-      var S=sunByDay[day]||[];
-      for(var j=0;j<S.length;j++){ if(!S[j].m && S[j].total===t.amt){ t.m=S[j].m='exact'; break; } }
+      var S=sunByDay[day]||[], rm=_regMin(t), best=-1, bestD=Infinity;
+      for(var j=0;j<S.length;j++){
+        if(S[j].m || S[j].total!==t.amt) continue;
+        var df=(rm<0||S[j].tm<0)?0:Math.abs(S[j].tm-rm);
+        if(df<bestD){ bestD=df; best=j; }
+      }
+      if(best>=0){ t.m=S[best].m='exact'; }
     });
   });
   // パス2: ±1日・金額完全一致（日付ズレ）
@@ -6027,14 +6044,41 @@ function airregiReconcile(txt){
     if(day<minDay||day>maxDay) return;
     sunByDay[day].forEach(function(s){ if(!s.m){ sunOnly.push(s); sunTot+=s.total; } });
   });
-  window._airregiLast={ minDay:minDay, maxDay:maxDay, missing:missing, sunOnly:sunOnly, nearPairs:nearPairs };
+  // ④ 日付が「打ち込んだ日」になっているかもしれない日報の候補
+  // まとめて入力すると、その日の日付で登録されてしまう。
+  // 「期間の最終日（＝ふつうは今日）に付いている日報」の中から、
+  //  入力漏れの会計と金額がぴったり同じものを候補として挙げる。
+  // 誤って別の会計と結びつく可能性があるので、ここでは一覧を出すだけで自動では直さない。
+  var dateSuspects=[];
+  (function(){
+    var lastDay=(sunByDay[maxDay]||[]);
+    if(!lastDay.length || !missing.length) return;
+    var usedRec={}, usedTx={};
+    var pairs=[];
+    missing.forEach(function(t,ti){
+      lastDay.forEach(function(s,si){
+        if(s.total!==t.amt || s.day<=t.day) return;
+        pairs.push([_airDayDiff(t.day, s.day), ti, si]);
+      });
+    });
+    pairs.sort(function(a,b){ return a[0]-b[0]; });
+    pairs.forEach(function(p){
+      if(usedTx[p[1]]||usedRec[p[2]]) return;
+      usedTx[p[1]]=usedRec[p[2]]=1;
+      var t=missing[p[1]], s=lastDay[p[2]];
+      dateSuspects.push({ id:s.id, name:s.name, staff:s.staff, amt:s.total, from:s.day, to:t.day, time:t.time });
+    });
+    dateSuspects.sort(function(a,b){ return a.to<b.to?-1:(a.to>b.to?1:(a.time<b.time?-1:1)); });
+  })();
+  window._airregiLast={ minDay:minDay, maxDay:maxDay, missing:missing, sunOnly:sunOnly, nearPairs:nearPairs, dateSuspects:dateSuspects };
   // 表示
   var matched=txs.length-missing.length;
   var html='<div style="background:#EAF5F3;border-radius:10px;padding:10px 12px;font-size:12.5px;line-height:1.9;margin-bottom:10px"><b>📊 照合結果（'+h(minDay)+' 〜 '+h(maxDay)+'）</b><br>'
     +'レジ会計 '+txs.length+'件中 <b>'+matched+'件</b> 対応OK（日付ズレ・まとめ会計・遅れ入力を含む）<br>'
     +'<b style="color:#C62828">① 入力漏れ疑い：'+missing.length+'件 ¥'+num(missTot)+'</b><br>'
     +'<b style="color:#E65100">② 日報のみ（レジ会計なし）：'+sunOnly.length+'件 ¥'+num(sunTot)+'</b><br>'
-    +'<b style="color:#B8860B">③ 金額不一致：'+nearPairs.length+'件</b></div>';
+    +'<b style="color:#B8860B">③ 金額不一致：'+nearPairs.length+'件</b><br>'
+    +'<b style="color:#6A1B9A">④ 日付が'+h(maxDay.slice(5))+'になっているかもしれない日報：'+dateSuspects.length+'件</b></div>';
   if(missing.length){
     html+='<div style="font-size:12px;font-weight:800;color:#C62828;margin:6px 0 4px">① 入力漏れ疑い（レジに会計あり・日報なし）</div>';
     html+='<button onclick="importAirregiMissing()" style="width:100%;padding:13px;margin-bottom:6px;background:#C62828;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">📥 この'+missing.length+'件を日報に取り込む（金額はレジどおり・担当者はあとで割り当て）</button>';
@@ -6058,6 +6102,20 @@ function airregiReconcile(txt){
     nearPairs.forEach(function(p){ var df=p.reg-p.sun; html+='<div style="display:flex;justify-content:space-between;padding:6px 10px;border-bottom:1px solid #FFF8E1;font-size:12px;gap:6px"><span>'+h(p.day.slice(5))+' '+h(p.time)+'　'+h(p.staff)+'</span><span>レジ¥'+num(p.reg)+' / 日報¥'+num(p.sun)+'（<b>'+(df>=0?'+':'−')+num(Math.abs(df))+'</b>）</span></div>'; });
     html+='</div>';
   }
+  if(dateSuspects.length){
+    html+='<div style="font-size:12px;font-weight:800;color:#6A1B9A;margin:6px 0 4px">④ 日付が'+h(maxDay.slice(5))+'になっているかもしれない日報</div>';
+    html+='<div style="font-size:11.5px;color:#5B3A6E;background:#F7F1FB;border:1px solid #CE93D8;border-radius:8px;padding:9px 11px;margin-bottom:6px;line-height:1.9">'
+      +'あとからまとめて打ち込むと、打ち込んだ日の日付で登録されます。'+h(maxDay.slice(5))+'に付いている日報のうち、<b>①入力漏れの会計と金額がぴったり同じ</b>ものを挙げています。<br>'
+      +'<b>自動では直しません。</b>別のお客様とたまたま同額のこともあるので、お名前を見て確かめてから直してください。<br>'
+      +'直し方：日報タブでその日報をタップ →「👤顧客」→ <b>来店日</b>を下の日付に変える</div>';
+    html+='<div style="max-height:240px;overflow:auto;border:1px solid #E1BEE7;border-radius:8px;margin-bottom:8px">';
+    dateSuspects.forEach(function(f){
+      html+='<div style="display:flex;justify-content:space-between;padding:6px 10px;border-bottom:1px solid #F3E5F5;font-size:12px;gap:6px">'
+        +'<span>'+h(f.name||'(名前なし)')+'　<span style="color:#94a3b8">'+h(f.staff||'担当なし')+'</span></span>'
+        +'<span>¥'+num(f.amt)+'　'+h(f.from.slice(5))+' → <b>'+h(f.to.slice(5))+' '+h(f.time)+'</b></span></div>';
+    });
+    html+='</div>';
+  }
   html+='<button onclick="downloadAirregiCsv()" style="width:100%;padding:10px;background:#2C7A6E;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer">📥 結果をCSVで保存</button>';
   if(el) el.innerHTML=html;
 }
@@ -6067,6 +6125,7 @@ function downloadAirregiCsv(){
   d.missing.forEach(function(t){ rows.push(['①入力漏れ疑い',t.day,t.time,t.amt,'','','']); });
   d.sunOnly.forEach(function(s){ rows.push(['②日報のみ',s.day,'','',s.total,'',s.staff]); });
   d.nearPairs.forEach(function(p){ rows.push(['③金額不一致',p.day,p.time,p.reg,p.sun,p.reg-p.sun,p.staff]); });
+  (d.dateSuspects||[]).forEach(function(f){ rows.push(['④日付ちがいの候補（日報'+f.from+'・'+(f.name||'名前なし')+'）',f.to,f.time,f.amt,f.amt,0,f.staff]); });
   var csv='﻿'+rows.map(function(r){ return r.map(function(c){ c=String(c==null?'':c); return (c.indexOf(',')>=0||c.indexOf('"')>=0)?('"'+c.replace(/"/g,'""')+'"'):c; }).join(','); }).join('\n');
   var blob=new Blob([csv],{type:'text/csv'});
   var a=document.createElement('a');
@@ -9485,7 +9544,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "22.8";
+var APP_VERSION = "22.9";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
@@ -9947,8 +10006,36 @@ function et_product(b){
   return s;
 }
 
+// 日報の日付・時刻を書き換える（あとからまとめて入力すると登録日になってしまうため）
+function _p2(n){ return (n<10?'0':'')+n; }
+function editBufDate(){ var d=new Date(state.editBuf&&state.editBuf.time); if(isNaN(d.getTime())) d=new Date(); return d; }
+function _editSetWhen(dateStr, timeStr){
+  if(!state.editBuf) return;
+  var cur=editBufDate();
+  var ds=dateStr || (cur.getFullYear()+'-'+_p2(cur.getMonth()+1)+'-'+_p2(cur.getDate()));
+  var ts=timeStr || (_p2(cur.getHours())+':'+_p2(cur.getMinutes()));
+  var p=String(ds).split('-'), hm=String(ts).split(':');
+  var nd=new Date(parseInt(p[0],10), parseInt(p[1],10)-1, parseInt(p[2],10), parseInt(hm[0],10)||0, parseInt(hm[1],10)||0, 0);
+  if(isNaN(nd.getTime())) return;
+  state.editBuf.time=nd.toISOString();
+  renderInlineEditor();
+}
+function editSetDate(v){ _editSetWhen(v, null); }
+function editSetTime(v){ _editSetWhen(null, v); }
+function editSetStaff(v){ if(state.editBuf){ state.editBuf.staff=v; renderInlineEditor(); } }
 function et_customer(b){
-  var s='<div style="font-size:11px;color:#64748B;font-weight:700;margin-bottom:4px">お名前</div><input value="'+h(b.customerName||'')+'" oninput="editSetCustomerName(this.value)" style="width:100%;padding:11px;border:1.5px solid #C8E0DC;border-radius:8px;margin-bottom:12px;font-size:15px">';
+  var _d=editBufDate();
+  var _ds=_d.getFullYear()+'-'+_p2(_d.getMonth()+1)+'-'+_p2(_d.getDate());
+  var _ts=_p2(_d.getHours())+':'+_p2(_d.getMinutes());
+  var s='<div style="font-size:11px;color:#64748B;font-weight:700;margin-bottom:4px">来店日・時刻</div>';
+  s+='<div style="display:flex;gap:8px;margin-bottom:4px">'
+    +'<input type="date" value="'+_ds+'" onchange="editSetDate(this.value)" style="flex:2;padding:11px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:15px">'
+    +'<input type="time" value="'+_ts+'" onchange="editSetTime(this.value)" style="flex:1;padding:11px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:15px"></div>';
+  s+='<div style="font-size:11px;color:#94a3b8;line-height:1.6;margin-bottom:12px">あとからまとめて入力すると、打ち込んだ日の日付になります。実際に来店された日に直してください。</div>';
+  s+='<div style="font-size:11px;color:#64748B;font-weight:700;margin-bottom:4px">担当者</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">';
+  (state.staff||[]).forEach(function(sn){ var a=(b.staff===sn); s+='<button onclick="editSetStaff(\''+jsq(sn)+'\')" style="padding:6px 11px;border-radius:14px;border:1.5px solid '+(a?'#2C7A6E':'#C8E0DC')+';background:'+(a?'#2C7A6E':'#fff')+';color:'+(a?'#fff':'#64748B')+';font-size:11px;cursor:pointer">'+h(sn)+'</button>'; });
+  s+='</div>';
+  s+='<div style="font-size:11px;color:#64748B;font-weight:700;margin-bottom:4px">お名前</div><input value="'+h(b.customerName||'')+'" oninput="editSetCustomerName(this.value)" style="width:100%;padding:11px;border:1.5px solid #C8E0DC;border-radius:8px;margin-bottom:12px;font-size:15px">';
   s+='<div style="font-size:11px;color:#64748B;font-weight:700;margin-bottom:4px">客種</div><div style="display:flex;gap:6px;margin-bottom:12px">';
   ['リピーター','新規'].forEach(function(ct){ var a=b.clientType===ct; s+='<button onclick="editSetClientType(\''+jsq(ct)+'\')" style="flex:1;padding:9px;border-radius:8px;border:1.5px solid '+(a?'#2C7A6E':'#C8E0DC')+';background:'+(a?'#2C7A6E':'#fff')+';color:'+(a?'#fff':'#64748B')+';font-weight:700;cursor:pointer">'+h(ct)+'</button>'; });
   s+='</div>';

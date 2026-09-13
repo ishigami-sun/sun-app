@@ -2379,6 +2379,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '📅 日報の<b>来店日・時刻・担当者</b>をあとから直せるようになりました。日報をタップして「👤顧客」を開いてください。あとからまとめて打ち込むと、その日の日付で登録されてしまいます。ちがう日のぶんは、ここで実際の来店日に直してください',
   '🛟 打ち込んだ日報が消えてしまう不具合を直しました。これまでは、同期の設定がうまくいっていない間に打ち込んだ日報が、設定が直った直後の同期で消えてしまうことがありました。今は<b>クラウドに届いたことを確認できるまで、その日報を端末から消さない</b>ようになっています',
   '⚠️ まだ届いていない日報がある時は、いちばん上の帯が赤く点滅して件数が出ます。その時は帯をタップしてください',
   '✅ 「合言葉が違う」でつながらなかった問題を直しました。保存先を新しいものに切り替え、古い保存先が残っている端末も自動で切り替わります。アプリを開き直すだけでOKです',
@@ -6268,7 +6269,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "22.8";
+var APP_VERSION = "22.9";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
@@ -6852,8 +6853,36 @@ function et_product(b){
   return s;
 }
 
+// 日報の日付・時刻を書き換える（あとからまとめて入力すると登録日になってしまうため）
+function _p2(n){ return (n<10?'0':'')+n; }
+function editBufDate(){ var d=new Date(state.editBuf&&state.editBuf.time); if(isNaN(d.getTime())) d=new Date(); return d; }
+function _editSetWhen(dateStr, timeStr){
+  if(!state.editBuf) return;
+  var cur=editBufDate();
+  var ds=dateStr || (cur.getFullYear()+'-'+_p2(cur.getMonth()+1)+'-'+_p2(cur.getDate()));
+  var ts=timeStr || (_p2(cur.getHours())+':'+_p2(cur.getMinutes()));
+  var p=String(ds).split('-'), hm=String(ts).split(':');
+  var nd=new Date(parseInt(p[0],10), parseInt(p[1],10)-1, parseInt(p[2],10), parseInt(hm[0],10)||0, parseInt(hm[1],10)||0, 0);
+  if(isNaN(nd.getTime())) return;
+  state.editBuf.time=nd.toISOString();
+  renderInlineEditor();
+}
+function editSetDate(v){ _editSetWhen(v, null); }
+function editSetTime(v){ _editSetWhen(null, v); }
+function editSetStaff(v){ if(state.editBuf){ state.editBuf.staff=v; renderInlineEditor(); } }
 function et_customer(b){
-  var s='<div style="font-size:11px;color:#64748B;font-weight:700;margin-bottom:4px">お名前</div><input value="'+h(b.customerName||'')+'" oninput="editSetCustomerName(this.value)" style="width:100%;padding:11px;border:1.5px solid #C8E0DC;border-radius:8px;margin-bottom:12px;font-size:15px">';
+  var _d=editBufDate();
+  var _ds=_d.getFullYear()+'-'+_p2(_d.getMonth()+1)+'-'+_p2(_d.getDate());
+  var _ts=_p2(_d.getHours())+':'+_p2(_d.getMinutes());
+  var s='<div style="font-size:11px;color:#64748B;font-weight:700;margin-bottom:4px">来店日・時刻</div>';
+  s+='<div style="display:flex;gap:8px;margin-bottom:4px">'
+    +'<input type="date" value="'+_ds+'" onchange="editSetDate(this.value)" style="flex:2;padding:11px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:15px">'
+    +'<input type="time" value="'+_ts+'" onchange="editSetTime(this.value)" style="flex:1;padding:11px;border:1.5px solid #C8E0DC;border-radius:8px;font-size:15px"></div>';
+  s+='<div style="font-size:11px;color:#94a3b8;line-height:1.6;margin-bottom:12px">あとからまとめて入力すると、打ち込んだ日の日付になります。実際に来店された日に直してください。</div>';
+  s+='<div style="font-size:11px;color:#64748B;font-weight:700;margin-bottom:4px">担当者</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">';
+  (state.staff||[]).forEach(function(sn){ var a=(b.staff===sn); s+='<button onclick="editSetStaff(\''+jsq(sn)+'\')" style="padding:6px 11px;border-radius:14px;border:1.5px solid '+(a?'#2C7A6E':'#C8E0DC')+';background:'+(a?'#2C7A6E':'#fff')+';color:'+(a?'#fff':'#64748B')+';font-size:11px;cursor:pointer">'+h(sn)+'</button>'; });
+  s+='</div>';
+  s+='<div style="font-size:11px;color:#64748B;font-weight:700;margin-bottom:4px">お名前</div><input value="'+h(b.customerName||'')+'" oninput="editSetCustomerName(this.value)" style="width:100%;padding:11px;border:1.5px solid #C8E0DC;border-radius:8px;margin-bottom:12px;font-size:15px">';
   s+='<div style="font-size:11px;color:#64748B;font-weight:700;margin-bottom:4px">客種</div><div style="display:flex;gap:6px;margin-bottom:12px">';
   ['リピーター','新規'].forEach(function(ct){ var a=b.clientType===ct; s+='<button onclick="editSetClientType(\''+jsq(ct)+'\')" style="flex:1;padding:9px;border-radius:8px;border:1.5px solid '+(a?'#2C7A6E':'#C8E0DC')+';background:'+(a?'#2C7A6E':'#fff')+';color:'+(a?'#fff':'#64748B')+';font-weight:700;cursor:pointer">'+h(ct)+'</button>'; });
   s+='</div>';
