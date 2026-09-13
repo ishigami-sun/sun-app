@@ -2048,7 +2048,7 @@ function init(){
   if(typeof fixProductIds === "function" && fixProductIds()){ try{save();}catch(e){} }
   // 管理タブで入力したキー/URLを最優先（キー再発行後に埋め込み値で上書きしないため）
   if(!state.cloudUrlCustom || !state.cloudUrl) state.cloudUrl = CLOUD_URL;
-  if(!state.cloudKeyCustom || !state.cloudKey) state.cloudKey = CLOUD_KEY;
+  if(CLOUD_KEY && (!state.cloudKeyCustom || !state.cloudKey)) state.cloudKey = CLOUD_KEY; // コード側が空のときは端末の合言葉を消さない（更新した瞬間に未設定になるのを防ぐ）
   // セッションチェック
   /* PIN無効 */
 
@@ -6231,7 +6231,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "22.0";
+var APP_VERSION = "22.1";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
