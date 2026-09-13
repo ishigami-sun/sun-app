@@ -482,6 +482,13 @@
   <div style="font-size:11px;color:#94a3b8;margin-top:7px;text-align:center">スマホの「ファイル」アプリ等に保存されます</div>
 </div>
 
+<div class="card" style="margin-bottom:14px;border:2px solid #1B5E20;background:#F6FBF6">
+  <div class="section-title" style="margin:0 0 8px">💰 人件費の見通し</div>
+  <div style="font-size:12px;color:#64748B;margin-bottom:8px;line-height:1.7">給与明細の固定給と歩合の計算式を登録してあります。日報の数字から<b>今の時点の給与見込みと人件費率</b>を出します。売上はアプリの集計を使うので<b>目安</b>です（エアレジの数字を入れると正確になります）。</div>
+  <select id="laborMonth" onchange="renderLaborCost()" style="width:100%;padding:11px;border:2px solid #C8E0DC;border-radius:10px;background:#fff;font-size:14px;font-weight:700;color:#1A4F47;margin-bottom:10px"></select>
+  <div id="laborCost"></div>
+</div>
+
 <div class="card" style="margin-bottom:14px;border:2px solid #2C7A6E">
   <div class="section-title" style="margin:0 0 8px">💴 給与エクセル用の集計（物販・ヒポポタマス）</div>
   <div style="font-size:12px;color:#64748B;margin-bottom:10px;line-height:1.7">給与計算のエクセルに打ち込む数字をまとめます。<b>物販（H列・I列）はアプリから自動集計</b>。<b>ヒポポタマスのタオル（P列）は毎月届く請求書の金額を入力</b>してください（アプリでは扱っていないため）。売上（B列）はエアレジを見てご自身で入力してください。</div>
@@ -4208,6 +4215,7 @@ function syncFromCloud(silent, cb){
         if(res.masters.expenses){ state.expenses = mergeByMonthKey(state.expenses, res.masters.expenses); }
         if(res.masters.payroll){ state.payroll = mergeByMonthKey(state.payroll, res.masters.payroll); }
         if(res.masters.hpsTowel){ state.hpsTowel = mergeByMonthKey(state.hpsTowel, res.masters.hpsTowel); }
+        if(res.masters.laborSales){ state.laborSales = mergeByMonthKey(state.laborSales, res.masters.laborSales); }
         if(res.masters.staffTypes){ state.staffTypes = Object.assign({}, res.masters.staffTypes, state.staffTypes||{}); }
       }
       saveLocal();
@@ -4342,6 +4350,7 @@ function _pushMastersNow(cb){
       invCategories: state.invCategories || [],
       payroll: state.payroll || {},
       hpsTowel: state.hpsTowel || {},
+      laborSales: state.laborSales || {},
       reports: state.reports || [],
       deletedMasters: state.deletedMasters || {}
     }}, cb||function(){});
@@ -4760,6 +4769,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '💰 管理タブに「人件費の見通し」を追加。給与明細から固定給と歩合の計算式を登録し、日報の数字から支給見込・会社負担込みの総額・人件費率を表示。「あと少しで物販歩合率が上がる人」も出ます',
   '✅ CLOUD_URLを9/13の新デプロイに切替。旧デプロイURLが端末に残っていても normalizeCloudConfig が自動で新URLへ移行。CLOUD_KEYが空のときに端末の合言葉を消さないよう init を修正',
   '🔧 cloudUrl/cloudKeyを通信前に正規化（空白・改行除去、GAS URL形式の抽出、不正時はCLOUD_URLへ）。SafariのSyntaxError: The string did not match the expected pattern（不正URLでfetchが拒否）への対策',
   '📷 スタッフ用の設定リンクをQRコードでも表示。スタッフは石上さんの画面をカメラで読んでリンクをタップするだけ（QRは端末内で生成、外部サービスに鍵は送りません）',
@@ -7601,7 +7611,7 @@ function switchTab(tab){
   var idx=['input','records','reports','dashboard','sales','goals','pnl','admin','manual','academy','attend','inventory'].indexOf(tab);
   if(idx>=0) tabs[idx].classList.add('active');
   if(tab==='goals'){ if(typeof renderGoals==='function') renderGoals(); }
-  if(tab==='admin'){ updateSessionInfo(); loadStaffPinManagement(); try{ renderPayrollExport(); }catch(e){} try{ renderSyncStatusByStaff(); }catch(e){} try{ buildStaffSetupLink(); }catch(e){} }
+  if(tab==='admin'){ updateSessionInfo(); loadStaffPinManagement(); try{ renderPayrollExport(); }catch(e){} try{ renderLaborCost(); }catch(e){} try{ renderSyncStatusByStaff(); }catch(e){} try{ buildStaffSetupLink(); }catch(e){} }
   if(tab==='records') renderRecords();
   if(tab==='reports'){ if(typeof renderReportsTab==='function') renderReportsTab(); if(typeof updateReportStaffSelect==='function') try{ updateReportStaffSelect(); }catch(e){} try{ syncAll(true); }catch(e){} }
   if(tab==='dashboard') renderDashboard();
@@ -7717,19 +7727,169 @@ function copyStaffSetupLink(){
   try{ t.select(); document.execCommand('copy'); }catch(e){}
   done();
 }
+/* ===== 💰 人件費の見通し（v22.2）
+   給与明細（令和8年8月度）から固定給と歩合の計算式を取り込んである。
+   日報の売上・物販から、その月の給与見込みと人件費率を出す ===== */
+var SOCIAL_INSURANCE_RATE=0.155;  // 会社負担の社会保険料の概算（健保・厚年・雇用・子育て拠出の事業主分）
+function laborSalesMap(ym){
+  if(!state.laborSales || typeof state.laborSales!=='object') state.laborSales={};
+  if(!state.laborSales[ym]) state.laborSales[ym]={};
+  return state.laborSales[ym];
+}
+function setLaborSales(ym, app, val){
+  var v=parseInt(String(val).replace(/[^0-9]/g,''),10);
+  var m=laborSalesMap(ym);
+  if(isNaN(v)||v<=0) delete m[app]; else m[app]=v;
+  m.updatedAt=new Date().toISOString();
+  try{ save(); }catch(e){ try{ saveLocal(); }catch(e2){} }
+  renderLaborCost();
+}
+// その月のスタッフ別の集計（施術税抜・物販売値/利益）
+function laborAggregate(ym){
+  var agg={};
+  function slot(s){ if(!agg[s]) agg[s]={menuInc:0, sell:0, profit:0}; return agg[s]; }
+  for(var i=0;i<state.records.length;i++){
+    var r=state.records[i];
+    if(recYMD(r).slice(0,7)!==ym) continue;
+    var ms=r.menus||[];
+    for(var j=0;j<ms.length;j++){ var st=staffBase(ms[j].menuStaff||r.staff); if(st) slot(st).menuInc+=menuLineInc(ms[j]); }
+    var ps=r.products||[];
+    for(var k=0;k<ps.length;k++){
+      var st2=staffBase(ps[k].productStaff||r.staff); if(!st2) continue;
+      var sl=slot(st2); sl.sell+=prodLineSell(ps[k]); sl.profit+=prodLineProfit(ps[k]);
+    }
+  }
+  return agg;
+}
+function renderLaborCost(){
+  var el=document.getElementById('laborCost'); if(!el) return;
+  var sel=document.getElementById('laborMonth');
+  if(sel && !sel.dataset.filled){
+    var months=payrollMonthList(), n=new Date();
+    var cur=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');
+    if(months.indexOf(cur)<0) months.unshift(cur);
+    var o='';
+    for(var i=0;i<months.length;i++){ var p=months[i].split('-'); o+='<option value="'+months[i]+'"'+(months[i]===cur?' selected':'')+'>'+p[0]+'年'+parseInt(p[1],10)+'月度</option>'; }
+    sel.innerHTML=o; sel.dataset.filled='1';
+  }
+  var ym=(sel&&sel.value)||'';
+  if(!ym) return;
+  var agg=laborAggregate(ym), towel=hpsMap(ym), ovr=laborSalesMap(ym);
+  var rows=[], totalPay=0, totalSales=0, tips=[];
+  for(var pi=0;pi<PAYROLL_ROWS.length;pi++){
+    var R=PAYROLL_ROWS[pi], a=agg[R.app]||{menuInc:0,sell:0,profit:0};
+    var estSales=Math.round(a.menuInc/1.1);          // アプリ集計の税抜（目安）
+    var sales=(ovr[R.app]!=null)?ovr[R.app]:estSales;
+    var tech = R.assistant ? Math.floor(sales*ASSISTANT_RATE) : techCommission(sales);
+    var profit=Math.round(a.profit), rate=payrollRate(profit), prod=Math.floor(profit*rate);
+    var tw=towel[R.app]||0, hps=Math.round(Math.ceil(tw/1.1*0.1)*0.8);
+    var fixed=R.base+R.ot+R.post+R.commute;
+    var pay=fixed+tech+prod+hps;
+    totalPay+=pay; totalSales+=sales;
+    rows.push({R:R,sales:sales,est:estSales,over:(ovr[R.app]!=null),tech:tech,profit:profit,rate:rate,prod:prod,hps:hps,fixed:fixed,pay:pay});
+    var nt=R.assistant?null:nextTechTier(sales);
+    if(nt && nt.gain>0) tips.push('<b>'+h(R.xls)+'</b>：技術売上あと <b>¥'+num(nt.need)+'</b> で歩合が発生（+¥'+num(nt.gain)+'）');
+    var np=nextProductTier(profit);
+    if(np && np.gain>0 && profit>0) tips.push('<b>'+h(R.xls)+'</b>：物販利益あと <b>¥'+num(np.need)+'</b> で歩合率が上がる（+¥'+num(np.gain)+'）');
+  }
+  var fixedOnly=0;
+  for(var fi=0;fi<PAYROLL_FIXED_ONLY.length;fi++) fixedOnly+=PAYROLL_FIXED_ONLY[fi].amount;
+  var grossPay=totalPay+fixedOnly;
+  var company=Math.round(grossPay*(1+SOCIAL_INSURANCE_RATE));
+  // 店舗全体の売上（施術＋物販、税抜）
+  var shopSales=0;
+  for(var key in agg) shopSales+=Math.round(agg[key].menuInc/1.1)+Math.round(agg[key].sell/1.1);
+  var ratio = shopSales>0 ? (company/shopSales*100) : 0;
+
+  var s='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:620px">';
+  s+='<tr style="background:#E8F5E9"><th style="border:1px solid #A5D6A7;padding:5px">氏名</th>'
+   +'<th style="border:1px solid #A5D6A7;padding:5px">技術売上(税抜)</th><th style="border:1px solid #A5D6A7;padding:5px">技術歩合</th>'
+   +'<th style="border:1px solid #A5D6A7;padding:5px">物販歩合</th><th style="border:1px solid #A5D6A7;padding:5px">HPS</th>'
+   +'<th style="border:1px solid #A5D6A7;padding:5px">固定給</th><th style="border:1px solid #A5D6A7;padding:5px">支給見込</th></tr>';
+  for(var ri=0;ri<rows.length;ri++){
+    var x=rows[ri];
+    s+='<tr><td style="border:1px solid #C8E6C9;padding:5px"><b>'+h(x.R.xls)+'</b>'+(x.R.assistant?'<br><span style="font-size:10px;color:#94a3b8">アシスタント20%</span>':'')+'</td>'
+     +'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right"><input type="number" inputmode="numeric" value="'+(x.over?x.sales:'')+'" placeholder="'+num(x.est)+'" onchange="setLaborSales(\''+ym+'\',\''+x.R.app+'\',this.value)" style="width:92px;padding:5px;border:1.5px solid '+(x.over?'#2E7D32':'#C8E0DC')+';border-radius:6px;font-size:12px;text-align:right;color:#1A4F47">'
+     +'<br><span style="font-size:10px;color:#94a3b8">'+(x.over?'エアレジ入力':'アプリ目安')+'</span></td>'
+     +'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right">'+num(x.tech)+'</td>'
+     +'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right">'+num(x.prod)+'<br><span style="font-size:10px;color:#94a3b8">利益'+num(x.profit)+'×'+Math.round(x.rate*100)+'%</span></td>'
+     +'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right">'+num(x.hps)+'</td>'
+     +'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right">'+num(x.fixed)+'</td>'
+     +'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right;font-weight:800;color:#1B5E20">'+num(x.pay)+'</td></tr>';
+  }
+  s+='<tr style="background:#F1F8E9;font-weight:800"><td style="border:1px solid #A5D6A7;padding:5px">6名の計</td>'
+   +'<td style="border:1px solid #A5D6A7;padding:5px;text-align:right">'+num(totalSales)+'</td>'
+   +'<td colspan="4" style="border:1px solid #A5D6A7;padding:5px;text-align:right">支給見込</td>'
+   +'<td style="border:1px solid #A5D6A7;padding:5px;text-align:right">'+num(totalPay)+'</td></tr>';
+  s+='</table></div>';
+  s+='<div style="margin-top:10px;padding:11px;background:#fff;border:2px solid #1B5E20;border-radius:10px;font-size:13px;line-height:2">'
+   +'<div style="display:flex;justify-content:space-between"><span>6名の支給見込</span><b>¥'+num(totalPay)+'</b></div>'
+   +'<div style="display:flex;justify-content:space-between"><span>石上三四郎・麻里子（固定）</span><b>¥'+num(fixedOnly)+'</b></div>'
+   +'<div style="display:flex;justify-content:space-between;border-top:1px solid #C8E6C9;padding-top:4px"><span>給与合計</span><b>¥'+num(grossPay)+'</b></div>'
+   +'<div style="display:flex;justify-content:space-between;color:#64748B;font-size:12px"><span>＋会社負担の社会保険（概算15.5%）</span><span>¥'+num(company-grossPay)+'</span></div>'
+   +'<div style="display:flex;justify-content:space-between;font-size:15px;color:#1B5E20;border-top:2px solid #1B5E20;padding-top:5px"><b>会社が払う総額</b><b>¥'+num(company)+'</b></div>'
+   +'<div style="display:flex;justify-content:space-between;margin-top:4px"><span>売上（税抜・アプリ集計）</span><b>¥'+num(shopSales)+'</b></div>'
+   +'<div style="display:flex;justify-content:space-between;font-size:16px;color:'+(ratio>55?'#C62828':(ratio>50?'#E65100':'#1B5E20'))+'"><b>人件費率</b><b>'+(shopSales>0?ratio.toFixed(1)+'%':'—')+'</b></div>'
+   +'</div>';
+  if(tips.length){
+    s+='<div style="margin-top:10px;padding:10px 12px;background:#FFF9E6;border:1.5px solid #F0D000;border-radius:9px;font-size:12px;line-height:2">'
+     +'<b>💡 あと少しで歩合が増える人</b><br>'+tips.slice(0,8).join('<br>')
+     +'<div style="font-size:11px;color:#8a6d4a;margin-top:5px">物販の歩合率は利益の全額にかかるので、境目（3万・5万・8万）を超えると一気に増えます</div></div>';
+  }
+  s+='<div style="font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.8">※固定給は令和8年8月度の給与明細に基づく登録値です（基本給・定額残業・役職手当・通勤費）。変更があったら教えてください。<br>※所得税・住民税・本人負担の社会保険は個人差が大きいため、ここでは会社が払う総額のみを出しています。</div>';
+  el.innerHTML=s;
+}
 /* ===== 💴 給与エクセル用の集計（v20.1）
    給与計算エクセル（R◯.◯月度シート）に打ち込む数字を用意する。
    H列=店販売値(税込) / I列=原価 → アプリの物販データから自動集計
    P列=ヒポポタマスのタオル売上(税込) → HPSの請求書を見て手入力（アプリ外のデータ）
    歩合の計算式はエクセルと同一にしてある（照合用） ===== */
 var PAYROLL_ROWS=[
-  {app:'花岡', xls:'桂川みのり', row:7},
-  {app:'堀井', xls:'堀井雄大',  row:8},
-  {app:'東',   xls:'東千華',    row:9},
-  {app:'梅田', xls:'梅田龍平',  row:10},
-  {app:'カノン', xls:'植村海音', row:11},
-  {app:'林',   xls:'林尚輝',    row:12}
+  // 固定給は2026年9月10日支給（令和8年8月度）の給与明細から。変更があったらここを直す
+  {app:'花岡', xls:'桂川みのり', row:7,  base:197025, ot:28675, post:100000, postName:'店長手当',   commute:10000},
+  {app:'堀井', xls:'堀井雄大',  row:8,  base:213000, ot:31000, post:30000,  postName:'リーダー手当', commute:10000},
+  {app:'東',   xls:'東千華',    row:9,  base:213000, ot:31000, post:30000,  postName:'リーダー手当', commute:10000},
+  {app:'梅田', xls:'梅田龍平',  row:10, base:213000, ot:31000, post:0,      postName:'',           commute:10000, assistant:true},
+  {app:'カノン', xls:'植村海音', row:11, base:213000, ot:31000, post:0,      postName:'',           commute:10000, assistant:true},
+  {app:'林',   xls:'林尚輝',    row:12, base:213000, ot:31000, post:50000,  postName:'副店長手当',  commute:10000}
 ];
+// 歩合の対象外（固定給のみ）。人件費の合計に含めるために持つ
+var PAYROLL_FIXED_ONLY=[
+  {name:'石上三四郎', amount:1600000},
+  {name:'石上麻里子', amount:85000}
+];
+// アシスタントのヘッドスパ等の歩合率（エクセルC25）
+var ASSISTANT_RATE=0.2;
+// 技術売上の歩合（エクセルE〜J列と同一。50万未満は歩合ゼロ、以降は段階ごとの積み上げ）
+function techCommission(sales){
+  var s=Math.max(0, Math.round(sales||0));
+  if(s<500000) return 0;                       // 50万未満は歩合なし（ここが大きな段差）
+  var t=0;
+  t+=Math.floor(500000*0.135);                 // 〜50万 13.5%
+  t+=Math.floor(Math.min(Math.max(s-500000,0),500000)*0.15);   // 〜100万 15%
+  t+=Math.floor(Math.min(Math.max(s-1000000,0),500000)*0.30);  // 〜150万 30%
+  t+=Math.floor(Math.min(Math.max(s-1500000,0),500000)*0.35);  // 〜200万 35%
+  t+=Math.floor(Math.min(Math.max(s-2000000,0),1000000)*0.40); // 〜300万 40%
+  t+=Math.floor(Math.max(s-3000000,0)*0.45);                   // 300万超 45%
+  return t;
+}
+// 物販利益があといくらで歩合率が上がるか（率は利益全額にかかるので段差が大きい）
+function nextProductTier(profit){
+  var p=Math.max(0,profit||0), bounds=[30000,50000,80000];
+  for(var i=0;i<bounds.length;i++){
+    if(p<bounds[i]){
+      var now=Math.floor(p*payrollRate(p)), next=Math.floor(bounds[i]*payrollRate(bounds[i]));
+      return {need:bounds[i]-p, gain:next-now, at:bounds[i]};
+    }
+  }
+  return null;
+}
+// 技術売上があといくらで歩合が発生するか（50万の段差のみ）
+function nextTechTier(sales){
+  var s=Math.max(0,sales||0);
+  if(s>=500000 || s===0) return null;
+  return {need:500000-s, gain:techCommission(500000)};
+}
 // エクセルの店販歩合率（J列の利益で決まる）
 function payrollRate(j){ if(!j) return 0; if(j<30000) return 0.2; if(j<50000) return 0.3; if(j<80000) return 0.35; return 0.4; }
 function hpsMap(ym){
@@ -9086,7 +9246,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "22.1";
+var APP_VERSION = "22.2";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
