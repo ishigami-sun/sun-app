@@ -74,6 +74,16 @@ What's New もスタッフ用は「使い方」だけにする（管理者向け
 - 定休日は月曜。スタッフは週休2日で、残り出勤日数は編集可能（`state.paceDays`）
 - 同期は `syncAll()` のみが入口。個別の同期ボタンを増やさない（上部バナー1か所に集約する方針）
 - 日報の重複は `dedupeRecordsById()` が同一IDを自動で1件に統合する
+- **`state.records` からローカル分を落としてよいのは `_cs` 印が付いているものだけ**（v22.7）。
+  `_cs` は「クラウドで実在を確認できた」印で、`syncFromCloud` / `pushAndSync` の取得結果と
+  `callCloud` の `addRecord` 成功時に付く。印が無いものは未送信なので絶対に消さない。
+
+  > 過去の事故: `syncFromCloud` が `state.records = クラウド全件 + 再送キューに載っているローカル分`
+  > としていた。`unauthorized` は再送キューに積まない仕様なので、接続設定が壊れている間に
+  > 打ち込んだ日報はキューに載らず、設定を直した直後の同期で消えていた。
+  > `syncAll` は取り込み→送信の順なので、送信される前に消える。本人は打ち込んだのに
+  > クラウドにもどの端末にも残らない状態になった（9月の東・かおる分）。
+  > 回帰テスト: `node tools/test_sync_keep_unsent.js` / `node tools/test_sync_migrate.js`
 - 給与エクセル用の集計は admin の管理タブ（`renderPayrollExport()`）。
   H列=店販売値(税込)・I列=原価はアプリから自動、P列=ヒポポタマスのタオルは請求書を手入力
 
