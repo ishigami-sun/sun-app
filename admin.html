@@ -4799,6 +4799,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '🧾 エアレジ取込みで、伝票名からわかる分は担当者も自動で入れるようにしました（例：伝票名「ネイル」→いつもネイルを入力している人）。過去の日報で8割以上その人、という時だけ自動で入れ、はっきりしない分は今まで通り「担当者なし」で残ります',
   '👤 日報タブの「担当者でしぼる」に「担当者なし」を追加。レジから取り込んだ日報など担当者が空のものだけを表示して割り当てられます',
   '📥 エアレジ照合の結果から「入力漏れ」をボタン1つで日報に取り込めるようにしました。金額・明細はレジの記録どおりに入るので売上の数字が正確になります。担当者は空で入るのであとから割り当ててください（取引Noで二重取り込みを防止）',
   '👁 閲覧専用モードを追加（admin.html?view=1）。税理士など社外の方に数字を見てもらう用で、入力・管理タブを隠し、編集・削除・設定は通信の入口で遮断します。管理タブから閲覧専用リンクをコピーできます',
@@ -5753,15 +5754,46 @@ function _airBuildLines(t){
   }
   return {menus:menus, products:products};
 }
+// 伝票名から担当者を推測する（例：伝票名「ネイル」＝いつもネイルを入力している人）
+// 過去の日報で「そのメニューを入力している人」がほぼ1人に決まっている時だけ自動で入れる。
+// はっきりしない時は空のままにして、あとで「担当者なし」から割り当ててもらう。
+function _airGuessStaff(slip){
+  var s=String(slip||'').trim();
+  if(!s) return '';
+  // 伝票名に含まれるメニュー名を探す（一番長く一致したものを使う）
+  var mn='';
+  for(var i=0;i<(state.menus||[]).length;i++){
+    var n=String(state.menus[i].name||'').trim();
+    if(n && s.indexOf(n)>=0 && n.length>mn.length) mn=n;
+  }
+  if(!mn) return '';
+  var cnt={}, tot=0;
+  for(var j=0;j<(state.records||[]).length;j++){
+    var r=state.records[j], b=staffBase(r.staff);
+    if(!b) continue;
+    var hit=false;
+    for(var k=0;k<(r.menus||[]).length;k++){ if(String(r.menus[k].name||'').indexOf(mn)>=0){ hit=true; break; } }
+    if(hit){ cnt[b]=(cnt[b]||0)+1; tot++; }
+  }
+  if(tot<10) return '';                    // 実績が少なすぎる時は決めつけない
+  var best='', bn=0;
+  for(var key in cnt){ if(cnt[key]>bn){ bn=cnt[key]; best=key; } }
+  if(!best || bn/tot < 0.8) return '';     // 8割以上その人、という時だけ採用する
+  for(var q=0;q<(state.staff||[]).length;q++){ if(staffBase(state.staff[q])===best) return state.staff[q]; }
+  return best;
+}
 function importAirregiMissing(){
   var L=window._airregiLast;
   if(!L||!L.missing||!L.missing.length){ showToast('⚠️ 取り込む対象がありません'); return; }
   var targets=L.missing.filter(function(t){ return !_airHasNo(t.no); });
   if(!targets.length){ showToast('✅ すべて取り込み済みです'); return; }
   var sum=targets.reduce(function(a,t){return a+(t.amt||0);},0);
+  var guessN=0;
+  targets.forEach(function(t){ t._gs=_airGuessStaff(t.slip); if(t._gs) guessN++; });
   if(!confirm('レジにあって日報に無い '+targets.length+'件（¥'+num(sum)+'）を日報に取り込みます。\n\n'
     +'・金額と内容はレジの記録どおりです\n'
-    +'・担当者は空のままなので、あとで割り当ててください\n'
+    +(guessN>0 ? ('・伝票名でわかる '+guessN+'件は担当者も自動で入れます\n') : '')
+    +'・残りは担当者が空なので、日報タブの「担当者なし」から割り当ててください\n'
     +'・同じ会計を二重に取り込むことはありません\n\nよろしいですか？')) return;
   var made=0, base=Date.now();
   targets.forEach(function(t,i){
@@ -5773,7 +5805,7 @@ function importAirregiMissing(){
     var pSell=L2.products.reduce(function(a,x){ return a+prodLineSell(x); },0);
     var pProf=L2.products.reduce(function(a,x){ return a+prodLineProfit(x); },0);
     var total=mAmt+pSell, exc=Math.round(total/1.1);
-    var rec={ id:base+i, airNo:t.no||'', time:dt.toISOString(), staff:'',
+    var rec={ id:base+i, airNo:t.no||'', time:dt.toISOString(), staff:(t._gs||''),
       customerName:'', clientType:'リピーター', media:'', payment:'',
       taxMode:'inc', paymentFeeRate:0, paymentFeeAmount:0,
       menus:L2.menus, products:L2.products,
@@ -5784,7 +5816,7 @@ function importAirregiMissing(){
   });
   try{ saveLocal(); }catch(e){}
   try{ renderAll(); }catch(e){}
-  showToast('📥 '+made+'件を日報に取り込みました。担当者を割り当ててください');
+  showToast('📥 '+made+'件を日報に取り込みました'+(guessN>0?('（うち'+guessN+'件は担当者も入れました）'):'')+'。残りは「担当者なし」から割り当ててください');
 }
 // 担当者が空の日報の件数（取り込み後に割り当てが必要なもの）
 function unassignedCount(ym){
@@ -5840,7 +5872,7 @@ function airregiReconcile(txt){
     var day=(gv(row,'来店日')||kd).replace(/\//g,'-');
     var fixedS=gv(row,'修正後合計'); var totS=gv(row,'合計');
     var amt=Math.round(parseFloat(fixedS!==''?fixedS:totS)||0);
-    txs.push({ day:day, time:gv(row,'会計時間').slice(0,5), amt:amt, m:null, no:gv(row,'取引No'), lines:[] });
+    txs.push({ day:day, time:gv(row,'会計時間').slice(0,5), amt:amt, m:null, no:gv(row,'取引No'), slip:gv(row,'伝票名'), lines:[] });
     _airLineOwner=txs[txs.length-1];
     var pv0=parseInt(gv(row,'価格')||'0',10); if(pv0>0) _airLineOwner.lines.push(pv0);
   }
@@ -9385,7 +9417,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "22.5";
+var APP_VERSION = "22.6";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
