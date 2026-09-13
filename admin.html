@@ -3970,6 +3970,8 @@ function callCloud(action, payload, callback, _tries){
         if(callback) callback(res);
         return;
       }
+      // クラウドに届いた日報に印を付ける（同期でローカルから消してよいかの判定に使う）
+      try{ if(res && res.ok && action==='addRecord' && payload && payload.record) payload.record._cs=1; }catch(e){}
       // サーバーが ok:false（合言葉違い等）を返した時は「通信できた時刻」を更新しない
       // （更新すると上部の帯が緑になり、同期できていないのに出来たように見えてしまう）
       if(!(res && res.ok===false)) state.lastSync=Date.now();
@@ -4052,13 +4054,26 @@ function dedupeRecordsById(){
    ①勝手に同期する（起動時・5分ごと・画面に戻った時・通信復帰時・日報登録後）
    ②それでも送れていない時だけ、上部バナーを点滅させて押してもらう ===== */
 // まだクラウドへ送れていない更新の件数（オフライン等で貯まったもの）
+// まだクラウドに届いていない日報の件数（_cs印が付いていないもの）
+// 一度もクラウドの一覧を見ていない端末は、印が無いだけなので数えない
+function unsentRecordCount(){
+  var n=0;
+  try{
+    if(!state._csReady) return 0;
+    var rs=state.records||[];
+    for(var i=0;i<rs.length;i++){ if(rs[i] && !rs[i]._cs) n++; }
+  }catch(e){}
+  return n;
+}
 function syncPendingCount(){
   var n=0;
   try{
     var q=(typeof syncQueue!=='undefined' && syncQueue) ? syncQueue : [];
     for(var i=0;i<q.length;i++){ if(q[i] && _isMutation(q[i].action)) n++; }
   }catch(e){}
-  return n;
+  // 再送キューに載っていなくても、届いていない日報があれば必ず出す
+  var u=unsentRecordCount();
+  return (u>n)?u:n;
 }
 function _ensureSyncNagStyle(){
   try{
@@ -4172,7 +4187,7 @@ function pushAndSync(cb, silent){
   callCloud('getAll', {}, function(res){
     if(!res||!res.ok){ if(!silent) showToast('⚠️ 反映できませんでした。通信を確認して再度お試しください'); if(cb) cb(); return; }
     var cloud=res.records||[];
-    var cloudIds={}; for(var i=0;i<cloud.length;i++) cloudIds[String(cloud[i].id)]=true;
+    var cloudIds={}; for(var i=0;i<cloud.length;i++){ cloudIds[String(cloud[i].id)]=true; cloud[i]._cs=1; }
     var delSet={}; var dids=state.deletedIds||[]; for(var i=0;i<dids.length;i++) delSet[String(dids[i])]=true;
     var toPush=[]; for(var i=0;i<state.records.length;i++){ var r=state.records[i]; if(!cloudIds[String(r.id)] && !delSet[String(r.id)]) toPush.push(r); }
     var toDelete=[]; for(var i=0;i<cloud.length;i++){ if(delSet[String(cloud[i].id)]) toDelete.push(cloud[i].id); }
@@ -4182,6 +4197,7 @@ function pushAndSync(cb, silent){
       for(var i=0;i<toPush.length;i++){ if(!have[String(toPush[i].id)]) merged.push(toPush[i]); }
       if(LOCAL_RECORD_DAYS>0){ var _cut2=Date.now()-LOCAL_RECORD_DAYS*86400000, _keep={}; for(var _k=0;_k<toPush.length;_k++) _keep[String(toPush[_k].id)]=1; merged=merged.filter(function(r){ var t=new Date(r&&r.time).getTime(); return !(t>0 && t<_cut2 && !_keep[String(r.id)]); }); }
       state.records=merged;
+      state._csReady=1;
       try{ saveLocal(); }catch(e){}
       if(typeof renderAll==='function') renderAll();
       if(!silent) showToast('✅ 反映完了！（日報 '+state.records.length+'件）');
@@ -4213,14 +4229,33 @@ function syncFromCloud(silent, cb){
       // クラウドの日報は全採用（削除済み除外）
       var _cloudRecs = allRecs.filter(function(r){ return !deletedSet[r.id]; });
       var _cloudIds = {};
-      for(var _ci=0;_ci<_cloudRecs.length;_ci++) _cloudIds[String(_cloudRecs[_ci].id)] = true;
-      // 「今セッションで送信失敗してキュー待ち」の日報IDだけを対象に、ローカル未送信分を保持
-      // （他端末で削除されただけの日報を“未送信”と誤認して復活させないための限定）
+      for(var _ci=0;_ci<_cloudRecs.length;_ci++){ _cloudIds[String(_cloudRecs[_ci].id)] = true; _cloudRecs[_ci]._cs = 1; }
+      // 【重要・v22.7】クラウドに無いローカルの日報を消してよいのは
+      // 「一度クラウドで見たことがある（_cs印あり）＝他の端末で削除された分」だけ。
+      // 印が無いものは、この端末で打ち込んだのにまだ届いていない日報なので絶対に消さない。
+      //
+      // 以前は「今セッションの再送キューに載っているものだけ残す」という条件だった。
+      // 合言葉違い（unauthorized）は再送キューに積まない仕様のため、
+      // 設定が壊れている間に打ち込んだ日報はキューに載らず、
+      // 設定を直した直後の同期で state.records ごと消えていた（本人は打ち込んだのに反映されない）。
       var _pendingIds = {};
       for(var _qi=0;_qi<(typeof syncQueue!=='undefined'?syncQueue.length:0);_qi++){ var _it=syncQueue[_qi]; if(_it && _it.action==='addRecord' && _it.payload && _it.payload.record && _it.payload.record.id!=null) _pendingIds[String(_it.payload.record.id)] = true; }
+      // 【v22.7 への移行時だけの安全弁】_cs印はこのバージョンから付き始めるので、
+      // それ以前からある日報には印が無い。印が無いものを一律「未送信」と見なすと、
+      // 他の端末で削除済みの日報まで復活してしまう。
+      // そこで初回だけは「最後にクラウドと通信できた時刻より後に作られた日報」だけを
+      // 未送信として扱う（日報のidは作成時のミリ秒タイムスタンプ）。
+      var _firstCs = !state._csReady, _lastOkAt = state.lastSync||0;
+      function _looksUnsent(r){
+        if(r._cs) return false;
+        if(!_firstCs) return true;
+        var t=Number(r.id);
+        return !(t>0) || t>_lastOkAt;
+      }
       var _localOnly = [];
-      for(var _li=0;_li<(state.records||[]).length;_li++){ var _lr=state.records[_li]; if(_lr && !_cloudIds[String(_lr.id)] && !deletedSet[_lr.id] && _pendingIds[String(_lr.id)]) _localOnly.push(_lr); }
+      for(var _li=0;_li<(state.records||[]).length;_li++){ var _lr=state.records[_li]; if(_lr && !_cloudIds[String(_lr.id)] && !deletedSet[_lr.id] && (_looksUnsent(_lr) || _pendingIds[String(_lr.id)])) _localOnly.push(_lr); }
       state.records = _cloudRecs.concat(_localOnly);
+      state._csReady = 1;   // この端末は一度クラウドの一覧を見た＝以降 _cs印の有無で判定してよい
       if(LOCAL_RECORD_DAYS>0){ var _cut=Date.now()-LOCAL_RECORD_DAYS*86400000; state.records=state.records.filter(function(r){ var t=new Date(r&&r.time).getTime(); return !(t>0 && t<_cut && _cloudIds[String(r.id)]); }); }
       // マスタも同期（ローカルが多い場合は上書きしない）
       if(res.masters){
@@ -4799,6 +4834,8 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '🛟 日報消失の根本原因を修正（重大）。syncFromCloudはクラウドに無いローカル日報を「今セッションの再送キューに載っているものだけ」残していたが、unauthorizedは再送キューに積まない仕様のため、接続設定が壊れている間に入力した日報がキューに載らず、設定修復後の最初の同期でstate.recordsごと消えていた。クラウドで確認できた日報に_cs印を付け、印の無いものは消さずに保持・再送するよう変更',
+  '⚠️ 未送信件数を再送キューだけでなく「_cs印の無い日報」からも数えるようにし、届いていない日報がある端末では必ず赤い帯が出るようにしました',
   '🧾 エアレジ取込みで、伝票名からわかる分は担当者も自動で入れるようにしました（例：伝票名「ネイル」→いつもネイルを入力している人）。過去の日報で8割以上その人、という時だけ自動で入れ、はっきりしない分は今まで通り「担当者なし」で残ります',
   '👤 日報タブの「担当者でしぼる」に「担当者なし」を追加。レジから取り込んだ日報など担当者が空のものだけを表示して割り当てられます',
   '📥 エアレジ照合の結果から「入力漏れ」をボタン1つで日報に取り込めるようにしました。金額・明細はレジの記録どおりに入るので売上の数字が正確になります。担当者は空で入るのであとから割り当ててください（取引Noで二重取り込みを防止）',
@@ -9417,7 +9454,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "22.6";
+var APP_VERSION = "22.7";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
