@@ -4346,13 +4346,48 @@ function _shrinkForQuota(level){
       state.records=(state.records||[]).filter(function(r){ var t=new Date(r&&r.time).getTime(); return !(t>0 && t<cut); });
       return state.records.length<n0;
     }
+    if(level===3){
+      // 最後の手段。ここで諦めると設定ごと保存できず、端末が初期状態に戻ってしまう。
+      // クラウドで確認できている日報(_cs印あり)は端末から外す。クラウドには残っているので
+      // 次の同期で必要な分だけ戻る。まだ届いていない日報(_cs印なし)は絶対に外さない。
+      var m0=(state.records||[]).length;
+      if(state._csReady){
+        state.records=(state.records||[]).filter(function(r){ return r && !r._cs; });
+      } else {
+        state.records=(state.records||[]).slice(-200);
+      }
+      return state.records.length<m0;
+    }
   }catch(e){}
   return false;
 }
+/* ===== 🔑 接続設定だけを別枠で保存（v23.0）
+   端末の保存容量がいっぱいだと localStorage.setItem がすべて失敗し、
+   同期の設定（保存先URL・合言葉）まで保存されずに消えていた。
+   結果、設定して同期 → 容量オーバーで保存できない → 開き直すと
+   「同期の設定が必要です」に戻る、という繰り返しになっていた。
+   設定は数十バイトしかないので、本体とは別の小さな枠に必ず書いておく。 ===== */
+function _saveCloudConf(){
+  try{
+    localStorage.setItem('sun_cloud_admin_conf', JSON.stringify({ u:state.cloudUrl||'', k:state.cloudKey||'',
+      uc:!!state.cloudUrlCustom, kc:!!state.cloudKeyCustom }));
+  }catch(e){}
+}
+function _loadCloudConf(){
+  try{
+    var raw=localStorage.getItem('sun_cloud_admin_conf'); if(!raw) return false;
+    var c=JSON.parse(raw); if(!c) return false;
+    var changed=false;
+    if(!state.cloudUrl && c.u){ state.cloudUrl=c.u; state.cloudUrlCustom=!!c.uc; changed=true; }
+    if(!state.cloudKey && c.k){ state.cloudKey=c.k; state.cloudKeyCustom=!!c.kc; changed=true; }
+    return changed;
+  }catch(e){ return false; }
+}
 function saveLocal(){
+  _saveCloudConf();   // 先に設定だけ確保する（本体の保存が失敗しても設定は残る）
   try{ if(state.deletedIds && state.deletedIds.length>2000){ state.deletedIds=state.deletedIds.slice(-1000); } }catch(e){}
   state._syncQueue=syncQueue; /* 未送信キューも一緒に永続化（リロードで消えないように） */
-  for(var lv=0; lv<=2; lv++){
+  for(var lv=0; lv<=3; lv++){
     try{ localStorage.setItem('sun_cloud_admin',JSON.stringify(state)); _costCache={}; return; }
     catch(e){
       var isQuota = e && (e.name==='QuotaExceededError' || /quota/i.test(String(e&&e.message||e)));
@@ -4360,7 +4395,7 @@ function saveLocal(){
       _shrinkForQuota(lv+1);   // 軽くしてもう一度
     }
   }
-  if(!_quotaWarned){ _quotaWarned=true; try{ showToast('⚠️ 端末の保存容量がいっぱいです。オンライン時に「同期」してから、不要な過去データの整理をご検討ください'); }catch(x){} }
+  if(!_quotaWarned){ _quotaWarned=true; try{ showToast('⚠️ 端末の保存容量がいっぱいで保存できません。同期の設定は残してあります。もう一度同期してください'); }catch(x){} }
   _costCache={};
 }
 // 保存 = ローカル即時保存
@@ -4422,7 +4457,7 @@ function _pushMastersNow(cb){
   } catch(e){}
 }
 
-function load(){try{var d=localStorage.getItem('sun_cloud_admin');if(d){var p=JSON.parse(d);for(var k in p)state[k]=p[k];}}catch(e){} try{ if(Array.isArray(state._syncQueue)) syncQueue=state._syncQueue.filter(function(it){ return it && (it.action==='addRecord'||it.action==='deleteRecord'); }).slice(-200); /* 前回セッションの未送信キューを復元（日報以外は捨てる） */ }catch(e){}}
+function load(){try{var d=localStorage.getItem('sun_cloud_admin');if(d){var p=JSON.parse(d);for(var k in p)state[k]=p[k];}}catch(e){} try{ _loadCloudConf(); /* 本体が保存できていなくても接続設定だけは復旧する */ }catch(e){} try{ if(Array.isArray(state._syncQueue)) syncQueue=state._syncQueue.filter(function(it){ return it && (it.action==='addRecord'||it.action==='deleteRecord'); }).slice(-200); /* 前回セッションの未送信キューを復元（日報以外は捨てる） */ }catch(e){}}
 
 function generateCOTA(){
   var nums=['1番','3番','5番','7番','9番'];
@@ -4834,6 +4869,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '🔑 localStorageのQuotaExceededで接続設定まで失われる不具合を修正。saveLocalは3段階の縮小を試して全部失敗すると何も書けず、cloudUrl/cloudKeyごと消えていた（設定→同期→容量オーバー→開き直すと未設定に戻る、の繰り返し）。設定は数十バイトなので本体とは別キー(*_conf)に先に保存し、load時に本体へ復旧する。あわせて縮小のレベル3（_cs印ありの日報を端末から外す。未送信は残す）を追加',
   '📅 日報の編集に<b>来店日・時刻・担当者</b>を追加（staff/admin両方）。これまで日付だけは後から直せませんでした',
   '🔎 エアレジ照合に「④ 日付が最終日になっているかもしれない日報」を追加。期間の最終日に付いている日報のうち、入力漏れの会計と金額が完全一致するものを候補として一覧表示します。別のお客様とたまたま同額のことがあるため<b>自動修正はしません</b>（実データで検証したところ自動修正では正しい日報まで動かしてしまうため、候補提示に留めています）。同日・同額が複数ある場合の対応付けも、会計時間がいちばん近い日報を選ぶよう改善',
   '👤 日報タブで「担当者なし」を選ぶと、一覧の上に<b>まとめて担当者を割り当てるボタン</b>が出るようになりました。レジから取り込んだ日報を1件ずつ開かなくても、名前を押すだけで全部入ります（すでに担当者が入っている日報は変わりません）',
@@ -9544,7 +9580,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "22.9";
+var APP_VERSION = "23.0";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
