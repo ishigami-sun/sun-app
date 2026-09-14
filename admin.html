@@ -4869,6 +4869,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '🔄 自動更新。version.jsonで新しい版を検知したら、入力中（顧客名・選択中のメニュー/物販・編集画面・入力欄フォーカス・非表示）でなければ flushSave して即リロード。入力中なら帯を出して1分ごと／画面復帰時に再挑戦。チェックは起動3秒後・10分ごと・画面復帰時（3分以上あいた時）。sun_upd_tried で同じ版への再挑戦を1セッション1回に制限してループを防止',
   '🔑 localStorageのQuotaExceededで接続設定まで失われる不具合を修正。saveLocalは3段階の縮小を試して全部失敗すると何も書けず、cloudUrl/cloudKeyごと消えていた（設定→同期→容量オーバー→開き直すと未設定に戻る、の繰り返し）。設定は数十バイトなので本体とは別キー(*_conf)に先に保存し、load時に本体へ復旧する。あわせて縮小のレベル3（_cs印ありの日報を端末から外す。未送信は残す）を追加',
   '📅 日報の編集に<b>来店日・時刻・担当者</b>を追加（staff/admin両方）。これまで日付だけは後から直せませんでした',
   '🔎 エアレジ照合に「④ 日付が最終日になっているかもしれない日報」を追加。期間の最終日に付いている日報のうち、入力漏れの会計と金額が完全一致するものを候補として一覧表示します。別のお客様とたまたま同額のことがあるため<b>自動修正はしません</b>（実データで検証したところ自動修正では正しい日報まで動かしてしまうため、候補提示に留めています）。同日・同額が複数ある場合の対応付けも、会計時間がいちばん近い日報を選ぶよう改善',
@@ -9580,7 +9581,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "23.0";
+var APP_VERSION = "23.1";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
@@ -9598,7 +9599,11 @@ function checkForUpdate(){
           // （公開ファイルのバージョン差でバナーが出続けるのを防ぐ）
           if(latestVersion && _verNum(latestVersion) > _verNum(APP_VERSION)){
             var _tried=''; try{ _tried=sessionStorage.getItem('sun_upd_tried')||''; }catch(e){}
-            if(_tried !== latestVersion) showUpdateBanner(latestVersion);
+            if(_tried !== latestVersion){
+              // 入力の途中でなければ、誰にも押させずにその場で新しい版に切り替える
+              if(!_isUserBusy()){ applyUpdate(latestVersion); }
+              else { showUpdateBanner(latestVersion); _pendingUpdateVer=latestVersion; }
+            }
           }
         } catch(e){}
       }
@@ -9607,6 +9612,33 @@ function checkForUpdate(){
   } catch(e){}
 }
 
+/* ===== 🔄 自動更新（v23.1）
+   新しい版を見つけたら、入力の途中でない限り自動で切り替える。
+   スタッフに「更新を押して」と頼まなくてよくする。 ===== */
+var _pendingUpdateVer='';
+function _isUserBusy(){
+  try{
+    // 何か打ち込んでいる途中（名前・メニュー・物販・編集画面・入力欄にカーソル）
+    var nm=document.getElementById('customerName'); if(nm && String(nm.value||'').trim()) return true;
+    if(state && ((state.selectedMenus||[]).length || (state.selectedProducts||[]).length)) return true;
+    if(state && state.editInlineId) return true;
+    var ae=document.activeElement; if(ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName||'')) return true;
+    if(document.visibilityState!=='visible') return true;   // 画面が見えていない時は触らない
+  }catch(e){}
+  return false;
+}
+function applyUpdate(newVer){
+  try{ sessionStorage.setItem('sun_upd_tried', newVer); }catch(e){}
+  try{ if(typeof flushSave==='function') flushSave(); }catch(e){}   // 保存してから切り替える
+  try{ if(typeof showToast==='function') showToast('🔄 新しい版に切り替えます'); }catch(e){}
+  setTimeout(function(){
+    try{ if('caches' in window){ caches.keys().then(function(names){ for(var i=0;i<names.length;i++) caches.delete(names[i]); }); } }catch(e){}
+    try{ location.href = location.href.split('?')[0].split('#')[0] + '?v=' + Date.now(); }
+    catch(e){ try{ location.reload(true); }catch(e2){} }
+  }, 600);
+}
+// 入力中で見送った更新を、手が空いたら自動で当てる（画面に戻った時／1分ごと）
+function _retryPendingUpdate(){ if(_pendingUpdateVer && !_isUserBusy()){ var v=_pendingUpdateVer; _pendingUpdateVer=''; applyUpdate(v); } }
 function showUpdateBanner(newVer){
   // 既存のバナーがあれば削除
   var existing = document.getElementById('updateBanner');
@@ -9615,26 +9647,11 @@ function showUpdateBanner(newVer){
   var banner = document.createElement('div');
   banner.id = 'updateBanner';
   banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:linear-gradient(135deg,#FF9800,#F57C00);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;z-index:9999;box-shadow:0 2px 8px rgba(0,0,0,0.2);cursor:pointer;animation:slideDown 0.4s ease';
-  banner.innerHTML = '<div style="display:flex;align-items:center;gap:10px"><span style="font-size:18px">🎉</span><div><div style="font-size:13px;font-weight:700">新しいバージョン v' + newVer + ' があります</div><div style="font-size:11px;opacity:0.95">タップして更新</div></div></div><div style="background:#fff;color:#F57C00;padding:6px 14px;border-radius:18px;font-weight:700;font-size:12px">更新</div>';
+  banner.innerHTML = '<div style="display:flex;align-items:center;gap:10px"><span style="font-size:18px">🎉</span><div><div style="font-size:13px;font-weight:700">新しいバージョン v' + newVer + ' があります</div><div style="font-size:11px;opacity:0.95">入力が終わると自動で切り替わります（今すぐならタップ）</div></div></div><div style="background:#fff;color:#F57C00;padding:6px 14px;border-radius:18px;font-weight:700;font-size:12px">更新</div>';
   banner.onclick = function(){
-    try{ sessionStorage.setItem('sun_upd_tried', newVer); }catch(e){}
     banner.innerHTML = '<div style="display:flex;align-items:center;gap:10px;width:100%;justify-content:center"><span style="font-size:18px">🔄</span><div style="font-size:13px;font-weight:700">更新中...</div></div>';
-    setTimeout(function(){
-      try { 
-        // Service Workerキャッシュもクリア
-        if('caches' in window){
-          caches.keys().then(function(names){
-            for(var i=0;i<names.length;i++) caches.delete(names[i]);
-          });
-        }
-      } catch(e){}
-      // 強制リロード（キャッシュ回避）
-      try { 
-        location.href = location.href.split('?')[0] + '?v=' + Date.now();
-      } catch(e){ 
-        location.reload(true); 
-      }
-    }, 300);
+    _pendingUpdateVer='';
+    applyUpdate(newVer);
   };
   document.body.appendChild(banner);
   
@@ -9654,6 +9671,15 @@ if(typeof window !== 'undefined'){
   setTimeout(function(){ try{ checkForUpdate(); }catch(e){} }, 3000);
   // その後10分ごとにチェック
   setInterval(function(){ try{ checkForUpdate(); }catch(e){} }, 10 * 60 * 1000);
+  // 画面に戻ってきた時もチェック（開きっぱなしの端末が古いままにならないように）
+  var _lastUpdChk=Date.now();
+  try{ document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState!=='visible') return;
+    try{ _retryPendingUpdate(); }catch(e){}
+    if(Date.now()-_lastUpdChk > 3*60*1000){ _lastUpdChk=Date.now(); try{ checkForUpdate(); }catch(e){} }
+  }); }catch(e){}
+  // 入力中で見送った更新は、手が空いたら当てる
+  setInterval(function(){ try{ _retryPendingUpdate(); }catch(e){} }, 60*1000);
 }
 
 

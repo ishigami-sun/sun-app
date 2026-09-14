@@ -2414,6 +2414,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '🔄 <b>更新ボタンを押さなくてよくなりました。</b>新しい版が出たら、入力の途中でなければ自動で切り替わります。入力中の時は終わってから自動で切り替わります',
   '🔑 同期の設定が勝手に消えてしまう不具合を直しました。端末の保存容量がいっぱいになると、保存そのものが失敗して<b>設定ごと消え、開き直すと「同期の設定が必要です」に戻って</b>いました。今は設定だけ別に必ず保存しておくので、容量がいっぱいでも消えません',
   '📅 日報の<b>来店日・時刻・担当者</b>をあとから直せるようになりました。日報をタップして「👤顧客」を開いてください。あとからまとめて打ち込むと、その日の日付で登録されてしまいます。ちがう日のぶんは、ここで実際の来店日に直してください',
   '🛟 打ち込んだ日報が消えてしまう不具合を直しました。これまでは、同期の設定がうまくいっていない間に打ち込んだ日報が、設定が直った直後の同期で消えてしまうことがありました。今は<b>クラウドに届いたことを確認できるまで、その日報を端末から消さない</b>ようになっています',
@@ -6305,7 +6306,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "23.0";
+var APP_VERSION = "23.1";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
@@ -6323,7 +6324,11 @@ function checkForUpdate(){
           // （公開ファイルのバージョン差でバナーが出続けるのを防ぐ）
           if(latestVersion && _verNum(latestVersion) > _verNum(APP_VERSION)){
             var _tried=''; try{ _tried=sessionStorage.getItem('sun_upd_tried')||''; }catch(e){}
-            if(_tried !== latestVersion) showUpdateBanner(latestVersion);
+            if(_tried !== latestVersion){
+              // 入力の途中でなければ、誰にも押させずにその場で新しい版に切り替える
+              if(!_isUserBusy()){ applyUpdate(latestVersion); }
+              else { showUpdateBanner(latestVersion); _pendingUpdateVer=latestVersion; }
+            }
           }
         } catch(e){}
       }
@@ -6332,6 +6337,33 @@ function checkForUpdate(){
   } catch(e){}
 }
 
+/* ===== 🔄 自動更新（v23.1）
+   新しい版を見つけたら、入力の途中でない限り自動で切り替える。
+   スタッフに「更新を押して」と頼まなくてよくする。 ===== */
+var _pendingUpdateVer='';
+function _isUserBusy(){
+  try{
+    // 何か打ち込んでいる途中（名前・メニュー・物販・編集画面・入力欄にカーソル）
+    var nm=document.getElementById('customerName'); if(nm && String(nm.value||'').trim()) return true;
+    if(state && ((state.selectedMenus||[]).length || (state.selectedProducts||[]).length)) return true;
+    if(state && state.editInlineId) return true;
+    var ae=document.activeElement; if(ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName||'')) return true;
+    if(document.visibilityState!=='visible') return true;   // 画面が見えていない時は触らない
+  }catch(e){}
+  return false;
+}
+function applyUpdate(newVer){
+  try{ sessionStorage.setItem('sun_upd_tried', newVer); }catch(e){}
+  try{ if(typeof flushSave==='function') flushSave(); }catch(e){}   // 保存してから切り替える
+  try{ if(typeof showToast==='function') showToast('🔄 新しい版に切り替えます'); }catch(e){}
+  setTimeout(function(){
+    try{ if('caches' in window){ caches.keys().then(function(names){ for(var i=0;i<names.length;i++) caches.delete(names[i]); }); } }catch(e){}
+    try{ location.href = location.href.split('?')[0].split('#')[0] + '?v=' + Date.now(); }
+    catch(e){ try{ location.reload(true); }catch(e2){} }
+  }, 600);
+}
+// 入力中で見送った更新を、手が空いたら自動で当てる（画面に戻った時／1分ごと）
+function _retryPendingUpdate(){ if(_pendingUpdateVer && !_isUserBusy()){ var v=_pendingUpdateVer; _pendingUpdateVer=''; applyUpdate(v); } }
 function showUpdateBanner(newVer){
   // 既存のバナーがあれば削除
   var existing = document.getElementById('updateBanner');
@@ -6340,26 +6372,11 @@ function showUpdateBanner(newVer){
   var banner = document.createElement('div');
   banner.id = 'updateBanner';
   banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:linear-gradient(135deg,#FF9800,#F57C00);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;z-index:9999;box-shadow:0 2px 8px rgba(0,0,0,0.2);cursor:pointer;animation:slideDown 0.4s ease';
-  banner.innerHTML = '<div style="display:flex;align-items:center;gap:10px"><span style="font-size:18px">🎉</span><div><div style="font-size:13px;font-weight:700">新しいバージョン v' + newVer + ' があります</div><div style="font-size:11px;opacity:0.95">タップして更新</div></div></div><div style="background:#fff;color:#F57C00;padding:6px 14px;border-radius:18px;font-weight:700;font-size:12px">更新</div>';
+  banner.innerHTML = '<div style="display:flex;align-items:center;gap:10px"><span style="font-size:18px">🎉</span><div><div style="font-size:13px;font-weight:700">新しいバージョン v' + newVer + ' があります</div><div style="font-size:11px;opacity:0.95">入力が終わると自動で切り替わります（今すぐならタップ）</div></div></div><div style="background:#fff;color:#F57C00;padding:6px 14px;border-radius:18px;font-weight:700;font-size:12px">更新</div>';
   banner.onclick = function(){
-    try{ sessionStorage.setItem('sun_upd_tried', newVer); }catch(e){}
     banner.innerHTML = '<div style="display:flex;align-items:center;gap:10px;width:100%;justify-content:center"><span style="font-size:18px">🔄</span><div style="font-size:13px;font-weight:700">更新中...</div></div>';
-    setTimeout(function(){
-      try { 
-        // Service Workerキャッシュもクリア
-        if('caches' in window){
-          caches.keys().then(function(names){
-            for(var i=0;i<names.length;i++) caches.delete(names[i]);
-          });
-        }
-      } catch(e){}
-      // 強制リロード（キャッシュ回避）
-      try { 
-        location.href = location.href.split('?')[0] + '?v=' + Date.now();
-      } catch(e){ 
-        location.reload(true); 
-      }
-    }, 300);
+    _pendingUpdateVer='';
+    applyUpdate(newVer);
   };
   document.body.appendChild(banner);
   
@@ -6379,6 +6396,15 @@ if(typeof window !== 'undefined'){
   setTimeout(function(){ try{ checkForUpdate(); }catch(e){} }, 3000);
   // その後10分ごとにチェック
   setInterval(function(){ try{ checkForUpdate(); }catch(e){} }, 10 * 60 * 1000);
+  // 画面に戻ってきた時もチェック（開きっぱなしの端末が古いままにならないように）
+  var _lastUpdChk=Date.now();
+  try{ document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState!=='visible') return;
+    try{ _retryPendingUpdate(); }catch(e){}
+    if(Date.now()-_lastUpdChk > 3*60*1000){ _lastUpdChk=Date.now(); try{ checkForUpdate(); }catch(e){} }
+  }); }catch(e){}
+  // 入力中で見送った更新は、手が空いたら当てる
+  setInterval(function(){ try{ _retryPendingUpdate(); }catch(e){} }, 60*1000);
 }
 
 
