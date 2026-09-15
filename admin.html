@@ -3744,6 +3744,20 @@ function extractSetupUrl(text){
   return '';
 }
 function applySetupKey(key, url){
+  // 【v23.2】保存する前にサーバーに通るか確かめる。断られる合言葉は保存しない
+  // （古いLINEのリンクを貼って、動いていた端末を壊してしまうのを防ぐ）
+  if(!applySetupKey._checked){
+    if(typeof showToast==='function') showToast('🔎 合言葉を確かめています…');
+    _probeKey(url, key, function(v){
+      if(v==='bad'){
+        if(typeof showToast==='function') showToast('⚠️ このリンクの合言葉はサーバーに断られました。石上さんに「今の」リンクをもらってください' + (state.cloudKey?'（今の設定はそのままです）':''));
+        return;
+      }
+      applySetupKey._checked=true;
+      try{ applySetupKey(key, url); } finally { applySetupKey._checked=false; }
+    });
+    return;
+  }
   state.cloudKey = key;
   state.cloudKeyCustom = true;
   // 保存先はリンクに含まれていればそれを、無ければアプリ標準（昔手入力した古いURLは上書きする）
@@ -4130,6 +4144,29 @@ function installAutoSync(){
    ①この端末の報告・マスタを送る → ②未送信の日報と削除をクラウドへ反映 → ③全員の最新を取り込む
    画面上部のバナーをタップするとこれが走る。各タブの同期ボタンは廃止した ===== */
 var _syncAllBusy=false;
+var _goodKeyTried=false;   // 「前に通った合言葉」に戻すのは1回だけ（無限に往復しない）
+/* ===== 🔑 合言葉の自己修復（v23.2）
+   古い設定リンク（#k=…付きのアイコンやブックマーク）から開くたびに、
+   正しい合言葉が古いものに上書きされ「合言葉が違います」に戻っていた。
+   ・合言葉を入れ替える前に、サーバーに通るか確かめる（断られたら入れ替えない）
+   ・同期が通った合言葉を lastGoodKey として覚え、断られた時はそれに戻して1回だけやり直す ===== */
+function _probeKey(url, key, cb){
+  var done=false; function fin(v){ if(done) return; done=true; try{ cb(v); }catch(e){} }
+  try{
+    var u=_cleanCloudUrl(url)||CLOUD_URL;
+    if(!u||!key){ fin('unknown'); return; }
+    setTimeout(function(){ fin('unknown'); }, 12000);
+    fetch(u, { method:'POST', body:JSON.stringify({key:key, action:'getAll'}), headers:{'Content-Type':'text/plain;charset=utf-8'}, redirect:'follow' })
+      .then(function(r){ return r.text(); })
+      .then(function(t){
+        var res=null; try{ res=JSON.parse(t); }catch(e){}
+        if(res && res.ok===true) fin('ok');
+        else if(res && res.ok===false && /unauthorized|forbidden/i.test(String(res.error||''))) fin('bad');
+        else fin('unknown');
+      })
+      .catch(function(){ fin('unknown'); });
+  }catch(e){ fin('unknown'); }
+}
 function syncAll(silent){
   if(!state.cloudUrl || !state.cloudKey){
     if(typeof pasteSetupLink==='function'){ pasteSetupLink(); }
@@ -4148,8 +4185,21 @@ function syncAll(silent){
     if(_finDone) return;            // 二重呼び出しで表示が乱れないように
     _finDone=true;
     _syncAllBusy=false;
-    if(ok){ state.lastFullSync=Date.now(); state.lastSyncError=''; }
+    if(ok){ state.lastFullSync=Date.now(); state.lastSyncError=''; state.lastGoodKey=state.cloudKey; state.lastGoodUrl=state.cloudUrl; }
     else { state.lastSyncError=String(err||'通信エラー'); }
+    // 合言葉が断られた時、前に通っていた合言葉があればそれに戻して1回だけやり直す
+    // （古いリンクから開いて合言葉が上書きされた端末を、自動で元に戻す）
+    if(!ok && !_goodKeyTried && syncAuthFailed() && state.lastGoodKey && state.lastGoodKey!==state.cloudKey){
+      _goodKeyTried=true;
+      state.cloudKey=state.lastGoodKey; state.cloudKeyCustom=true;
+      if(state.lastGoodUrl){ state.cloudUrl=state.lastGoodUrl; state.cloudUrlCustom=(state.lastGoodUrl!==CLOUD_URL); }
+      state.lastSyncError='';
+      _syncAllBusy=false;
+      try{ saveLocal(); }catch(e){}
+      try{ if(typeof showToast==='function') showToast('🔧 前に通っていた合言葉に戻して、もう一度つなぎます'); }catch(e){}
+      setTimeout(function(){ try{ syncAll(silent); }catch(e){} }, 400);
+      return;
+    }
     if(!ok && typeof adoptAdminConfigIfAny==='function' && !_adoptTried && syncAuthFailed()){
       _adoptTried=true;
       if(adoptAdminConfigIfAny()){ setTimeout(function(){ try{ syncAll(silent); }catch(e){} }, 400); return; }
@@ -4370,7 +4420,7 @@ function _shrinkForQuota(level){
 function _saveCloudConf(){
   try{
     localStorage.setItem('sun_cloud_admin_conf', JSON.stringify({ u:state.cloudUrl||'', k:state.cloudKey||'',
-      uc:!!state.cloudUrlCustom, kc:!!state.cloudKeyCustom }));
+      uc:!!state.cloudUrlCustom, kc:!!state.cloudKeyCustom, g:state.lastGoodKey||'', gu:state.lastGoodUrl||'' }));
   }catch(e){}
 }
 function _loadCloudConf(){
@@ -4380,6 +4430,7 @@ function _loadCloudConf(){
     var changed=false;
     if(!state.cloudUrl && c.u){ state.cloudUrl=c.u; state.cloudUrlCustom=!!c.uc; changed=true; }
     if(!state.cloudKey && c.k){ state.cloudKey=c.k; state.cloudKeyCustom=!!c.kc; changed=true; }
+    if(!state.lastGoodKey && c.g){ state.lastGoodKey=c.g; state.lastGoodUrl=c.gu||''; changed=true; }
     return changed;
   }catch(e){ return false; }
 }
@@ -4869,6 +4920,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '🔑 合言葉の自己修復。#k= 付きURL／設定リンク貼り付け／管理者版設定の取り込みは、いずれも保存前に _probeKey でサーバーに確かめ、unauthorized なら入れ替えない。同期成功時の合言葉を lastGoodKey として保持（*_conf にも保存）し、unauthorized になったら1回だけそれに戻して再同期。古い #k= を持つホーム画面アイコンから開くたびに正しい合言葉が上書きされていた件の根本対策',
   '🔄 自動更新。version.jsonで新しい版を検知したら、入力中（顧客名・選択中のメニュー/物販・編集画面・入力欄フォーカス・非表示）でなければ flushSave して即リロード。入力中なら帯を出して1分ごと／画面復帰時に再挑戦。チェックは起動3秒後・10分ごと・画面復帰時（3分以上あいた時）。sun_upd_tried で同じ版への再挑戦を1セッション1回に制限してループを防止',
   '🔑 localStorageのQuotaExceededで接続設定まで失われる不具合を修正。saveLocalは3段階の縮小を試して全部失敗すると何も書けず、cloudUrl/cloudKeyごと消えていた（設定→同期→容量オーバー→開き直すと未設定に戻る、の繰り返し）。設定は数十バイトなので本体とは別キー(*_conf)に先に保存し、load時に本体へ復旧する。あわせて縮小のレベル3（_cs印ありの日報を端末から外す。未送信は残す）を追加',
   '📅 日報の編集に<b>来店日・時刻・担当者</b>を追加（staff/admin両方）。これまで日付だけは後から直せませんでした',
@@ -8967,14 +9019,27 @@ try{
     var _raw=location.hash.slice(3), _amp=_raw.indexOf('&');
     var _hk=decodeURIComponent(_amp>=0?_raw.slice(0,_amp):_raw).trim();
     var _hu=''; try{ var _um=_raw.match(/[&?]u=([^&]+)/); if(_um) _hu=_cleanCloudUrl(decodeURIComponent(_um[1])); }catch(e){}
-    if(_hk){ state.cloudKey=_hk; state.cloudKeyCustom=true;
-      // 保存先はリンクに含まれていればそれを、無ければアプリ標準を使う
-      try{ state.cloudUrl=_hu||CLOUD_URL; state.cloudUrlCustom=!!(_hu && _hu!==CLOUD_URL); state.lastSyncError=''; }catch(e){}
-      try{ saveLocal(); }catch(e){}
+    if(_hk){
       try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){ location.hash=''; }
-      try{ updateCloudStatus(); }catch(e){}
-      try{ showToast('🔑 接続キーを設定しました'); }catch(e){}
-      try{ setTimeout(function(){ syncFromCloud(); },600); }catch(e){}
+      var _adoptHash=function(){
+        state.cloudKey=_hk; state.cloudKeyCustom=true;
+        // 保存先はリンクに含まれていればそれを、無ければアプリ標準を使う
+        try{ state.cloudUrl=_hu||CLOUD_URL; state.cloudUrlCustom=!!(_hu && _hu!==CLOUD_URL); state.lastSyncError=''; }catch(e){}
+        try{ saveLocal(); }catch(e){}
+        try{ updateCloudStatus(); }catch(e){}
+        try{ showToast('🔑 接続キーを設定しました'); }catch(e){}
+        try{ setTimeout(function(){ syncFromCloud(); },600); }catch(e){}
+      };
+      var _curKey=String(state.cloudKey||'');
+      if(!_curKey || _curKey===_hk){ _adoptHash(); }
+      else {
+        // 【v23.2】すでに合言葉がある端末では、リンクの合言葉をサーバーに確かめてから入れ替える。
+        // 古い設定リンクを保存したアイコンから開くたびに、正しい合言葉が上書きされていたため。
+        _probeKey(_hu||CLOUD_URL, _hk, function(v){
+          if(v==='bad'){ try{ showToast('⚠️ このリンクの合言葉は古いので使いませんでした（今の設定のまま）'); }catch(e){} return; }
+          _adoptHash();
+        });
+      }
     }
   }
 }catch(e){}
@@ -9581,7 +9646,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "23.1";
+var APP_VERSION = "23.2";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
