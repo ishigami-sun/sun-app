@@ -4920,6 +4920,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '📵 アプリ内ブラウザ（LINE/Facebook/Instagram）をUAで検出し、画面下に固定の赤い注意を表示。別ストレージなので入力しても届かない・設定も入らない事故の防止（花岡さんの件）。設定リンクの貼り付けは残してあり、閉じ込められた日報の送出には使える',
   '🔑 合言葉の自己修復。#k= 付きURL／設定リンク貼り付け／管理者版設定の取り込みは、いずれも保存前に _probeKey でサーバーに確かめ、unauthorized なら入れ替えない。同期成功時の合言葉を lastGoodKey として保持（*_conf にも保存）し、unauthorized になったら1回だけそれに戻して再同期。古い #k= を持つホーム画面アイコンから開くたびに正しい合言葉が上書きされていた件の根本対策',
   '🔄 自動更新。version.jsonで新しい版を検知したら、入力中（顧客名・選択中のメニュー/物販・編集画面・入力欄フォーカス・非表示）でなければ flushSave して即リロード。入力中なら帯を出して1分ごと／画面復帰時に再挑戦。チェックは起動3秒後・10分ごと・画面復帰時（3分以上あいた時）。sun_upd_tried で同じ版への再挑戦を1セッション1回に制限してループを防止',
   '🔑 localStorageのQuotaExceededで接続設定まで失われる不具合を修正。saveLocalは3段階の縮小を試して全部失敗すると何も書けず、cloudUrl/cloudKeyごと消えていた（設定→同期→容量オーバー→開き直すと未設定に戻る、の繰り返し）。設定は数十バイトなので本体とは別キー(*_conf)に先に保存し、load時に本体へ復旧する。あわせて縮小のレベル3（_cs印ありの日報を端末から外す。未送信は残す）を追加',
@@ -9012,6 +9013,32 @@ function showToast(msg){
 init();
 try{ if(normalizeCloudConfig()) saveLocal(); }catch(e){}
 try{ applyViewOnlyMode(); }catch(e){}
+/* ===== 📵 LINE等のアプリ内ブラウザで開いた時の注意（v23.3）
+   LINEの中でリンクを開くと、ホーム画面のSUNとは別の保存場所になる。
+   ここで打った日報は届かず、設定を入れてもホーム画面のSUNには入らない。
+   スタッフが気づかずに入力してしまう事故を、画面の下に赤い帯を出して止める。
+   （設定リンクの貼り付け自体はできるようにしておく＝閉じ込められた日報を送り出す用） ===== */
+function _inAppBrowserName(){
+  try{
+    var ua=String(navigator.userAgent||'');
+    if(/\bLine\//i.test(ua)) return 'LINE';
+    if(/FBAN|FBAV|FB_IAB/i.test(ua)) return 'Facebook';
+    if(/Instagram/i.test(ua)) return 'Instagram';
+  }catch(e){}
+  return '';
+}
+function _warnInAppBrowser(){
+  var app=_inAppBrowserName(); if(!app) return;
+  if(document.getElementById('inAppWarn')) return;
+  var d=document.createElement('div');
+  d.id='inAppWarn';
+  d.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:9998;background:#C62828;color:#fff;padding:12px 14px;font-size:13px;line-height:1.7;box-shadow:0 -2px 10px rgba(0,0,0,.3)';
+  d.innerHTML='<b>⚠️ '+app+'の中で開いています。ここで打った日報は届きません。</b><br>'
+    +'ホーム画面の <b>SUN</b> のアイコンから開き直してください。'
+    +'<div style="font-size:11px;opacity:.9;margin-top:4px">設定リンクは「長押し→コピー」だけして、ホーム画面のSUNの上の帯に貼り付けてください</div>';
+  document.body.appendChild(d);
+}
+try{ _warnInAppBrowser(); }catch(e){}
 // URLの #k=… でアクセスすると接続キーを自動保存（管理者が各端末で1回開くだけ。キーは履歴に残らないよう即消去）
 try{
   if(location.hash && location.hash.indexOf('#k=')===0){
@@ -9646,7 +9673,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "23.2";
+var APP_VERSION = "23.3";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
