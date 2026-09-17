@@ -1523,7 +1523,8 @@ function callCloud(action, payload, callback, _tries){
         return;
       }
       // クラウドに届いた日報に印を付ける（同期でローカルから消してよいかの判定に使う）
-      try{ if(res && res.ok && action==='addRecord' && payload && payload.record) payload.record._cs=1; }catch(e){}
+      try{ if(res && res.ok && action==='addRecord' && payload && payload.record){ payload.record._cs=1; _markDelivered(payload.record.id); } }catch(e){}
+      try{ if(res && res.ok && action==='deleteRecord' && payload && payload.id!=null && typeof syncQueue!=='undefined' && syncQueue){ syncQueue=syncQueue.filter(function(it){ return !(it && it.action==='deleteRecord' && String(_queueRecId(it))===String(payload.id)); }); state._syncQueue=syncQueue; } }catch(e){}
       // サーバーが ok:false（合言葉違い等）を返した時は「通信できた時刻」を更新しない
       // （更新すると上部の帯が緑になり、同期できていないのに出来たように見えてしまう）
       if(!(res && res.ok===false)) state.lastSync=Date.now();
@@ -1616,9 +1617,51 @@ function unsentRecordCount(){
   }catch(e){}
   return n;
 }
+/* ===== 🧹 再送キューの掃除（v23.4）
+   再送キューは「一度送れなかった日報」を入れておく場所。ただし日報は
+   pushAndSync でも送られるので、キューに残ったまま実際には届いていることがある。
+   以前はキューの件数をそのまま「まだ届いていない」と数えていたため、
+   届いたあとも一日中「○件がまだ全員に届いていません」が出続けていた。
+   届いたことが確認できた（_cs印あり）日報の分はキューから外して数えない。 ===== */
+function _queueRecId(it){
+  try{ var p=it&&it.payload; return p ? ((p.record&&p.record.id!=null)?p.record.id:(p.id!=null?p.id:null)) : null; }catch(e){ return null; }
+}
+// 日報がクラウドに届いた印を、端末に保存している本体（state.records）にも付け、キューから外す
+function _markDelivered(id){
+  if(id==null) return;
+  try{
+    var k=String(id), rs=state.records||[];
+    for(var i=0;i<rs.length;i++){ if(rs[i] && String(rs[i].id)===k){ rs[i]._cs=1; } }
+    if(typeof syncQueue!=='undefined' && syncQueue){
+      syncQueue=syncQueue.filter(function(it){ return !(it && it.action==='addRecord' && String(_queueRecId(it))===k); });
+      state._syncQueue=syncQueue;
+    }
+  }catch(e){}
+}
+function _pruneDeliveredQueue(){
+  try{
+    if(typeof syncQueue==='undefined' || !syncQueue) return;
+    var byId={}, rs=state.records||[];
+    for(var i=0;i<rs.length;i++){ if(rs[i] && rs[i].id!=null) byId[String(rs[i].id)]=rs[i]; }
+    var before=syncQueue.length;
+    syncQueue=syncQueue.filter(function(it){
+      if(!it) return false;
+      if(it.action==='addRecord'){
+        var r=byId[String(_queueRecId(it))];
+        return !!(r && !r._cs);          // 本体に残っていて、まだ届いていないものだけ
+      }
+      if(it.action==='deleteRecord'){
+        return false;                    // 削除は deletedIds で pushAndSync が必ず送るので、キューには要らない
+      }
+      return false;
+    });
+    if(syncQueue.length!==before) state._syncQueue=syncQueue;
+  }catch(e){}
+}
 function syncPendingCount(){
   var n=0;
   try{
+    _pruneDeliveredQueue();
     var q=(typeof syncQueue!=='undefined' && syncQueue) ? syncQueue : [];
     for(var i=0;i<q.length;i++){ if(q[i] && _isMutation(q[i].action)) n++; }
   }catch(e){}
@@ -1757,7 +1800,7 @@ function syncAll(silent){
         _pushMastersNow(function(){
           try{
             // ③未送信の日報と削除をクラウドへ反映し、記録を最新化
-            pushAndSync(function(){ fin(true); }, true);
+            pushAndSync(function(){ try{ _pruneDeliveredQueue(); processSyncQueue(); }catch(e){} fin(true); }, true);
           }catch(e){ fin(false); }
         });
       }catch(e){ fin(false); }
@@ -2222,7 +2265,7 @@ function init(){
     if(isOnline && syncQueue.length){ setTimeout(function(){ try{ processSyncQueue(); }catch(e){} }, 300); }
     setTimeout(function(){ try{ syncAll(true); }catch(e){} }, 500);
     // 5分ごとに自動同期（取り込みだけでなく未送信の送信も行う）
-    setInterval(function(){ if(isOnline){ try{ syncAll(true); }catch(e){} } }, 5*60*1000);
+    setInterval(function(){ if(isOnline){ try{ processSyncQueue(); }catch(e){} try{ syncAll(true); }catch(e){} } }, 5*60*1000);
     try{ installAutoSync(); }catch(e){}
   }
   updateCloudStatus();
@@ -2470,6 +2513,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '🔕 「○件がまだ全員に届いていません」が、届いたあとも出続ける不具合を直しました。届いたことを確かめた分は数えません。同期のたびに送り残しも自動で流します',
   '📵 LINEの中でリンクを開いてしまった時に、画面の下に赤い注意が出るようになりました。LINEの中で打った日報は届きません。ホーム画面のSUNから開いてください',
   '🔑 「合言葉が違います」に勝手に戻ってしまう不具合を直しました。古いリンクを保存したアイコンから開くと、正しい合言葉が古いものに上書きされていました。今は入れ替える前にサーバーに確かめ、断られる合言葉は使いません。もし上書きされても、前に通っていた合言葉に自動で戻します',
   '🔄 <b>更新ボタンを押さなくてよくなりました。</b>新しい版が出たら、入力の途中でなければ自動で切り替わります。入力中の時は終わってから自動で切り替わります',
@@ -6403,7 +6447,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "23.3";
+var APP_VERSION = "23.4";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){

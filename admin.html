@@ -3985,7 +3985,8 @@ function callCloud(action, payload, callback, _tries){
         return;
       }
       // クラウドに届いた日報に印を付ける（同期でローカルから消してよいかの判定に使う）
-      try{ if(res && res.ok && action==='addRecord' && payload && payload.record) payload.record._cs=1; }catch(e){}
+      try{ if(res && res.ok && action==='addRecord' && payload && payload.record){ payload.record._cs=1; _markDelivered(payload.record.id); } }catch(e){}
+      try{ if(res && res.ok && action==='deleteRecord' && payload && payload.id!=null && typeof syncQueue!=='undefined' && syncQueue){ syncQueue=syncQueue.filter(function(it){ return !(it && it.action==='deleteRecord' && String(_queueRecId(it))===String(payload.id)); }); state._syncQueue=syncQueue; } }catch(e){}
       // サーバーが ok:false（合言葉違い等）を返した時は「通信できた時刻」を更新しない
       // （更新すると上部の帯が緑になり、同期できていないのに出来たように見えてしまう）
       if(!(res && res.ok===false)) state.lastSync=Date.now();
@@ -4079,9 +4080,51 @@ function unsentRecordCount(){
   }catch(e){}
   return n;
 }
+/* ===== 🧹 再送キューの掃除（v23.4）
+   再送キューは「一度送れなかった日報」を入れておく場所。ただし日報は
+   pushAndSync でも送られるので、キューに残ったまま実際には届いていることがある。
+   以前はキューの件数をそのまま「まだ届いていない」と数えていたため、
+   届いたあとも一日中「○件がまだ全員に届いていません」が出続けていた。
+   届いたことが確認できた（_cs印あり）日報の分はキューから外して数えない。 ===== */
+function _queueRecId(it){
+  try{ var p=it&&it.payload; return p ? ((p.record&&p.record.id!=null)?p.record.id:(p.id!=null?p.id:null)) : null; }catch(e){ return null; }
+}
+// 日報がクラウドに届いた印を、端末に保存している本体（state.records）にも付け、キューから外す
+function _markDelivered(id){
+  if(id==null) return;
+  try{
+    var k=String(id), rs=state.records||[];
+    for(var i=0;i<rs.length;i++){ if(rs[i] && String(rs[i].id)===k){ rs[i]._cs=1; } }
+    if(typeof syncQueue!=='undefined' && syncQueue){
+      syncQueue=syncQueue.filter(function(it){ return !(it && it.action==='addRecord' && String(_queueRecId(it))===k); });
+      state._syncQueue=syncQueue;
+    }
+  }catch(e){}
+}
+function _pruneDeliveredQueue(){
+  try{
+    if(typeof syncQueue==='undefined' || !syncQueue) return;
+    var byId={}, rs=state.records||[];
+    for(var i=0;i<rs.length;i++){ if(rs[i] && rs[i].id!=null) byId[String(rs[i].id)]=rs[i]; }
+    var before=syncQueue.length;
+    syncQueue=syncQueue.filter(function(it){
+      if(!it) return false;
+      if(it.action==='addRecord'){
+        var r=byId[String(_queueRecId(it))];
+        return !!(r && !r._cs);          // 本体に残っていて、まだ届いていないものだけ
+      }
+      if(it.action==='deleteRecord'){
+        return false;                    // 削除は deletedIds で pushAndSync が必ず送るので、キューには要らない
+      }
+      return false;
+    });
+    if(syncQueue.length!==before) state._syncQueue=syncQueue;
+  }catch(e){}
+}
 function syncPendingCount(){
   var n=0;
   try{
+    _pruneDeliveredQueue();
     var q=(typeof syncQueue!=='undefined' && syncQueue) ? syncQueue : [];
     for(var i=0;i<q.length;i++){ if(q[i] && _isMutation(q[i].action)) n++; }
   }catch(e){}
@@ -4220,7 +4263,7 @@ function syncAll(silent){
         _pushMastersNow(function(){
           try{
             // ③未送信の日報と削除をクラウドへ反映し、記録を最新化
-            pushAndSync(function(){ fin(true); }, true);
+            pushAndSync(function(){ try{ _pruneDeliveredQueue(); processSyncQueue(); }catch(e){} fin(true); }, true);
           }catch(e){ fin(false); }
         });
       }catch(e){ fin(false); }
@@ -4679,7 +4722,7 @@ function init(){
     if(isOnline && syncQueue.length){ setTimeout(function(){ try{ processSyncQueue(); }catch(e){} }, 300); }
     setTimeout(function(){ try{ syncAll(true); }catch(e){} }, 500);
     // 5分ごとに自動同期（取り込みだけでなく未送信の送信も行う）
-    setInterval(function(){ if(isOnline){ try{ syncAll(true); }catch(e){} } }, 5*60*1000);
+    setInterval(function(){ if(isOnline){ try{ processSyncQueue(); }catch(e){} try{ syncAll(true); }catch(e){} } }, 5*60*1000);
     try{ installAutoSync(); }catch(e){}
   }
   updateCloudStatus();
@@ -4920,6 +4963,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '🔕 未送信バナーの誤表示を修正。再送キュー(syncQueue)は起動時と online 時にしか流れず、日中の一時失敗で積まれた addRecord が pushAndSync で届いた後もキューに残り、syncPendingCount がそれを数え続けていた。_cs印のある日報のキュー項目は除外・削除（_pruneDeliveredQueue）、callCloud 成功時は本体レコードにも印を付けてキューから外す（_markDelivered）、syncAll と5分ごとにキューも流す',
   '📵 アプリ内ブラウザ（LINE/Facebook/Instagram）をUAで検出し、画面下に固定の赤い注意を表示。別ストレージなので入力しても届かない・設定も入らない事故の防止（花岡さんの件）。設定リンクの貼り付けは残してあり、閉じ込められた日報の送出には使える',
   '🔑 合言葉の自己修復。#k= 付きURL／設定リンク貼り付け／管理者版設定の取り込みは、いずれも保存前に _probeKey でサーバーに確かめ、unauthorized なら入れ替えない。同期成功時の合言葉を lastGoodKey として保持（*_conf にも保存）し、unauthorized になったら1回だけそれに戻して再同期。古い #k= を持つホーム画面アイコンから開くたびに正しい合言葉が上書きされていた件の根本対策',
   '🔄 自動更新。version.jsonで新しい版を検知したら、入力中（顧客名・選択中のメニュー/物販・編集画面・入力欄フォーカス・非表示）でなければ flushSave して即リロード。入力中なら帯を出して1分ごと／画面復帰時に再挑戦。チェックは起動3秒後・10分ごと・画面復帰時（3分以上あいた時）。sun_upd_tried で同じ版への再挑戦を1セッション1回に制限してループを防止',
@@ -9673,7 +9717,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "23.3";
+var APP_VERSION = "23.4";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
