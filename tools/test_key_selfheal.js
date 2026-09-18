@@ -20,6 +20,7 @@ function run(file,label){
  global.setTimeout=(fn,ms)=>{ if(ms<1000) fn(); return 1; };   // 12秒のタイムアウトは無視
  global.history={replaceState(){}}; global.location={hash:'',pathname:'/staff.html',search:''};
  global.syncAuthFailed=()=>/unauthorized/i.test(String(global.state.lastSyncError||''));
+ global.syncAuthFailedRaw=global.syncAuthFailed;   // v23.5 で fin は生判定を使う
  eval('var _goodKeyTried=false; var _syncAllBusy=false;');
  eval(grab('_probeKey')); eval(grab('applySetupKey'));
  const tick=()=>new Promise(r=>setImmediate(r));
