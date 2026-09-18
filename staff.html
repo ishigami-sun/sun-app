@@ -1409,7 +1409,7 @@ function updateCloudStatus(){
     el.style.display='block';
     el.style.background='rgba(244,67,54,0.45)';
     el.style.animation='syncNag 1.3s ease-in-out infinite';
-    txt.innerHTML='⚠️ <b>つながりません（合言葉が違うようです）</b><br><b>ここをタップして、石上さんから届いた設定リンクを貼り直してください</b>'+'<br><span style="font-size:10px;opacity:.9;font-weight:400">'+h(syncDiagLine())+'</span>';
+    txt.innerHTML='⚠️ <b>クラウドにつながっていません</b><br>石上さんに知らせてください。設定リンクが届いたら、ここをタップして貼り付けてください';
   } else if(state.lastSyncError && syncUrlMismatch()){
     el.style.display='block';
     el.style.background='rgba(244,67,54,0.40)';
@@ -1686,7 +1686,16 @@ function syncIsStale(){
   return !last || (Date.now()-last) > 60*60*1000;   // 1時間
 }
 // 直前の同期失敗が「合言葉が違う／権限がない」系か
-function syncAuthFailed(){ return /unauthorized|認証|forbidden|invalid key|key/i.test(String(state.lastSyncError||'')); }
+// 直前の応答が「合言葉が違う」だったか（生の判定。自動リトライや合言葉の戻し処理に使う）
+function syncAuthFailedRaw(){ return /unauthorized|forbidden/i.test(String(state.lastSyncError||'')); }
+// 画面に赤く出してよいか（v23.5）: 3回続けて断られ、かつ最後の成功から10分以上たった時だけ。
+// 一度きりの失敗（サーバーの一時的な不調など）で赤い帯と貼り直しの案内を出さないため。
+function syncAuthFailed(){
+  if(!syncAuthFailedRaw()) return false;
+  if((state.authFails||0) < 3) return false;
+  var last=Math.max(state.lastFullSync||0, state.lastSync||0);
+  return !last || (Date.now()-last) > 10*60*1000;
+}
 // 保存されている接続先がアプリ標準と違うか（昔、手入力したURLが残っていると新しい保存先に届かない）
 function syncUrlMismatch(){
   try{ return !!(state.cloudUrl && CLOUD_URL && state.cloudUrl !== CLOUD_URL); }catch(e){ return false; }
@@ -1765,11 +1774,18 @@ function syncAll(silent){
     if(_finDone) return;            // 二重呼び出しで表示が乱れないように
     _finDone=true;
     _syncAllBusy=false;
-    if(ok){ state.lastFullSync=Date.now(); state.lastSyncError=''; state.lastGoodKey=state.cloudKey; state.lastGoodUrl=state.cloudUrl; }
-    else { state.lastSyncError=String(err||'通信エラー'); }
+    if(ok){ state.lastFullSync=Date.now(); state.lastSyncError=''; state.lastGoodKey=state.cloudKey; state.lastGoodUrl=state.cloudUrl; state.authFails=0; }
+    else {
+      state.lastSyncError=String(err||'通信エラー');
+      if(syncAuthFailedRaw()){
+        state.authFails=(state.authFails||0)+1;
+        // 一度きりの失敗で騒がない。少し待って黙って試し直す（3回まで）
+        if(state.authFails<3){ setTimeout(function(){ try{ if(isOnline) syncAll(true); }catch(e){} }, 60*1000); }
+      }
+    }
     // 合言葉が断られた時、前に通っていた合言葉があればそれに戻して1回だけやり直す
     // （古いリンクから開いて合言葉が上書きされた端末を、自動で元に戻す）
-    if(!ok && !_goodKeyTried && syncAuthFailed() && state.lastGoodKey && state.lastGoodKey!==state.cloudKey){
+    if(!ok && !_goodKeyTried && syncAuthFailedRaw() && state.lastGoodKey && state.lastGoodKey!==state.cloudKey){
       _goodKeyTried=true;
       state.cloudKey=state.lastGoodKey; state.cloudKeyCustom=true;
       if(state.lastGoodUrl){ state.cloudUrl=state.lastGoodUrl; state.cloudUrlCustom=(state.lastGoodUrl!==CLOUD_URL); }
@@ -1780,7 +1796,7 @@ function syncAll(silent){
       setTimeout(function(){ try{ syncAll(silent); }catch(e){} }, 400);
       return;
     }
-    if(!ok && typeof adoptAdminConfigIfAny==='function' && !_adoptTried && syncAuthFailed()){
+    if(!ok && typeof adoptAdminConfigIfAny==='function' && !_adoptTried && syncAuthFailedRaw()){
       _adoptTried=true;
       if(adoptAdminConfigIfAny()){ setTimeout(function(){ try{ syncAll(silent); }catch(e){} }, 400); return; }
     }
@@ -1788,7 +1804,7 @@ function syncAll(silent){
     try{ updateCloudStatus(); }catch(e){}
     if(!silent && typeof showToast==='function'){
       if(ok) showToast('✅ 最新にしました（日報 '+((state.records||[]).length)+'件）');
-      else showToast('⚠️ つながりませんでした（'+syncFailHint()+'）'+(state.lastSyncError?' ['+String(state.lastSyncError).slice(0,40)+']':'')+' ◆ '+syncDiagLine());
+      else showToast('⚠️ つながりませんでした。少し待ってもう一度お試しください');
     }
   };
   try{
@@ -2513,6 +2529,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '🔕 一度つながらなかっただけで赤い帯を出すのをやめました。裏で自動で試し直し、それでもつながらない時だけ静かに知らせます。技術的な文字も出しません',
   '🔕 「○件がまだ全員に届いていません」が、届いたあとも出続ける不具合を直しました。届いたことを確かめた分は数えません。同期のたびに送り残しも自動で流します',
   '📵 LINEの中でリンクを開いてしまった時に、画面の下に赤い注意が出るようになりました。LINEの中で打った日報は届きません。ホーム画面のSUNから開いてください',
   '🔑 「合言葉が違います」に勝手に戻ってしまう不具合を直しました。古いリンクを保存したアイコンから開くと、正しい合言葉が古いものに上書きされていました。今は入れ替える前にサーバーに確かめ、断られる合言葉は使いません。もし上書きされても、前に通っていた合言葉に自動で戻します',
@@ -6447,7 +6464,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "23.4";
+var APP_VERSION = "23.5";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){

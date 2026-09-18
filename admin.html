@@ -4149,7 +4149,16 @@ function syncIsStale(){
   return !last || (Date.now()-last) > 60*60*1000;   // 1時間
 }
 // 直前の同期失敗が「合言葉が違う／権限がない」系か
-function syncAuthFailed(){ return /unauthorized|認証|forbidden|invalid key|key/i.test(String(state.lastSyncError||'')); }
+// 直前の応答が「合言葉が違う」だったか（生の判定。自動リトライや合言葉の戻し処理に使う）
+function syncAuthFailedRaw(){ return /unauthorized|forbidden/i.test(String(state.lastSyncError||'')); }
+// 画面に赤く出してよいか（v23.5）: 3回続けて断られ、かつ最後の成功から10分以上たった時だけ。
+// 一度きりの失敗（サーバーの一時的な不調など）で赤い帯と貼り直しの案内を出さないため。
+function syncAuthFailed(){
+  if(!syncAuthFailedRaw()) return false;
+  if((state.authFails||0) < 3) return false;
+  var last=Math.max(state.lastFullSync||0, state.lastSync||0);
+  return !last || (Date.now()-last) > 10*60*1000;
+}
 // 保存されている接続先がアプリ標準と違うか（昔、手入力したURLが残っていると新しい保存先に届かない）
 function syncUrlMismatch(){
   try{ return !!(state.cloudUrl && CLOUD_URL && state.cloudUrl !== CLOUD_URL); }catch(e){ return false; }
@@ -4228,11 +4237,18 @@ function syncAll(silent){
     if(_finDone) return;            // 二重呼び出しで表示が乱れないように
     _finDone=true;
     _syncAllBusy=false;
-    if(ok){ state.lastFullSync=Date.now(); state.lastSyncError=''; state.lastGoodKey=state.cloudKey; state.lastGoodUrl=state.cloudUrl; }
-    else { state.lastSyncError=String(err||'通信エラー'); }
+    if(ok){ state.lastFullSync=Date.now(); state.lastSyncError=''; state.lastGoodKey=state.cloudKey; state.lastGoodUrl=state.cloudUrl; state.authFails=0; }
+    else {
+      state.lastSyncError=String(err||'通信エラー');
+      if(syncAuthFailedRaw()){
+        state.authFails=(state.authFails||0)+1;
+        // 一度きりの失敗で騒がない。少し待って黙って試し直す（3回まで）
+        if(state.authFails<3){ setTimeout(function(){ try{ if(isOnline) syncAll(true); }catch(e){} }, 60*1000); }
+      }
+    }
     // 合言葉が断られた時、前に通っていた合言葉があればそれに戻して1回だけやり直す
     // （古いリンクから開いて合言葉が上書きされた端末を、自動で元に戻す）
-    if(!ok && !_goodKeyTried && syncAuthFailed() && state.lastGoodKey && state.lastGoodKey!==state.cloudKey){
+    if(!ok && !_goodKeyTried && syncAuthFailedRaw() && state.lastGoodKey && state.lastGoodKey!==state.cloudKey){
       _goodKeyTried=true;
       state.cloudKey=state.lastGoodKey; state.cloudKeyCustom=true;
       if(state.lastGoodUrl){ state.cloudUrl=state.lastGoodUrl; state.cloudUrlCustom=(state.lastGoodUrl!==CLOUD_URL); }
@@ -4243,7 +4259,7 @@ function syncAll(silent){
       setTimeout(function(){ try{ syncAll(silent); }catch(e){} }, 400);
       return;
     }
-    if(!ok && typeof adoptAdminConfigIfAny==='function' && !_adoptTried && syncAuthFailed()){
+    if(!ok && typeof adoptAdminConfigIfAny==='function' && !_adoptTried && syncAuthFailedRaw()){
       _adoptTried=true;
       if(adoptAdminConfigIfAny()){ setTimeout(function(){ try{ syncAll(silent); }catch(e){} }, 400); return; }
     }
@@ -4963,6 +4979,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '🔕 認証エラーの赤帯をデバウンス。syncAuthFailed は「unauthorized が3回連続、かつ最後の成功から10分以上」で真。生判定は syncAuthFailedRaw（lastGoodKey 戻し・admin設定取り込みはこちら）。fin で authFails を数え、3回までは60秒後に黙って syncAll(true)。正規表現から「key」「認証」を外し誤検知を防止。staff版の赤帯から診断行を削除',
   '🔕 未送信バナーの誤表示を修正。再送キュー(syncQueue)は起動時と online 時にしか流れず、日中の一時失敗で積まれた addRecord が pushAndSync で届いた後もキューに残り、syncPendingCount がそれを数え続けていた。_cs印のある日報のキュー項目は除外・削除（_pruneDeliveredQueue）、callCloud 成功時は本体レコードにも印を付けてキューから外す（_markDelivered）、syncAll と5分ごとにキューも流す',
   '📵 アプリ内ブラウザ（LINE/Facebook/Instagram）をUAで検出し、画面下に固定の赤い注意を表示。別ストレージなので入力しても届かない・設定も入らない事故の防止（花岡さんの件）。設定リンクの貼り付けは残してあり、閉じ込められた日報の送出には使える',
   '🔑 合言葉の自己修復。#k= 付きURL／設定リンク貼り付け／管理者版設定の取り込みは、いずれも保存前に _probeKey でサーバーに確かめ、unauthorized なら入れ替えない。同期成功時の合言葉を lastGoodKey として保持（*_conf にも保存）し、unauthorized になったら1回だけそれに戻して再同期。古い #k= を持つホーム画面アイコンから開くたびに正しい合言葉が上書きされていた件の根本対策',
@@ -9717,7 +9734,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "23.4";
+var APP_VERSION = "23.5";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
