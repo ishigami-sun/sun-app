@@ -3853,7 +3853,11 @@ function updateCloudStatus(){
     el.style.display='block';
     el.style.background='rgba(244,67,54,0.45)';
     el.style.animation='syncNag 1.1s ease-in-out infinite';
-    txt.innerHTML='⚠️ <b>'+syncPendingCount()+'件がまだ全員に届いていません</b><br><b>ここをタップして送ってください</b>';
+    var _ul=unsentRecordList();
+    var _un=_ul.slice(0,2).map(function(r){ var d=new Date(r.time); return (isNaN(d.getTime())?'':((d.getMonth()+1)+'/'+d.getDate()+' '))+(r.customerName||'名前なし')+'様 ¥'+num(r.total||0); }).join('、');
+    var _pf=state.lastPushFail, _why='';
+    if(_pf && _ul.some(function(r){ return String(r.id)===String(_pf.id); })) _why='<br><span style="font-size:10px;opacity:.9;font-weight:400">送れない理由: '+h(String(_pf.err||'').slice(0,70))+'</span>';
+    txt.innerHTML='⚠️ <b>'+syncPendingCount()+'件がまだ全員に届いていません</b>'+(_un?'<br><span style="font-size:11px;font-weight:400">'+h(_un)+'</span>':'')+'<br><b>ここをタップして送ってください</b>'+_why;
   } else if(syncIsStale()){
     el.style.display='block';
     el.style.background='rgba(255,152,0,0.40)';
@@ -3958,11 +3962,14 @@ function callCloud(action, payload, callback, _tries){
   }
   var data = Object.assign({key:state.cloudKey, action:action}, payload);
   // CORS対応のため text/plain で送信
+  // 【v23.6】応答が無いまま待ち続けないよう30秒で打ち切る（打ち切りは通信失敗として再送に回る）
+  var _ac=null; try{ if(typeof AbortController!=='undefined'){ _ac=new AbortController(); setTimeout(function(){ try{ _ac.abort(); }catch(e){} }, 30000); } }catch(e){}
   fetch(state.cloudUrl, {
     method:'POST',
     body:JSON.stringify(data),
     headers:{'Content-Type':'text/plain;charset=utf-8'},
-    redirect:'follow'
+    redirect:'follow',
+    signal:(_ac?_ac.signal:undefined)
   }).then(function(r){
       // JSON以外（GoogleのログインHTML・エラーページ等）が返った時に中身を残す
       return r.text().then(function(t){
@@ -3981,11 +3988,13 @@ function callCloud(action, payload, callback, _tries){
         // サーバーがアプリレベルで失敗を返した → 更新系は再送（上限付き）。黙って失わない
         // ただし合言葉違いは再送しても通らない（日報は state.records に残り、設定後の同期で送られる）
         if(!/unauthorized|forbidden/i.test(String(res.error||''))) _enqueueRetry(action, payload, _tries);
+        // 送れなかった日報と理由を控える（上の帯に出して、何が引っかかっているか分かるように）
+        try{ if(action==='addRecord' && payload && payload.record) state.lastPushFail={ id:payload.record.id, err:String(res.error||'サーバーが受け付けませんでした'), at:Date.now() }; }catch(e){}
         if(callback) callback(res);
         return;
       }
       // クラウドに届いた日報に印を付ける（同期でローカルから消してよいかの判定に使う）
-      try{ if(res && res.ok && action==='addRecord' && payload && payload.record){ payload.record._cs=1; _markDelivered(payload.record.id); } }catch(e){}
+      try{ if(res && res.ok && action==='addRecord' && payload && payload.record){ payload.record._cs=1; _markDelivered(payload.record.id); if(state.lastPushFail && String(state.lastPushFail.id)===String(payload.record.id)) state.lastPushFail=null; } }catch(e){}
       try{ if(res && res.ok && action==='deleteRecord' && payload && payload.id!=null && typeof syncQueue!=='undefined' && syncQueue){ syncQueue=syncQueue.filter(function(it){ return !(it && it.action==='deleteRecord' && String(_queueRecId(it))===String(payload.id)); }); state._syncQueue=syncQueue; } }catch(e){}
       // サーバーが ok:false（合言葉違い等）を返した時は「通信できた時刻」を更新しない
       // （更新すると上部の帯が緑になり、同期できていないのに出来たように見えてしまう）
@@ -3997,6 +4006,7 @@ function callCloud(action, payload, callback, _tries){
     .catch(function(err){
       // 通信失敗 → 再送（上限付き）
       _enqueueRetry(action, payload, _tries);
+      try{ if(action==='addRecord' && payload && payload.record) state.lastPushFail={ id:payload.record.id, err:(/abort/i.test(String(err))?'サーバーの応答が30秒以内にありませんでした':String(err)), at:Date.now() }; }catch(e){}
       if(callback) callback({ok:false, error:err.toString(), queued:true});
     });
 }
@@ -4071,6 +4081,16 @@ function dedupeRecordsById(){
 // まだクラウドへ送れていない更新の件数（オフライン等で貯まったもの）
 // まだクラウドに届いていない日報の件数（_cs印が付いていないもの）
 // 一度もクラウドの一覧を見ていない端末は、印が無いだけなので数えない
+// まだ届いていない日報そのもの（帯に「どれか」を出すため）
+function unsentRecordList(){
+  var out=[];
+  try{
+    if(!state._csReady) return out;
+    var rs=state.records||[];
+    for(var i=0;i<rs.length;i++){ if(rs[i] && !rs[i]._cs) out.push(rs[i]); }
+  }catch(e){}
+  return out;
+}
 function unsentRecordCount(){
   var n=0;
   try{
@@ -4275,13 +4295,14 @@ function syncAll(silent){
     syncFromCloud(true, function(ok1, err1){
       if(!ok1){ fin(false, err1); return; }
       try{
-        // ②マージ済みのマスタ・報告を送る（他端末のぶんを消さない）
-        _pushMastersNow(function(){
-          try{
-            // ③未送信の日報と削除をクラウドへ反映し、記録を最新化
-            pushAndSync(function(){ try{ _pruneDeliveredQueue(); processSyncQueue(); }catch(e){} fin(true); }, true);
-          }catch(e){ fin(false); }
-        });
+        // ②【v23.6】未送信の日報と削除を先に送る（取り込んだ一覧を使い回すので全件を取り直さない）
+        pushAndSync(function(){
+          try{ _pruneDeliveredQueue(); processSyncQueue(); }catch(e){}
+          fin(true);
+          // ③マスタ（メニュー・物販・報告など）は変更があった時か30分に1回だけ、日報の同期を待たせずに送る
+          //   （以前は毎回・日報より先に全マスタを送っていて、これが詰まると日報が送られなかった）
+          try{ _pushMastersIfNeeded(); }catch(e){}
+        }, true, (typeof window!=='undefined' ? window._lastCloudSnap : null));
       }catch(e){ fin(false); }
     });
   }catch(e){ fin(false); }
@@ -4290,22 +4311,25 @@ function syncAll(silent){
 }
 // バージョン文字列を数値化（"20.10" > "20.2" を正しく比較）
 function _verNum(v){ var p=String(v||'').split('.'); return (parseInt(p[0],10)||0)*10000 + (parseInt(p[1],10)||0); }
-function pushAndSync(cb, silent){
+function pushAndSync(cb, silent, snap){
   if(!state.cloudUrl||!state.cloudKey){ if(!silent) showToast('⚠️ クラウド未設定'); if(cb) cb(); return; }
   if(!silent) showToast('🔄 反映中…そのままお待ちください');
-  callCloud('getAll', {}, function(res){
-    if(!res||!res.ok){ if(!silent) showToast('⚠️ 反映できませんでした。通信を確認して再度お試しください'); if(cb) cb(); return; }
-    var cloud=res.records||[];
-    var cloudIds={}; for(var i=0;i<cloud.length;i++){ cloudIds[String(cloud[i].id)]=true; cloud[i]._cs=1; }
-    var delSet={}; var dids=state.deletedIds||[]; for(var i=0;i<dids.length;i++) delSet[String(dids[i])]=true;
-    var toPush=[]; for(var i=0;i<state.records.length;i++){ var r=state.records[i]; if(!cloudIds[String(r.id)] && !delSet[String(r.id)]) toPush.push(r); }
-    var toDelete=[]; for(var i=0;i<cloud.length;i++){ if(delSet[String(cloud[i].id)]) toDelete.push(cloud[i].id); }
+  var delSet={}; var dids=state.deletedIds||[]; for(var i=0;i<dids.length;i++) delSet[String(dids[i])]=true;
+  // 【v23.6】直前の取り込み（syncFromCloud）で得たクラウドの一覧が60秒以内にあれば、
+  // 全件をもう一度取りに行かない。同期のたびに2回全件を取っていたのが遅さの原因の一つ。
+  var useSnap = !!(snap && snap.ids && (Date.now()-(snap.at||0) < 60*1000));
+  function runWith(cloudIds, toDelete, cloudList){
+    // 送るのは「クラウドに無く、削除もされておらず、届いた印(_cs)も無い」日報だけ
+    var toPush=[]; for(var i=0;i<state.records.length;i++){ var r=state.records[i]; if(!r) continue; if(delSet[String(r.id)]) continue; if(cloudIds[String(r.id)]) continue; if(r._cs) continue; toPush.push(r); }
     function finish(){
-      var merged=cloud.filter(function(c){ return !delSet[String(c.id)]; });
-      var have={}; for(var i=0;i<merged.length;i++) have[String(merged[i].id)]=true;
-      for(var i=0;i<toPush.length;i++){ if(!have[String(toPush[i].id)]) merged.push(toPush[i]); }
-      if(LOCAL_RECORD_DAYS>0){ var _cut2=Date.now()-LOCAL_RECORD_DAYS*86400000, _keep={}; for(var _k=0;_k<toPush.length;_k++) _keep[String(toPush[_k].id)]=1; merged=merged.filter(function(r){ var t=new Date(r&&r.time).getTime(); return !(t>0 && t<_cut2 && !_keep[String(r.id)]); }); }
-      state.records=merged;
+      if(cloudList){
+        // 全件モード：クラウドの一覧で本体を作り直す（従来どおり）
+        var merged=cloudList.filter(function(c){ return !delSet[String(c.id)]; });
+        var have={}; for(var i=0;i<merged.length;i++) have[String(merged[i].id)]=true;
+        for(var i=0;i<toPush.length;i++){ if(!have[String(toPush[i].id)]) merged.push(toPush[i]); }
+        if(LOCAL_RECORD_DAYS>0){ var _cut2=Date.now()-LOCAL_RECORD_DAYS*86400000, _keep={}; for(var _k=0;_k<toPush.length;_k++) _keep[String(toPush[_k].id)]=1; merged=merged.filter(function(r){ var t=new Date(r&&r.time).getTime(); return !(t>0 && t<_cut2 && !_keep[String(r.id)]); }); }
+        state.records=merged;
+      }
       state._csReady=1;
       try{ saveLocal(); }catch(e){}
       if(typeof renderAll==='function') renderAll();
@@ -4317,6 +4341,14 @@ function pushAndSync(cb, silent){
     var done=0; function tick(){ done++; if(done>=pending) finish(); }
     for(var i=0;i<toPush.length;i++){ (function(r){ try{ callCloud('addRecord',{record:r},function(){ tick(); }); }catch(e){ tick(); } })(toPush[i]); }
     for(var i=0;i<toDelete.length;i++){ (function(id){ try{ callCloud('deleteRecord',{id:id},function(){ tick(); }); }catch(e){ tick(); } })(toDelete[i]); }
+  }
+  if(useSnap){ runWith(snap.ids, snap.toDelete||[], null); return; }
+  callCloud('getAll', {}, function(res){
+    if(!res||!res.ok){ if(!silent) showToast('⚠️ 反映できませんでした。通信を確認して再度お試しください'); if(cb) cb(); return; }
+    var cloud=res.records||[];
+    var cloudIds={}; for(var i=0;i<cloud.length;i++){ cloudIds[String(cloud[i].id)]=true; cloud[i]._cs=1; }
+    var toDelete=[]; for(var i=0;i<cloud.length;i++){ if(delSet[String(cloud[i].id)]) toDelete.push(cloud[i].id); }
+    runWith(cloudIds, toDelete, cloud);
   });
 }
 
@@ -4339,6 +4371,8 @@ function syncFromCloud(silent, cb){
       var _cloudRecs = allRecs.filter(function(r){ return !deletedSet[r.id]; });
       var _cloudIds = {};
       for(var _ci=0;_ci<_cloudRecs.length;_ci++){ _cloudIds[String(_cloudRecs[_ci].id)] = true; _cloudRecs[_ci]._cs = 1; }
+      // 【v23.6】この一覧を控えておき、直後の送信で全件を取り直さない
+      try{ var _td=[]; for(var _di2=0;_di2<allRecs.length;_di2++){ if(deletedSet[allRecs[_di2].id]) _td.push(allRecs[_di2].id); } window._lastCloudSnap={ ids:_cloudIds, toDelete:_td, at:Date.now() }; }catch(e){}
       // 【重要・v22.7】クラウドに無いローカルの日報を消してよいのは
       // 「一度クラウドで見たことがある（_cs印あり）＝他の端末で削除された分」だけ。
       // 印が無いものは、この端末で打ち込んだのにまだ届いていない日報なので絶対に消さない。
@@ -4509,7 +4543,7 @@ function saveLocal(){
   _costCache={};
 }
 // 保存 = ローカル即時保存
-function save(){ saveLocal(); saveMastersToCloud(); }
+function save(){ state._mastersDirty=true; saveLocal(); saveMastersToCloud(); }
 // 入力中の保存をまとめる（表示は即時、localStorage書込み＋マスタのクラウド送信を400msに集約）
 var _saveDebTimer=null;
 function saveDebounced(){ if(_saveDebTimer) clearTimeout(_saveDebTimer); _saveDebTimer=setTimeout(function(){ _saveDebTimer=null; try{ save(); }catch(e){} }, 400); }
@@ -4538,7 +4572,18 @@ function _pullReportsThenPush(next){
     });
   }catch(e){ next(); }
 }
+// マスタは変更があった時（save() で _mastersDirty が立つ）か、30分に1回だけ送る
+function _pushMastersIfNeeded(){
+  var due = state._mastersDirty || (Date.now()-(state._mastersPushedAt||0) > 30*60*1000);
+  if(!due) return false;
+  _pushMastersNow(function(){});
+  return true;
+}
 function _pushMastersNow(cb){
+  var _cb=function(res){
+    if(res && res.ok){ state._mastersDirty=false; state._mastersPushedAt=Date.now(); try{ saveLocal(); }catch(e){} }
+    try{ (cb||function(){})(res); }catch(e){}
+  };
   try {
     callCloud('saveMasters', {masters:{
       staff: state.staff || [],
@@ -4563,7 +4608,7 @@ function _pushMastersNow(cb){
       laborSales: state.laborSales || {},
       reports: state.reports || [],
       deletedMasters: state.deletedMasters || {}
-    }}, cb||function(){});
+    }}, _cb);
   } catch(e){}
 }
 
@@ -4979,6 +5024,8 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '⚡ 同期の高速化。syncAll は getAll→（全マスタ saveMasters）→pushAndSync 内で再度 getAll、と全件を2回取っていた。syncFromCloud の一覧を window._lastCloudSnap に控え、pushAndSync が60秒以内ならそれを使い回す。日報の送信をマスタ送信より先にし、マスタは _mastersDirty（save()で立つ）か30分経過の時だけ・fin 後に非同期で送る（_pushMastersIfNeeded）。callCloud に30秒の AbortController を追加（詰まると日報が永久に送られなかった）',
+  '🔎 未送信バナーに対象の日報（日付・顧客名・金額、最大2件）と state.lastPushFail（addRecord が ok:false／通信失敗した理由）を表示。unsentRecordList() を追加',
   '🔕 認証エラーの赤帯をデバウンス。syncAuthFailed は「unauthorized が3回連続、かつ最後の成功から10分以上」で真。生判定は syncAuthFailedRaw（lastGoodKey 戻し・admin設定取り込みはこちら）。fin で authFails を数え、3回までは60秒後に黙って syncAll(true)。正規表現から「key」「認証」を外し誤検知を防止。staff版の赤帯から診断行を削除',
   '🔕 未送信バナーの誤表示を修正。再送キュー(syncQueue)は起動時と online 時にしか流れず、日中の一時失敗で積まれた addRecord が pushAndSync で届いた後もキューに残り、syncPendingCount がそれを数え続けていた。_cs印のある日報のキュー項目は除外・削除（_pruneDeliveredQueue）、callCloud 成功時は本体レコードにも印を付けてキューから外す（_markDelivered）、syncAll と5分ごとにキューも流す',
   '📵 アプリ内ブラウザ（LINE/Facebook/Instagram）をUAで検出し、画面下に固定の赤い注意を表示。別ストレージなので入力しても届かない・設定も入らない事故の防止（花岡さんの件）。設定リンクの貼り付けは残してあり、閉じ込められた日報の送出には使える',
@@ -9734,7 +9781,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "23.5";
+var APP_VERSION = "23.6";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
