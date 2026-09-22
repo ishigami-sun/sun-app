@@ -73,6 +73,16 @@ What's New もスタッフ用は「使い方」だけにする（管理者向け
   集計は必ず `staffBase()` / `sameStaff()` で姓ベースに揃える。**厳密一致で比較しない**
 - 定休日は月曜。スタッフは週休2日で、残り出勤日数は編集可能（`state.paceDays`）
 - 同期は `syncAll()` のみが入口。個別の同期ボタンを増やさない（上部バナー1か所に集約する方針）
+- **`syncAll` の順序は 取り込み → 日報の送信 → （必要な時だけ）マスタ送信**（v23.6）。
+  全件取得（getAll）は1回だけ: `syncFromCloud` が一覧を `window._lastCloudSnap` に控え、
+  `pushAndSync(cb, silent, snap)` は60秒以内の控えがあれば getAll を呼ばない。
+  マスタ（saveMasters）は `state._mastersDirty`（`save()` で立つ）か30分経過の時だけ、`fin` の後に非同期で送る
+  （`_pushMastersIfNeeded`）。**日報の送信をマスタ送信の後ろに置かない**（詰まると日報が永久に送られない）。
+  `callCloud` は30秒で打ち切る（AbortController）。応答が無いまま待ち続けない。
+
+  > 過去の事故: 毎回「getAll → 全マスタ saveMasters → getAll → addRecord」と全件を2回取り、
+  > マスタ送信が詰まると日報が送られず「1件がまだ届いていません」が消えなかった（お店のiPad、9/22）。
+  > 回帰テスト: `node tools/test_sync_fast.js`
 - 日報の重複は `dedupeRecordsById()` が同一IDを自動で1件に統合する
 - **`state.records` からローカル分を落としてよいのは `_cs` 印が付いているものだけ**（v22.7）。
   `_cs` は「クラウドで実在を確認できた」印で、`syncFromCloud` / `pushAndSync` の取得結果と
