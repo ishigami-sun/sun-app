@@ -1533,6 +1533,7 @@ function callCloud(action, payload, callback, _tries){
       }
       // クラウドに届いた日報に印を付ける（同期でローカルから消してよいかの判定に使う）
       try{ if(res && res.ok && action==='addRecord' && payload && payload.record){ payload.record._cs=1; _markDelivered(payload.record.id); if(state.lastPushFail && String(state.lastPushFail.id)===String(payload.record.id)) state.lastPushFail=null; } }catch(e){}
+      try{ if(res && res.ok && action==='deleteRecord' && payload && payload.id!=null){ if(!state._delConfirmed) state._delConfirmed={}; state._delConfirmed[String(payload.id)]=1; } }catch(e){}
       try{ if(res && res.ok && action==='deleteRecord' && payload && payload.id!=null && typeof syncQueue!=='undefined' && syncQueue){ syncQueue=syncQueue.filter(function(it){ return !(it && it.action==='deleteRecord' && String(_queueRecId(it))===String(payload.id)); }); state._syncQueue=syncQueue; } }catch(e){}
       // サーバーが ok:false（合言葉違い等）を返した時は「通信できた時刻」を更新しない
       // （更新すると上部の帯が緑になり、同期できていないのに出来たように見えてしまう）
@@ -1885,10 +1886,29 @@ function pushAndSync(cb, silent, snap){
     var cloud=res.records||[];
     var cloudIds={}; for(var i=0;i<cloud.length;i++){ cloudIds[String(cloud[i].id)]=true; cloud[i]._cs=1; }
     var toDelete=[]; for(var i=0;i<cloud.length;i++){ if(delSet[String(cloud[i].id)]) toDelete.push(cloud[i].id); }
+    try{ _confirmDeletesAgainst(cloudIds); }catch(e){}
     runWith(cloudIds, toDelete, cloud);
   });
 }
 
+/* ===== ⚡ 差分同期（v23.7）
+   これまで同期のたびに日報を全件（2,400件・1.5MB）受け取っていた。
+   サーバー側（gas/incremental_sync.gs）に「前回以降に変わった分だけ返す getSince」を足し、
+   アプリはふだん差分だけを受け取る。全件は「初回」「1日1回」「サーバーが差分に未対応の時」だけ。
+   - state.syncSince      … サーバーが返した時刻。次回はこれ以降の変化だけをもらう
+   - state.lastFullPullAt … 最後に全件を受け取った時刻（24時間で全件を取り直す＝取りこぼしの保険）
+   - state._noGetSince    … サーバーが getSince を知らなかった時刻（1時間は全件で動く）
+   - state._delConfirmed  … クラウドへ届いたことが確認できた削除（差分モードで送る削除を絞る） ===== */
+function _pendingDeletes(){
+  var out=[], c=state._delConfirmed||{};
+  (state.deletedIds||[]).forEach(function(id){ if(!c[String(id)]) out.push(id); });
+  return out;
+}
+// クラウドの一覧（id の集合）を見て、もう存在しない削除は「届いた」扱いにする
+function _confirmDeletesAgainst(cloudIds){
+  if(!state._delConfirmed) state._delConfirmed={};
+  (state.deletedIds||[]).forEach(function(id){ if(!cloudIds[String(id)]) state._delConfirmed[String(id)]=1; });
+}
 function syncFromCloud(silent, cb){
   if(!state.cloudUrl||!state.cloudKey){
     if(!silent) showToast('⚠️ クラウド未設定');
@@ -1896,7 +1916,56 @@ function syncFromCloud(silent, cb){
     return;
   }
   if(!silent) showToast('🔄 同期中...');
-  callCloud('getAll', {}, function(res){
+  var canDelta = (Number(state.syncSince)>0)
+    && !(state._noGetSince && (Date.now()-state._noGetSince) < 60*60*1000)
+    && ((Date.now()-(state.lastFullPullAt||0)) < 24*60*60*1000);
+  if(canDelta) _syncFromCloudDelta(silent, cb); else _syncFromCloudFull(silent, cb);
+}
+function _syncFromCloudDelta(silent, cb){
+  callCloud('getSince', {since: Number(state.syncSince)||0}, function(res){
+    if(!res || res.ok===false){
+      // サーバーがまだ差分に対応していない → 1時間は全件で動く
+      if(res && /unknown action/i.test(String(res.error||''))){ state._noGetSince=Date.now(); _syncFromCloudFull(silent, cb); return; }
+      if(!silent) showToast('⚠️ 同期失敗: '+((res&&res.error)||''));
+      if(cb) cb(false, (res&&res.error)||'');
+      return;
+    }
+    if(res.full){ _applyFullResponse(res, silent, cb); return; }   // 差分の記録がまだ無く、全件が返ってきた
+    if(!res.noChange){
+      var deletedSet={}; (state.deletedIds||[]).forEach(function(d){ deletedSet[String(d)]=1; });
+      var byId={}; (state.records||[]).forEach(function(r,i){ if(r) byId[String(r.id)]=i; });
+      var recs=res.records||[];
+      for(var i=0;i<recs.length;i++){
+        var r=recs[i]; if(!r||r.id==null) continue;
+        r._cs=1; var k=String(r.id);
+        if(deletedSet[k]) continue;                       // この端末で消した分は戻さない
+        if(k in byId) state.records[byId[k]]=r; else { byId[k]=state.records.length; state.records.push(r); }
+      }
+      var dels=res.deleted||[];
+      if(dels.length){
+        var ds={}; dels.forEach(function(d){ ds[String(d)]=1; });
+        state.records=(state.records||[]).filter(function(r){ return !(r && ds[String(r.id)]); });
+        if(!state._delConfirmed) state._delConfirmed={};
+        dels.forEach(function(d){ state._delConfirmed[String(d)]=1; });
+      }
+      if(res.masters) _applyCloudMasters(res.masters);
+      try{ dedupeRecordsById(); }catch(e){}
+    }
+    state._csReady=1;
+    if(res.now) state.syncSince=Number(res.now)||state.syncSince;
+    // 直後の送信は「届いていない日報」と「まだ届いていない削除」だけを送ればよい
+    try{ window._lastCloudSnap={ ids:{}, toDelete:_pendingDeletes(), at:Date.now(), partial:true }; }catch(e){}
+    saveLocal();
+    renderAll();
+    if(!silent) showToast(res.noChange ? '✅ 最新です（日報 '+state.records.length+'件）' : '✅ 同期完了！日報 '+state.records.length+'件');
+    if(cb) cb(true);
+  });
+}
+function _syncFromCloudFull(silent, cb){
+  if(!state.cloudUrl||!state.cloudKey){ if(cb) cb(false); return; }
+  callCloud('getAll', {}, function(res){ _applyFullResponse(res, silent, cb); });
+}
+function _applyFullResponse(res, silent, cb){
     if(res.ok){
       // 削除済みIDを除外
       var allRecs = res.records || [];
@@ -1936,8 +2005,23 @@ function syncFromCloud(silent, cb){
       for(var _li=0;_li<(state.records||[]).length;_li++){ var _lr=state.records[_li]; if(_lr && !_cloudIds[String(_lr.id)] && !deletedSet[_lr.id] && (_looksUnsent(_lr) || _pendingIds[String(_lr.id)])) _localOnly.push(_lr); }
       state.records = _cloudRecs.concat(_localOnly);
       state._csReady = 1;   // この端末は一度クラウドの一覧を見た＝以降 _cs印の有無で判定してよい
+      state.lastFullPullAt=Date.now();
+      if(res.now) state.syncSince=Number(res.now)||0;   // サーバーが差分に対応していれば、次回からは差分だけ受け取る
+      try{ _confirmDeletesAgainst(_cloudIds); }catch(e){}
       if(LOCAL_RECORD_DAYS>0){ var _cut=Date.now()-LOCAL_RECORD_DAYS*86400000; state.records=state.records.filter(function(r){ var t=new Date(r&&r.time).getTime(); return !(t>0 && t<_cut && _cloudIds[String(r.id)]); }); }
-      // マスタも同期（ローカルが多い場合は上書きしない）
+      if(res.masters) _applyCloudMasters(res.masters);
+      saveLocal();
+      renderAll();
+      if(!silent) showToast('✅ 同期完了！日報 '+state.records.length+'件');
+      if(cb) cb(true);
+    } else {
+      if(!silent) showToast('⚠️ 同期失敗: '+(res.error||''));
+      if(cb) cb(false, (res && res.error) || '');
+    }
+}
+// クラウドから来たマスタ（メニュー・物販・報告など）を端末のものと統合する（全件・差分の両方で使う）
+function _applyCloudMasters(masters){
+  var res={masters:masters};
       if(res.masters){
         // 先に削除履歴(tombstone)を統合し、以降のマージで削除済みを除外・復活させない
         if(res.masters.deletedMasters) mergeDeletedMasters(res.masters.deletedMasters);
@@ -1958,16 +2042,8 @@ function syncFromCloud(silent, cb){
         if(res.masters.reports){ var _crl=res.masters.reports.length; state.reports = mergeMasterById(state.reports||[], res.masters.reports, delSetOf('reports')); if((state.reports||[]).length>_crl){ try{ _pushMastersNow(); }catch(e){} } } // ローカルにしか無い報告があればクラウドへ自動復元
         if(typeof renderAcademyVideos==='function'){ try{ renderAcademyVideos(); if(typeof renderEduAdmin==='function') renderEduAdmin(); }catch(e){} }
       }
-      saveLocal();
-      renderAll();
-      if(!silent) showToast('✅ 同期完了！日報 '+state.records.length+'件');
-      if(cb) cb(true);
-    } else {
-      if(!silent) showToast('⚠️ 同期失敗: '+(res.error||''));
-      if(cb) cb(false, (res && res.error) || '');
-    }
-  });
 }
+
 
 function saveCloudConfig(){
   state.cloudUrl = document.getElementById('cloudUrl').value.trim();
@@ -2574,6 +2650,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '⚡ 同期が「変わった分だけ」になりました。これまで毎回2,400件を全部受け取っていたのを、前回から変わった分だけにします（サーバー側の切り替え後に有効）。全件は1日1回だけ',
   '⚡ 同期を速くしました。毎回2回取りに行っていた全件を1回にし、日報を先に送るようにしました。メニューや物販の設定は変えた時だけ送ります',
   '🔎 「○件がまだ届いていません」の帯に、どの日報か（日付・お名前・金額）と、送れない理由が出るようになりました',
   '🔕 一度つながらなかっただけで赤い帯を出すのをやめました。裏で自動で試し直し、それでもつながらない時だけ静かに知らせます。技術的な文字も出しません',
@@ -6511,7 +6588,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "23.6";
+var APP_VERSION = "23.7";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){

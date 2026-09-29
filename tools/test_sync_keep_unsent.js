@@ -21,6 +21,8 @@ function run(file,label){
    cb({ok:true});
  };
  eval(grab('syncFromCloud')); eval(grab('pushAndSync'));
+ // v23.7: syncFromCloud は全件パス _syncFromCloudFull → _applyFullResponse に委譲する
+ eval(grab('_syncFromCloudFull')); eval(grab('_applyFullResponse')); eval(grab('_applyCloudMasters')); eval(grab('_confirmDeletesAgainst'));
  eval(grab('unsentRecordCount')); eval(grab('syncPendingCount'));
  const ok=[];
  // ① 正常同期
