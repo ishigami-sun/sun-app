@@ -15,7 +15,7 @@ function run(file,label){
    mergeMasterUnique:(a,b)=>b||a, mergeMasterById:(a,b)=>b||a, mergeInventory:(a,b)=>b||a, mergeByMonthKey:(a,b)=>b||a,
    attMerge:(a,b)=>b||a, mergeDeletedMasters(){}, delSetOf:()=>({}), _pushMastersNow(){}, dedupeMenus(){} });
  // 関数宣言をこの run() のスコープに置くため、まとめて1回の eval にする（コールバック内の eval だと外から見えない）
- eval(['_pendingDeletes','_confirmDeletesAgainst','syncFromCloud','_syncFromCloudDelta','_syncFromCloudFull','_applyFullResponse','_applyCloudMasters'].map(grab).join('\n'));
+ eval(['_recordDays','_pendingDeletes','_confirmDeletesAgainst','syncFromCloud','_syncFromCloudDelta','_syncFromCloudFull','_applyFullResponse','_applyCloudMasters'].map(grab).join('\n'));
  let calls=[], script=[];
  global.callCloud=(a,p,cb)=>{ calls.push({a,p}); const r=script.shift(); cb(typeof r==='function'?r(a,p):r); };
  const checks=[], ids=()=>state.records.map(r=>r.id).sort();

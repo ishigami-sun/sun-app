@@ -4328,7 +4328,7 @@ function pushAndSync(cb, silent, snap){
         var merged=cloudList.filter(function(c){ return !delSet[String(c.id)]; });
         var have={}; for(var i=0;i<merged.length;i++) have[String(merged[i].id)]=true;
         for(var i=0;i<toPush.length;i++){ if(!have[String(toPush[i].id)]) merged.push(toPush[i]); }
-        if(LOCAL_RECORD_DAYS>0){ var _cut2=Date.now()-LOCAL_RECORD_DAYS*86400000, _keep={}; for(var _k=0;_k<toPush.length;_k++) _keep[String(toPush[_k].id)]=1; merged=merged.filter(function(r){ var t=new Date(r&&r.time).getTime(); return !(t>0 && t<_cut2 && !_keep[String(r.id)]); }); }
+        if(_recordDays()>0){ var _cut2=Date.now()-_recordDays()*86400000, _keep={}; for(var _k=0;_k<toPush.length;_k++) _keep[String(toPush[_k].id)]=1; merged=merged.filter(function(r){ var t=new Date(r&&r.time).getTime(); return !(t>0 && t<_cut2 && !_keep[String(r.id)]); }); }
         state.records=merged;
       }
       state._csReady=1;
@@ -4380,6 +4380,7 @@ function syncFromCloud(silent, cb){
   }
   if(!silent) showToast('🔄 同期中...');
   var canDelta = (Number(state.syncSince)>0)
+    && ((state.records||[]).length>0)   // 端末に日報が無い（容量不足で外した等）時は全件から
     && !(state._noGetSince && (Date.now()-state._noGetSince) < 60*60*1000)
     && ((Date.now()-(state.lastFullPullAt||0)) < 24*60*60*1000);
   if(canDelta) _syncFromCloudDelta(silent, cb); else _syncFromCloudFull(silent, cb);
@@ -4471,7 +4472,7 @@ function _applyFullResponse(res, silent, cb){
       state.lastFullPullAt=Date.now();
       if(res.now) state.syncSince=Number(res.now)||0;   // サーバーが差分に対応していれば、次回からは差分だけ受け取る
       try{ _confirmDeletesAgainst(_cloudIds); }catch(e){}
-      if(LOCAL_RECORD_DAYS>0){ var _cut=Date.now()-LOCAL_RECORD_DAYS*86400000; state.records=state.records.filter(function(r){ var t=new Date(r&&r.time).getTime(); return !(t>0 && t<_cut && _cloudIds[String(r.id)]); }); }
+      if(_recordDays()>0){ var _cut=Date.now()-_recordDays()*86400000; state.records=state.records.filter(function(r){ var t=new Date(r&&r.time).getTime(); return !(t>0 && t<_cut && _cloudIds[String(r.id)]); }); }
       if(res.masters) _applyCloudMasters(res.masters);
       saveLocal();
       renderAll();
@@ -4551,6 +4552,13 @@ function migrateToCloud(){
 // ローカル保存（即時）
 var _quotaWarned=false;
 var LOCAL_RECORD_DAYS = 0; // ローカルに保持する日報の日数（0=全件）。クラウドが正本なので端末には直近分だけあればよい
+// この端末が保持する日報の日数。容量不足で日報を外したことがある端末は、以後60日だけ保持する
+// （全件を取り直すたびに容量オーバー→全部外す、を繰り返さないため）
+function _recordDays(){
+  var base = LOCAL_RECORD_DAYS;
+  if(state && state._lowStorage){ return (base>0 && base<60) ? base : 60; }
+  return base;
+}
 function _shrinkForQuota(level){
   // 容量超過時の自動回復。level1: 再送キューの掃除 / level2: 古い日報を端末から外す（クラウドには残る）
   try{
@@ -4560,8 +4568,10 @@ function _shrinkForQuota(level){
       state._syncQueue=syncQueue;
       return syncQueue.length<before;
     }
-    if(level===2 && LOCAL_RECORD_DAYS>0){
-      var cut=Date.now()-LOCAL_RECORD_DAYS*86400000, n0=(state.records||[]).length;
+    if(level===2 && (_recordDays()>0 || true)){
+      // 容量不足の端末はここで60日に切り詰める（LOCAL_RECORD_DAYS=0 の管理者版でも効く）
+      if(!state._lowStorage) state._lowStorage=Date.now();
+      var cut=Date.now()-_recordDays()*86400000, n0=(state.records||[]).length;
       state.records=(state.records||[]).filter(function(r){ var t=new Date(r&&r.time).getTime(); return !(t>0 && t<cut); });
       return state.records.length<n0;
     }
@@ -4575,6 +4585,10 @@ function _shrinkForQuota(level){
       } else {
         state.records=(state.records||[]).slice(-200);
       }
+      // 【v23.8】外したぶんは差分同期では戻ってこない。次の同期を必ず全件から始め、
+      // 以後この端末は直近60日だけ保持する（また容量オーバーで全部外す、を繰り返さない）
+      state._lowStorage=Date.now();
+      state.syncSince=0; state.lastFullPullAt=0;
       return state.records.length<m0;
     }
   }catch(e){}
@@ -4615,7 +4629,7 @@ function saveLocal(){
       _shrinkForQuota(lv+1);   // 軽くしてもう一度
     }
   }
-  if(!_quotaWarned){ _quotaWarned=true; try{ showToast('⚠️ 端末の保存容量がいっぱいで保存できません。同期の設定は残してあります。もう一度同期してください'); }catch(x){} }
+  if(!_quotaWarned){ _quotaWarned=true; try{ showToast('⚠️ この端末は保存容量がいっぱいなので、直近60日分だけ手元に置きます（クラウドには全部残っています）'); }catch(x){} }
   _costCache={};
 }
 // 保存 = ローカル即時保存
@@ -5100,6 +5114,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '💾 容量不足×差分同期の穴を修正。_shrinkForQuota level3 で _cs 付き日報を全部外したあと、差分モード（getSince）では追加分しか来ないため端末が0件のままだった（管理者版 9/29「最新にしました（日報 0件）」）。level2/3 で state._lowStorage を立て、syncSince/lastFullPullAt を0にして次は全件から。_recordDays() が _lowStorage の端末を60日に切り詰める（admin の LOCAL_RECORD_DAYS=0 でも）。canDelta に records.length>0 を追加',
   '⚡ 差分同期。syncFromCloud を dispatcher 化: state.syncSince>0 かつ 24h以内に全件済み かつ サーバーが getSince 対応なら getSince（since=前回サーバー時刻）で追加/置換/削除だけ適用。noChange なら何もしない。unknown action なら1時間は全件に戻す。全件パスは _applyFullResponse、マスタ統合は _applyCloudMasters に共通化。削除は _delConfirmed で「届いた」ものを除き、差分モードでは未確認分だけ送る。サーバー側コードは gas/incremental_sync.gs（doPost 置き換え＋末尾追加＋新バージョンでデプロイ）',
   '⚡ 同期の高速化。syncAll は getAll→（全マスタ saveMasters）→pushAndSync 内で再度 getAll、と全件を2回取っていた。syncFromCloud の一覧を window._lastCloudSnap に控え、pushAndSync が60秒以内ならそれを使い回す。日報の送信をマスタ送信より先にし、マスタは _mastersDirty（save()で立つ）か30分経過の時だけ・fin 後に非同期で送る（_pushMastersIfNeeded）。callCloud に30秒の AbortController を追加（詰まると日報が永久に送られなかった）',
   '🔎 未送信バナーに対象の日報（日付・顧客名・金額、最大2件）と state.lastPushFail（addRecord が ok:false／通信失敗した理由）を表示。unsentRecordList() を追加',
@@ -9858,7 +9873,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "23.7";
+var APP_VERSION = "23.8";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
