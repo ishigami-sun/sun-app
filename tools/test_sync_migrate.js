@@ -19,6 +19,8 @@ function run(file,label){
  const CLOUD=[{id:Date.parse('2026-09-10T01:00:00Z'),staff:'林',total:1000}];
  global.callCloud=(a,p,cb)=>a==='getAll'?cb({ok:true,records:JSON.parse(JSON.stringify(CLOUD)),masters:null}):cb({ok:true});
  eval(grab('syncFromCloud'));
+ // v23.7: syncFromCloud は全件パス _syncFromCloudFull → _applyFullResponse に委譲する
+ eval(grab('_syncFromCloudFull')); eval(grab('_applyFullResponse')); eval(grab('_applyCloudMasters')); eval(grab('_confirmDeletesAgainst'));
  syncFromCloud(true,()=>{});
  const ids=state.records.map(r=>r.id);
  const keptSynced=ids.includes(Date.parse('2026-09-10T01:00:00Z'));
