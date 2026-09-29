@@ -99,6 +99,11 @@ What's New もスタッフ用は「使い方」だけにする（管理者向け
   古い doPost は残してよい（後ろに書いた同名の関数が有効になる）。
   案内ページ（コピーボタン付き・翻訳の影響を受けない）: https://claude.ai/artifact/EXo9CivytNMM1QCdgPqK57
   ※ Chrome の自動翻訳が GitHub のコード表示まで日本語にする（「関数」「戻る」）。GitHub からコピーさせない。
+- **容量不足の端末は差分同期だけでは戻らない**（v23.8）。`_shrinkForQuota` の level2/3 で日報を外したら
+  `state._lowStorage` を立て、`syncSince=0` / `lastFullPullAt=0` にして次は必ず全件から。
+  端末が保持する日数は `_recordDays()`（通常は `LOCAL_RECORD_DAYS`、`_lowStorage` の端末は60日。admin の 0=全件 でも60）。
+  `canDelta` は `state.records.length>0` を要求する。**同じ端末に admin と staff の両方を入れると localStorage を
+  2重に使う**（石上さんの携帯）。回帰テスト: `node tools/test_low_storage.js`
 - 日報の重複は `dedupeRecordsById()` が同一IDを自動で1件に統合する
 - **`state.records` からローカル分を落としてよいのは `_cs` 印が付いているものだけ**（v22.7）。
   `_cs` は「クラウドで実在を確認できた」印で、`syncFromCloud` / `pushAndSync` の取得結果と

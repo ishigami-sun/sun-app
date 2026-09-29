@@ -10,7 +10,7 @@ function run(file,label){
  global.showToast=()=>{}; global.renderAll=()=>{}; global.saveLocal=()=>{}; global.LOCAL_RECORD_DAYS=0;
  let calls=[];
  global.callCloud=(a,p,cb)=>{ calls.push(a); if(a==='getAll') return cb({ok:true,records:[{id:1},{id:2}]}); if(a==='addRecord'){ p.record._cs=1; } cb({ok:true}); };
- eval(grab('pushAndSync'));
+ eval(grab('_recordDays')); eval(grab('pushAndSync'));
  const checks=[];
  // ① 控えあり（新しい）: getAll を呼ばない。_cs の無い 3 だけ送る。1,2 は控えに載っている
  global.state={cloudUrl:'https://x/exec',cloudKey:'K',deletedIds:[],records:[{id:1,_cs:1},{id:2,_cs:1},{id:3},{id:4,_cs:1}]};
