@@ -94,8 +94,11 @@ What's New もスタッフ用は「使い方」だけにする（管理者向け
   ファイルとこの契約を一緒に直す。** サーバーが未対応（unknown action）なら1時間は全件で動く。
   削除は `state._delConfirmed` で「届いた」ものを除き、差分モードでは `_pendingDeletes()` だけ送る。
   回帰テスト: `node tools/test_sync_incremental.js`
-  石上さん側の手順: Apps Script の `doPost` を gas/incremental_sync.gs の doPost で置き換え → 末尾に残りを追加 →
-  デプロイ→デプロイを管理→鉛筆→**新バージョン**→デプロイ（URLは変わらない）
+  石上さん側の手順（消さない・打ち替えない）: gas/incremental_sync.gs を**全部コピーしてコード.gs の一番下に貼る**
+  → ⌘S → デプロイ→デプロイを管理→鉛筆→**新バージョン**→デプロイ（URLは変わらない）。
+  古い doPost は残してよい（後ろに書いた同名の関数が有効になる）。
+  案内ページ（コピーボタン付き・翻訳の影響を受けない）: https://claude.ai/artifact/EXo9CivytNMM1QCdgPqK57
+  ※ Chrome の自動翻訳が GitHub のコード表示まで日本語にする（「関数」「戻る」）。GitHub からコピーさせない。
 - 日報の重複は `dedupeRecordsById()` が同一IDを自動で1件に統合する
 - **`state.records` からローカル分を落としてよいのは `_cs` 印が付いているものだけ**（v22.7）。
   `_cs` は「クラウドで実在を確認できた」印で、`syncFromCloud` / `pushAndSync` の取得結果と
