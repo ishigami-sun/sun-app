@@ -83,6 +83,19 @@ What's New もスタッフ用は「使い方」だけにする（管理者向け
   > 過去の事故: 毎回「getAll → 全マスタ saveMasters → getAll → addRecord」と全件を2回取り、
   > マスタ送信が詰まると日報が送られず「1件がまだ届いていません」が消えなかった（お店のiPad、9/22）。
   > 回帰テスト: `node tools/test_sync_fast.js`
+- **差分同期（v23.7）**: サーバー側 `gas/incremental_sync.gs`（doPost の置き換え＋末尾追加）とセット。
+  `syncFromCloud` は dispatcher。`state.syncSince>0` かつ 24時間以内に全件済み かつ サーバーが getSince 対応なら
+  `_syncFromCloudDelta`（`getSince(since)` → 追加/置換/削除だけ適用）、それ以外は `_syncFromCloudFull`
+  （`getAll` → `_applyFullResponse`）。マスタの統合は両方 `_applyCloudMasters(masters)`。
+  サーバー契約: `getAll` は `now`（サーバー時刻）を返す。`getSince` は `{noChange,now}` か
+  `{records:[追加/変更], deleted:[id], masters?:…, now}` か `{full:true, …getAllと同形}`。
+  `since` はサーバーの `now` を使う（端末の時計は使わない）。サーバーは 'changes' シートに
+  `[ts, add|del|masters, id]` を残す。**サーバー側の関数名や doPost の action を変える時は gas/ の
+  ファイルとこの契約を一緒に直す。** サーバーが未対応（unknown action）なら1時間は全件で動く。
+  削除は `state._delConfirmed` で「届いた」ものを除き、差分モードでは `_pendingDeletes()` だけ送る。
+  回帰テスト: `node tools/test_sync_incremental.js`
+  石上さん側の手順: Apps Script の `doPost` を gas/incremental_sync.gs の doPost で置き換え → 末尾に残りを追加 →
+  デプロイ→デプロイを管理→鉛筆→**新バージョン**→デプロイ（URLは変わらない）
 - 日報の重複は `dedupeRecordsById()` が同一IDを自動で1件に統合する
 - **`state.records` からローカル分を落としてよいのは `_cs` 印が付いているものだけ**（v22.7）。
   `_cs` は「クラウドで実在を確認できた」印で、`syncFromCloud` / `pushAndSync` の取得結果と
