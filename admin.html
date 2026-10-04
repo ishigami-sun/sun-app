@@ -5114,6 +5114,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '💴 給与エクセル用集計のHPS物販歩合を円単位に（65.6→66）。給与エクセル R8.9度 の6人分（技術歩合・物販歩合・HPS）をアプリの式で再計算し、全員1円まで一致を確認',
   '💾 容量不足×差分同期の穴を修正。_shrinkForQuota level3 で _cs 付き日報を全部外したあと、差分モード（getSince）では追加分しか来ないため端末が0件のままだった（管理者版 9/29「最新にしました（日報 0件）」）。level2/3 で state._lowStorage を立て、syncSince/lastFullPullAt を0にして次は全件から。_recordDays() が _lowStorage の端末を60日に切り詰める（admin の LOCAL_RECORD_DAYS=0 でも）。canDelta に records.length>0 を追加',
   '⚡ 差分同期。syncFromCloud を dispatcher 化: state.syncSince>0 かつ 24h以内に全件済み かつ サーバーが getSince 対応なら getSince（since=前回サーバー時刻）で追加/置換/削除だけ適用。noChange なら何もしない。unknown action なら1時間は全件に戻す。全件パスは _applyFullResponse、マスタ統合は _applyCloudMasters に共通化。削除は _delConfirmed で「届いた」ものを除き、差分モードでは未確認分だけ送る。サーバー側コードは gas/incremental_sync.gs（doPost 置き換え＋末尾追加＋新バージョンでデプロイ）',
   '⚡ 同期の高速化。syncAll は getAll→（全マスタ saveMasters）→pushAndSync 内で再度 getAll、と全件を2回取っていた。syncFromCloud の一覧を window._lastCloudSnap に控え、pushAndSync が60秒以内ならそれを使い回す。日報の送信をマスタ送信より先にし、マスタは _mastersDirty（save()で立つ）か30分経過の時だけ・fin 後に非同期で送る（_pushMastersIfNeeded）。callCloud に30秒の AbortController を追加（詰まると日報が永久に送られなかった）',
@@ -8548,7 +8549,7 @@ function renderPayrollExport(){
     var sell=Math.round(a.sell), cost=Math.round(a.sell-a.profit);
     var j=sell-cost, rate=payrollRate(j), tpay=Math.floor(j*rate);
     var tw=towel[row.app]||0;
-    var q=tw/1.1, inc=Math.ceil(q*0.1), hps=Math.round(inc*0.8*10)/10;
+    var q=tw/1.1, inc=Math.ceil(q*0.1), hps=Math.round(inc*0.8);   // 給与エクセルと同じく円単位（小数は出さない）
     totSell+=sell; totCost+=cost; totTowel+=tw;
     s+='<tr>'
      +'<td style="border:1px solid #C8E0DC;padding:6px"><b>'+h(row.xls)+'</b><br><span style="font-size:10px;color:#94a3b8">'+(row.row)+'行目／アプリ：'+h(row.app)+'</span></td>'
@@ -9873,7 +9874,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "23.8";
+var APP_VERSION = "23.9";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
