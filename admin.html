@@ -5114,6 +5114,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '📈 P&Lの人件費を、給与エクセルと同じ式（管理タブ「人件費の見通し」と共通の laborCostForMonth）に統一。以前の概算（固定給一律254,000・税込売上1円目から歩合・HPSなし）をやめ、役員2名の固定給と会社負担の社会保険（15.5%）まで含めた「会社が払う総額」を人件費合計にしました。年表示は各月を合算',
   '💴 給与エクセル用集計のHPS物販歩合を円単位に（65.6→66）。給与エクセル R8.9度 の6人分（技術歩合・物販歩合・HPS）をアプリの式で再計算し、全員1円まで一致を確認',
   '💾 容量不足×差分同期の穴を修正。_shrinkForQuota level3 で _cs 付き日報を全部外したあと、差分モード（getSince）では追加分しか来ないため端末が0件のままだった（管理者版 9/29「最新にしました（日報 0件）」）。level2/3 で state._lowStorage を立て、syncSince/lastFullPullAt を0にして次は全件から。_recordDays() が _lowStorage の端末を60日に切り詰める（admin の LOCAL_RECORD_DAYS=0 でも）。canDelta に records.length>0 を追加',
   '⚡ 差分同期。syncFromCloud を dispatcher 化: state.syncSince>0 かつ 24h以内に全件済み かつ サーバーが getSince 対応なら getSince（since=前回サーバー時刻）で追加/置換/削除だけ適用。noChange なら何もしない。unknown action なら1時間は全件に戻す。全件パスは _applyFullResponse、マスタ統合は _applyCloudMasters に共通化。削除は _delConfirmed で「届いた」ものを除き、差分モードでは未確認分だけ送る。サーバー側コードは gas/incremental_sync.gs（doPost 置き換え＋末尾追加＋新バージョンでデプロイ）',
@@ -8349,6 +8350,32 @@ function laborAggregate(ym){
   }
   return agg;
 }
+// 月(ym)の人件費を給与エクセルと同じ式で計算する（管理タブ「人件費の見通し」と P&L の両方が使う）
+// 戻り値: rows（6名）, totalPay（6名の支給見込）, fixedOnly（石上2名）, grossPay（給与合計）,
+//         company（会社負担の社会保険込み）, totalSales（技術売上税抜の合計）, shopSales（店舗売上税抜）
+function laborCostForMonth(ym){
+  var agg=laborAggregate(ym), towel=hpsMap(ym), ovr=laborSalesMap(ym);
+  var rows=[], totalPay=0, totalSales=0;
+  for(var pi=0;pi<PAYROLL_ROWS.length;pi++){
+    var R=PAYROLL_ROWS[pi], a=agg[R.app]||{menuInc:0,sell:0,profit:0};
+    var estSales=Math.round(a.menuInc/1.1);
+    var sales=(ovr[R.app]!=null)?ovr[R.app]:estSales;
+    var tech = R.assistant ? Math.floor(sales*ASSISTANT_RATE) : techCommission(sales);
+    var profit=Math.round(a.profit), rate=payrollRate(profit), prod=Math.floor(profit*rate);
+    var tw=towel[R.app]||0, hps=Math.round(Math.ceil(tw/1.1*0.1)*0.8);
+    var fixed=R.base+R.ot+R.post+R.commute;
+    var pay=fixed+tech+prod+hps;
+    totalPay+=pay; totalSales+=sales;
+    rows.push({R:R,sales:sales,est:estSales,over:(ovr[R.app]!=null),tech:tech,profit:profit,rate:rate,prod:prod,hps:hps,fixed:fixed,pay:pay});
+  }
+  var fixedOnly=0;
+  for(var fi=0;fi<PAYROLL_FIXED_ONLY.length;fi++) fixedOnly+=PAYROLL_FIXED_ONLY[fi].amount;
+  var grossPay=totalPay+fixedOnly;
+  var company=Math.round(grossPay*(1+SOCIAL_INSURANCE_RATE));
+  var shopSales=0;
+  for(var key in agg) shopSales+=Math.round(agg[key].menuInc/1.1)+Math.round(agg[key].sell/1.1);
+  return {ym:ym, rows:rows, totalPay:totalPay, totalSales:totalSales, fixedOnly:fixedOnly, grossPay:grossPay, company:company, shopSales:shopSales};
+}
 function renderLaborCost(){
   var el=document.getElementById('laborCost'); if(!el) return;
   var sel=document.getElementById('laborMonth');
@@ -8723,8 +8750,28 @@ function pnlStaffAgg(filtered){
   }
   return per;
 }
-// 人件費（全員分）を自動計算
+// 人件費（全員分）。v24.0: 給与エクセルと同じ式（laborCostForMonth）で表示期間の各月を合算する。
+// 以前は固定給を全員254,000・技術歩合を税込売上の1円目から・物販歩合は四捨五入・HPSなし、という概算で
+// 給与エクセルと合わなかった。管理タブ「人件費の見通し」と同じ数字が P&L にも出る。
 function pnlPayroll(filtered){
+  var mk=pnlMonthKeys(), per={}, order=[], fixedOnly=0, grossPay=0, company=0;
+  function ens(name){ if(!per[name]){ per[name]={name:name,type:'stylist',fixed:0,post:0,tech:0,prod:0,hps:0,sum:0,techSales:0,spaSales:0,prodProfit:0,months:0}; order.push(name); } return per[name]; }
+  for(var q=0;q<mk.keys.length;q++){
+    var L=laborCostForMonth(mk.keys[q]);
+    for(var i=0;i<L.rows.length;i++){
+      var x=L.rows[i], o=ens(x.R.xls);
+      o.type=x.R.assistant?'assistant':'stylist';
+      o.fixed+=x.R.base+x.R.ot+x.R.commute; o.post+=x.R.post;
+      o.tech+=x.tech; o.prod+=x.prod; o.hps+=x.hps; o.sum+=x.pay;
+      o.techSales+=x.sales; if(x.R.assistant) o.spaSales+=x.sales; o.prodProfit+=x.profit; o.months++;
+    }
+    for(var fi=0;fi<PAYROLL_FIXED_ONLY.length;fi++){ var F=PAYROLL_FIXED_ONLY[fi], of=ens(F.name); of.type='officer'; of.officer=true; of.sum+=F.amount; of.months++; }
+    fixedOnly+=L.fixedOnly; grossPay+=L.grossPay; company+=L.company;
+  }
+  var rows=order.map(function(n){ return per[n]; });
+  return {rows:rows, total:company, grossPay:grossPay, fixedOnly:fixedOnly, company:company, insurance:company-grossPay, months:mk.keys.length};
+}
+function pnlPayroll_old_(filtered){
   var agg=pnlStaffAgg(filtered);
   var roster=state.staff||[];
   var rows=[], total=0;
@@ -8926,37 +8973,38 @@ function pnlExtraHtml(filtered,totalSell,prodCost,feeAmount){
   var laborRate=totalSell>0?(laborTotal/totalSell*100):0;
   // 人件費率アラート（目立つ上部表示）
   html+=prLaborAlertHtml(laborTotal, totalSell);
-  // 人件費（自動計算）
+  // 人件費（給与エクセルと同じ式）
   html+='<div class="pnl-section">';
-  html+='<div class="pnl-section-title">👥 人件費（自動計算）</div>';
+  html+='<div class="pnl-section-title">👥 人件費（給与エクセルと同じ式）</div>';
+  html+='<div style="font-size:11px;color:#64748B;margin-bottom:8px;line-height:1.7">管理タブ「人件費の見通し」と同じ計算です。技術売上はエアレジの数字を入れた月はそれを、入れていない月はアプリの税抜目安を使います。ヒポポタマスのタオルは管理タブで入力した請求額から。</div>';
   for(var i=0;i<pay.rows.length;i++){
     var rw=pay.rows[i];
-    var sel='<select onchange="setStaffType(\''+rw.name+'\',this.value)" style="font-size:11px;padding:3px 6px;border:1.5px solid #C8E0DC;border-radius:7px;background:#fff;color:#2C7A6E;font-weight:700">'
-      +'<option value="stylist"'+(rw.type==='stylist'?' selected':'')+'>スタイリスト</option>'
-      +'<option value="assistant"'+(rw.type==='assistant'?' selected':'')+'>アシスタント</option>'
-      +'<option value="officer"'+(rw.type==='officer'?' selected':'')+'>役員</option>'
-      +'<option value="excluded"'+(rw.type==='excluded'?' selected':'')+'>対象外</option></select>';
+    var sel='<span style="font-size:11px;padding:3px 8px;border-radius:7px;background:#EAF5F3;color:#2C7A6E;font-weight:700">'+(rw.officer?'固定':(rw.type==='assistant'?'アシスタント':'スタイリスト'))+'</span>';
     html+='<div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px;margin-bottom:8px">';
-    html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:'+((rw.excluded)?'0':'6px')+'"><div style="font-weight:700;font-size:13px;color:#1A4F47">'+staffBadge(rw.name)+'</div>'+sel+'</div>';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:'+((rw.excluded)?'0':'6px')+'"><div style="font-weight:700;font-size:13px;color:#1A4F47">'+h(rw.name)+'</div>'+sel+'</div>';
     if(rw.officer){
       html+='<div style="display:flex;justify-content:space-between;font-size:12px;color:#475569"><span>役員報酬</span><span style="text-align:right;font-family:DM Sans,sans-serif">¥'+num(rw.sum)+'</span></div>';
       html+='<div style="display:flex;justify-content:space-between;border-top:1px solid #E2E8F0;margin-top:6px;padding-top:6px;font-weight:700;color:#2C7A6E"><span>合計</span><span style="font-family:DM Sans,sans-serif">¥'+num(rw.sum)+'</span></div>';
-      html+='<div style="font-size:10px;color:#94a3b8;margin-top:4px">役員報酬（固定）／歩合・役職手当は対象外</div>';
+      html+='<div style="font-size:10px;color:#94a3b8;margin-top:4px">固定（歩合・役職手当なし）</div>';
     } else if(!rw.excluded){
-      var techLabel=(rw.type==='assistant')?'技術歩合（特例20%）':'技術歩合（累進）';
+      var techLabel=(rw.type==='assistant')?'技術歩合（ヘッドスパ等×20%）':'技術歩合（段階歩合）';
       html+='<div style="display:grid;grid-template-columns:1fr auto;gap:3px 10px;font-size:12px;color:#475569">';
-      html+='<span>固定給</span><span style="text-align:right;font-family:DM Sans,sans-serif">¥'+num(rw.fixed)+'</span>';
-      html+='<span>役職手当'+(staffPostLabel(rw.name)?'（'+staffPostLabel(rw.name)+'）':'')+'</span><span style="text-align:right;font-family:DM Sans,sans-serif">¥'+num(rw.post)+'</span>';
+      html+='<span>固定給（基本給＋定額残業＋通勤費）</span><span style="text-align:right;font-family:DM Sans,sans-serif">¥'+num(rw.fixed)+'</span>';
+      html+='<span>役職手当</span><span style="text-align:right;font-family:DM Sans,sans-serif">¥'+num(rw.post)+'</span>';
       html+='<span>'+techLabel+'</span><span style="text-align:right;font-family:DM Sans,sans-serif">¥'+num(rw.tech)+'</span>';
       html+='<span>物販歩合</span><span style="text-align:right;font-family:DM Sans,sans-serif">¥'+num(rw.prod)+'</span>';
+      html+='<span>HPS物販歩合（タオル）</span><span style="text-align:right;font-family:DM Sans,sans-serif">¥'+num(rw.hps)+'</span>';
       html+='</div>';
-      html+='<div style="display:flex;justify-content:space-between;border-top:1px solid #E2E8F0;margin-top:6px;padding-top:6px;font-weight:700;color:#2C7A6E"><span>合計</span><span style="font-family:DM Sans,sans-serif">¥'+num(rw.sum)+'</span></div>';
-      html+='<div style="font-size:10px;color:#94a3b8;margin-top:4px">技術売上(税込)¥'+num(rw.techSales)+(rw.type==='assistant'?'（特例¥'+num(rw.spaSales)+'）':'')+' / 物販利益¥'+num(rw.prodProfit)+'</div>';
+      html+='<div style="display:flex;justify-content:space-between;border-top:1px solid #E2E8F0;margin-top:6px;padding-top:6px;font-weight:700;color:#2C7A6E"><span>支給見込</span><span style="font-family:DM Sans,sans-serif">¥'+num(rw.sum)+'</span></div>';
+      html+='<div style="font-size:10px;color:#94a3b8;margin-top:4px">技術売上(税抜)¥'+num(rw.techSales)+' / 物販利益¥'+num(rw.prodProfit)+'</div>';
     }
     html+='</div>';
   }
-  html+='<div class="pnl-row total"><div class="pnl-label">人件費合計</div><div class="pnl-value">¥'+num(laborTotal)+'</div></div>';
+  html+='<div class="pnl-row"><div class="pnl-label">給与合計（支給額）</div><div class="pnl-value">¥'+num(pay.grossPay)+'</div></div>';
+  html+='<div class="pnl-row"><div class="pnl-label pnl-sub">　＋会社負担の社会保険（概算'+Math.round(SOCIAL_INSURANCE_RATE*1000)/10+'%）</div><div class="pnl-value pnl-sub">¥'+num(pay.insurance)+'</div></div>';
+  html+='<div class="pnl-row total"><div class="pnl-label">人件費合計（会社が払う総額）</div><div class="pnl-value">¥'+num(laborTotal)+'</div></div>';
   html+='<div class="pnl-row"><div class="pnl-label pnl-sub">　人件費率</div><div class="pnl-value pnl-sub">'+(Math.round(laborRate*10)/10)+'%</div></div>';
+  html+='<div style="font-size:10px;color:#94a3b8;margin-top:6px">※早朝手当など給与エクセルで手入力している項目は含みません。固定給は給与明細の登録値（変更があれば教えてください）。</div>';
   html+='</div>';
 
   // 給与還元率（総支給額 手入力式）
@@ -9874,7 +9922,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "23.9";
+var APP_VERSION = "24.0";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
