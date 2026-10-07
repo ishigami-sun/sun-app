@@ -4533,10 +4533,7 @@ function migrateToCloud(){
   
   document.getElementById('migrateStatus').textContent = '📤 送信中... ('+state.records.length+'件)';
   // まずマスタを送信
-  callCloud('saveMasters', {masters:{
-    staff:state.staff, mediaList:state.mediaList, payments:state.payments,
-    paymentMaster:state.paymentMaster, menus:state.menus, products:state.products
-  }}, function(res){
+  callCloud('saveMasters', {masters:_mastersPayload()}, function(res){
     // 次に日報を一括送信
     callCloud('bulkImport', {records:state.records}, function(res2){
       if(res2.ok){
@@ -4675,31 +4672,36 @@ function _pushMastersNow(cb){
     try{ (cb||function(){})(res); }catch(e){}
   };
   try {
-    callCloud('saveMasters', {masters:{
-      staff: state.staff || [],
-      mediaList: state.mediaList || [],
-      payments: state.payments || [],
-      paymentMaster: state.paymentMaster || [],
-      menus: state.menus || [],
-      products: state.products || [],
-      productBrands: state.productBrands || [],
-      productSubCategories: state.productSubCategories || [],
-      goals: state.goals || {},
-      tickets: state.tickets || {},
-      expenses: state.expenses || {},
-      staffTypes: state.staffTypes || {},
-      eduVideos: state.eduVideos || [],
-      airegi: state.airegi || {},
-      attendance: state.attendance || {},
-      inventory: state.inventory || [],
-      invCategories: state.invCategories || [],
-      payroll: state.payroll || {},
-      hpsTowel: state.hpsTowel || {},
-      laborSales: state.laborSales || {},
-      reports: state.reports || [],
-      deletedMasters: state.deletedMasters || {}
-    }}, _cb);
+    callCloud('saveMasters', {masters:_mastersPayload()}, _cb);
   } catch(e){}
+}
+// クラウドへ送るマスタの全項目（v24.2）。saveMasters は「送った項目だけ」でシート全体を置き換えるので、
+// どの経路から送る時も必ずこの全項目で送る（項目を減らした送信をすると、経費・給与などがクラウドから消える）。
+function _mastersPayload(){
+  return {
+    staff: state.staff || [],
+    mediaList: state.mediaList || [],
+    payments: state.payments || [],
+    paymentMaster: state.paymentMaster || [],
+    menus: state.menus || [],
+    products: state.products || [],
+    productBrands: state.productBrands || [],
+    productSubCategories: state.productSubCategories || [],
+    goals: state.goals || {},
+    tickets: state.tickets || {},
+    expenses: state.expenses || {},
+    staffTypes: state.staffTypes || {},
+    eduVideos: state.eduVideos || [],
+    airegi: state.airegi || {},
+    attendance: state.attendance || {},
+    inventory: state.inventory || [],
+    invCategories: state.invCategories || [],
+    payroll: state.payroll || {},
+    hpsTowel: state.hpsTowel || {},
+    laborSales: state.laborSales || {},
+    reports: state.reports || [],
+    deletedMasters: state.deletedMasters || {}
+  };
 }
 
 function load(){try{var d=localStorage.getItem('sun_cloud_admin');if(d){var p=JSON.parse(d);for(var k in p)state[k]=p[k];}}catch(e){} try{ _loadCloudConf(); /* 本体が保存できていなくても接続設定だけは復旧する */ }catch(e){} try{ if(Array.isArray(state._syncQueue)) syncQueue=state._syncQueue.filter(function(it){ return it && (it.action==='addRecord'||it.action==='deleteRecord'); }).slice(-200); /* 前回セッションの未送信キューを復元（日報以外は捨てる） */ }catch(e){}}
@@ -9351,11 +9353,7 @@ function savePending(){
   if(!state.cloudUrl || !state.cloudKey){ showToast('⚠️ クラウド設定がありません'); return; }
   var btn = document.getElementById('savePendingBtn');
   if(btn){ btn.disabled = true; btn.innerHTML = '保存中...'; }
-  callCloud('saveMasters', {masters:{
-    staff:state.staff, mediaList:state.mediaList, payments:state.payments,
-    paymentMaster:state.paymentMaster, menus:state.menus, products:state.products,
-    productBrands:state.productBrands||[], productSubCategories:state.productSubCategories||[]
-  }}, function(res){
+  callCloud('saveMasters', {masters:_mastersPayload()}, function(res){
     if(btn){ btn.disabled = false; btn.innerHTML = '💾 保存して全員に共有'; }
     if(res && res.ok){
       state.pendingChanges = false;
@@ -9923,7 +9921,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "24.1";
+var APP_VERSION = "24.2";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){

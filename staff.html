@@ -2024,6 +2024,8 @@ function _applyFullResponse(res, silent, cb){
 function _applyCloudMasters(masters){
   var res={masters:masters};
       if(res.masters){
+        // 管理者専用のマスタ（経費・給与など）は使わないが控えておき、送信時にそのまま返す（v24.2）
+        try{ var _keep=state._adminMasters||{}; for(var _ai=0;_ai<ADMIN_ONLY_MASTERS.length;_ai++){ var _ak=ADMIN_ONLY_MASTERS[_ai]; if(res.masters[_ak]!=null) _keep[_ak]=res.masters[_ak]; } state._adminMasters=_keep; }catch(e){}
         // 先に削除履歴(tombstone)を統合し、以降のマージで削除済みを除外・復活させない
         if(res.masters.deletedMasters) mergeDeletedMasters(res.masters.deletedMasters);
         // staff: ローカルとクラウドをマージ（重複排除・削除済み除外）
@@ -2065,10 +2067,7 @@ function migrateToCloud(){
   
   document.getElementById('migrateStatus').textContent = '📤 送信中... ('+state.records.length+'件)';
   // まずマスタを送信
-  callCloud('saveMasters', {masters:{
-    staff:state.staff, mediaList:state.mediaList, payments:state.payments,
-    paymentMaster:state.paymentMaster, menus:state.menus, products:state.products
-  }}, function(res){
+  callCloud('saveMasters', {masters:_mastersPayload()}, function(res){
     // 次に日報を一括送信
     callCloud('bulkImport', {records:state.records}, function(res2){
       if(res2.ok){
@@ -2208,26 +2207,37 @@ function _pushMastersNow(cb){
     try{ (cb||function(){})(res); }catch(e){}
   };
   try {
-    callCloud('saveMasters', {masters:{
-      staff: state.staff || [],
-      mediaList: state.mediaList || [],
-      payments: state.payments || [],
-      paymentMaster: state.paymentMaster || [],
-      menus: state.menus || [],
-      products: state.products || [],
-      productBrands: state.productBrands || [],
-      productSubCategories: state.productSubCategories || [],
-      goals: state.goals || {},
-      tickets: state.tickets || {},
-      eduVideos: state.eduVideos || [],
-      airegi: state.airegi || {},
-      attendance: state.attendance || {},
-      inventory: state.inventory || [],
-      invCategories: state.invCategories || [],
-      reports: state.reports || [],
-      deletedMasters: state.deletedMasters || {}
-    }}, _cb);
+    callCloud('saveMasters', {masters:_mastersPayload()}, _cb);
   } catch(e){}
+}
+// クラウドへ送るマスタの全項目（v24.2）。saveMasters は「送った項目だけ」でシート全体を置き換えるので、
+// どの経路から送る時も必ずこの全項目で送る（項目を減らした送信をすると、他の項目がクラウドから消える）。
+// 管理者専用のマスタ（経費・給与・技術売上・タオル）はこの端末では使わないが、
+// クラウドから受け取ったものを控えておき（state._adminMasters）そのまま返す。返さないと消える。
+var ADMIN_ONLY_MASTERS=['expenses','staffTypes','payroll','hpsTowel','laborSales'];
+function _mastersPayload(){
+  var m={
+    staff: state.staff || [],
+    mediaList: state.mediaList || [],
+    payments: state.payments || [],
+    paymentMaster: state.paymentMaster || [],
+    menus: state.menus || [],
+    products: state.products || [],
+    productBrands: state.productBrands || [],
+    productSubCategories: state.productSubCategories || [],
+    goals: state.goals || {},
+    tickets: state.tickets || {},
+    eduVideos: state.eduVideos || [],
+    airegi: state.airegi || {},
+    attendance: state.attendance || {},
+    inventory: state.inventory || [],
+    invCategories: state.invCategories || [],
+    reports: state.reports || [],
+    deletedMasters: state.deletedMasters || {}
+  };
+  var keep=(state && state._adminMasters) || {};
+  for(var i=0;i<ADMIN_ONLY_MASTERS.length;i++){ var k=ADMIN_ONLY_MASTERS[i]; if(keep[k]!=null) m[k]=keep[k]; }
+  return m;
 }
 
 function load(){try{var d=localStorage.getItem('sun_cloud_staff');if(d){var p=JSON.parse(d);for(var k in p)state[k]=p[k];}}catch(e){} try{ _loadCloudConf(); /* 本体が保存できていなくても接続設定だけは復旧する */ }catch(e){} try{ if(Array.isArray(state._syncQueue)) syncQueue=state._syncQueue.filter(function(it){ return it && (it.action==='addRecord'||it.action==='deleteRecord'); }).slice(-200); /* 前回セッションの未送信キューを復元（日報以外は捨てる） */ }catch(e){}}
@@ -5555,11 +5565,7 @@ function addBrand(){
   document.getElementById('newBrand').value='';
   save();
   if(state.cloudUrl && state.cloudKey){
-    callCloud('saveMasters', {masters:{
-      staff:state.staff, mediaList:state.mediaList, payments:state.payments,
-      paymentMaster:state.paymentMaster, menus:state.menus, products:state.products,
-      productBrands:state.productBrands, productSubCategories:state.productSubCategories
-    }}, function(){});
+    callCloud('saveMasters', {masters:_mastersPayload()}, function(){});
   }
   renderAdminLists();
   showToast('✅ '+v+'を追加');
@@ -5575,11 +5581,7 @@ function removeBrand(i){
   try { save(); } catch(e){}
   try {
     if(state.cloudUrl && state.cloudKey && typeof callCloud === 'function'){
-      callCloud('saveMasters', {masters:{
-        staff:state.staff, mediaList:state.mediaList, payments:state.payments,
-        paymentMaster:state.paymentMaster, menus:state.menus, products:state.products,
-        productBrands:state.productBrands, productSubCategories:state.productSubCategories
-      }}, function(){});
+      callCloud('saveMasters', {masters:_mastersPayload()}, function(){});
     }
   } catch(e){ console.log('cloud save failed', e); }
   try {
@@ -5598,11 +5600,7 @@ function addSubCat(){
   document.getElementById('newSubCat').value='';
   save();
   if(state.cloudUrl && state.cloudKey){
-    callCloud('saveMasters', {masters:{
-      staff:state.staff, mediaList:state.mediaList, payments:state.payments,
-      paymentMaster:state.paymentMaster, menus:state.menus, products:state.products,
-      productBrands:state.productBrands, productSubCategories:state.productSubCategories
-    }}, function(){});
+    callCloud('saveMasters', {masters:_mastersPayload()}, function(){});
   }
   renderAdminLists();
   showToast('✅ '+v+'を追加');
@@ -5618,11 +5616,7 @@ function removeSubCat(i){
   try { save(); } catch(e){}
   try {
     if(state.cloudUrl && state.cloudKey && typeof callCloud === 'function'){
-      callCloud('saveMasters', {masters:{
-        staff:state.staff, mediaList:state.mediaList, payments:state.payments,
-        paymentMaster:state.paymentMaster, menus:state.menus, products:state.products,
-        productBrands:state.productBrands, productSubCategories:state.productSubCategories
-      }}, function(){});
+      callCloud('saveMasters', {masters:_mastersPayload()}, function(){});
     }
   } catch(e){ console.log('cloud save failed', e); }
   try {
@@ -5692,11 +5686,7 @@ function savePaymentEdit(i){
   state.editingPayIdx = -1;
   save();
   if(state.cloudUrl && state.cloudKey){
-    callCloud('saveMasters', {masters:{
-      staff:state.staff, mediaList:state.mediaList, payments:state.payments,
-      paymentMaster:state.paymentMaster, menus:state.menus, products:state.products,
-      productBrands:state.productBrands||[], productSubCategories:state.productSubCategories||[]
-    }}, function(){});
+    callCloud('saveMasters', {masters:_mastersPayload()}, function(){});
   }
   renderAll();
   showToast('✅ 保存しました');
@@ -5724,11 +5714,7 @@ function saveMenuEdit(i){
   state.editingMenuIdx = -1;
   save();
   if(state.cloudUrl && state.cloudKey){
-    callCloud('saveMasters', {masters:{
-      staff:state.staff, mediaList:state.mediaList, payments:state.payments,
-      paymentMaster:state.paymentMaster, menus:state.menus, products:state.products,
-      productBrands:state.productBrands||[], productSubCategories:state.productSubCategories||[]
-    }}, function(){});
+    callCloud('saveMasters', {masters:_mastersPayload()}, function(){});
   }
   renderAll();
   showToast('✅ 保存しました');
@@ -5762,11 +5748,7 @@ function saveMasterProductEdit(i){
   state.editingProductIdx = -1;
   save();
   if(state.cloudUrl && state.cloudKey){
-    callCloud('saveMasters', {masters:{
-      staff:state.staff, mediaList:state.mediaList, payments:state.payments,
-      paymentMaster:state.paymentMaster, menus:state.menus, products:state.products,
-      productBrands:state.productBrands||[], productSubCategories:state.productSubCategories||[]
-    }}, function(){});
+    callCloud('saveMasters', {masters:_mastersPayload()}, function(){});
   }
   renderAll();
   showToast('✅ 保存しました');
@@ -6603,7 +6585,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "24.1";
+var APP_VERSION = "24.2";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
