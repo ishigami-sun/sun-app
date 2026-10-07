@@ -22,7 +22,8 @@ function run(file,label){
  checks.push(['控えが古ければ getAll してから送る', calls[0]==='getAll' && calls.filter(a=>a==='addRecord').length===1 && state.records.length===3]);
  // ③ マスタ送信の判定
  let masters=0; global.callCloud=(a,p,cb)=>{ if(a==='saveMasters'){ masters++; cb({ok:true}); } else cb({ok:true}); };
- eval(grab('_pushMastersIfNeeded')); eval(grab('_pushMastersNow'));
+ eval(grab('_pushMastersIfNeeded')); eval(grab('_pushMastersNow')); eval(grab('_mastersPayload'));
+ global.ADMIN_ONLY_MASTERS=['expenses','staffTypes','payroll','hpsTowel','laborSales']; // staff の _mastersPayload が参照する
  global.state={_mastersDirty:false,_mastersPushedAt:Date.now(),staff:[],mediaList:[],payments:[],paymentMaster:[],menus:[],products:[],productBrands:[],productSubCategories:[],goals:{},tickets:{},eduVideos:[],airegi:{},attendance:{},inventory:[],invCategories:[],reports:[],deletedMasters:{}};
  const a1=_pushMastersIfNeeded();
  state._mastersDirty=true; const a2=_pushMastersIfNeeded();
