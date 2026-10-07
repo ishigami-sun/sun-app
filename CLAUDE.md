@@ -104,6 +104,14 @@ What's New もスタッフ用は「使い方」だけにする（管理者向け
   端末が保持する日数は `_recordDays()`（通常は `LOCAL_RECORD_DAYS`、`_lowStorage` の端末は60日。admin の 0=全件 でも60）。
   `canDelta` は `state.records.length>0` を要求する。**同じ端末に admin と staff の両方を入れると localStorage を
   2重に使う**（石上さんの携帯）。回帰テスト: `node tools/test_low_storage.js`
+- **マスタ送信（saveMasters）は必ず `_mastersPayload()` の全項目で送る**（v24.2）。サーバーの saveMasters は
+  「送った項目だけ」で masters シート全体を置き換える。項目を減らして送る経路を1つでも作ると、
+  経費・給与・laborSales・hpsTowel・staffTypes（admin 専用）がクラウドから消える。
+  staff 版は受け取った admin 専用マスタを `state._adminMasters` に控えて、そのまま返す（`ADMIN_ONLY_MASTERS`）。
+
+  > 過去の事故: staff のマスタ送信とブランド・メニュー編集が項目を減らして送っていたため、
+  > スタッフ端末が同期するたびに P&L の経費・9月の技術売上・タオルがクラウドから消えた（10/7）。
+  > 回帰テスト: `node tools/test_masters_keep.js`（saveMasters の呼び出しが全部 `_mastersPayload()` かを数える）
 - 日報の重複は `dedupeRecordsById()` が同一IDを自動で1件に統合する
 - **`state.records` からローカル分を落としてよいのは `_cs` 印が付いているものだけ**（v22.7）。
   `_cs` は「クラウドで実在を確認できた」印で、`syncFromCloud` / `pushAndSync` の取得結果と
