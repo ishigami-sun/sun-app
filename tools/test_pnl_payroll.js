@@ -25,6 +25,6 @@ const checks=[];
 for(const r of pay.rows){ if(r.officer) continue; const k=PAYROLL_ROWS.find(x=>x.xls===r.name).app; checks.push([r.name+' 支給見込 '+r.sum.toLocaleString(), r.sum===EX[k].pay]); }
 checks.push(['役員2名（固定）が含まれる', pay.rows.filter(r=>r.officer).length===2 && pay.fixedOnly===1685000]);
 checks.push(['給与合計＝エクセルの支給合計（早朝手当除く）4,793,968', pay.grossPay===4793968]);
-checks.push(['人件費合計＝給与合計×1.155', pay.total===Math.round(4793968*1.155) && pay.insurance===pay.total-pay.grossPay]);
+checks.push(['人件費合計＝給与合計×(1+会社負担率 '+SOCIAL_INSURANCE_RATE+')', pay.total===Math.round(4793968*(1+SOCIAL_INSURANCE_RATE)) && pay.insurance===pay.total-pay.grossPay]);
 checks.forEach(([n,v])=>console.log((v?'✅':'❌')+' '+n));
 const ok=checks.every(c=>c[1]); console.log('\n'+(ok?'すべて合格':'★失敗あり')); process.exit(ok?0:1);

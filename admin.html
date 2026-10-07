@@ -5114,6 +5114,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '💰 会社負担の社会保険を15.5%（仮置き）→11.6%に。令和8年9月の給与集計表の本人負担額から逆算した実態値です（月あたり約18.7万円、人件費を多く見ていました）。P&Lと管理タブの人件費の見通しに反映',
   '📈 P&Lの人件費を、給与エクセルと同じ式（管理タブ「人件費の見通し」と共通の laborCostForMonth）に統一。以前の概算（固定給一律254,000・税込売上1円目から歩合・HPSなし）をやめ、役員2名の固定給と会社負担の社会保険（15.5%）まで含めた「会社が払う総額」を人件費合計にしました。年表示は各月を合算',
   '💴 給与エクセル用集計のHPS物販歩合を円単位に（65.6→66）。給与エクセル R8.9度 の6人分（技術歩合・物販歩合・HPS）をアプリの式で再計算し、全員1円まで一致を確認',
   '💾 容量不足×差分同期の穴を修正。_shrinkForQuota level3 で _cs 付き日報を全部外したあと、差分モード（getSince）では追加分しか来ないため端末が0件のままだった（管理者版 9/29「最新にしました（日報 0件）」）。level2/3 で state._lowStorage を立て、syncSince/lastFullPullAt を0にして次は全件から。_recordDays() が _lowStorage の端末を60日に切り詰める（admin の LOCAL_RECORD_DAYS=0 でも）。canDelta に records.length>0 を追加',
@@ -8319,7 +8320,7 @@ function copyStaffSetupLink(){
 /* ===== 💰 人件費の見通し（v22.2）
    給与明細（令和8年8月度）から固定給と歩合の計算式を取り込んである。
    日報の売上・物販から、その月の給与見込みと人件費率を出す ===== */
-var SOCIAL_INSURANCE_RATE=0.155;  // 会社負担の社会保険料の概算（健保・厚年・雇用・子育て拠出の事業主分）
+var SOCIAL_INSURANCE_RATE=0.116;  // 会社負担の社会保険料（健保・介護・厚年・子育て支援は労使折半、雇用保険は会社0.85%、子ども・子育て拠出金0.36%）。令和8年9月の給与集計表から逆算（支給合計の11.6%）。以前の15.5%は仮置き
 function laborSalesMap(ym){
   if(!state.laborSales || typeof state.laborSales!=='object') state.laborSales={};
   if(!state.laborSales[ym]) state.laborSales[ym]={};
@@ -8441,7 +8442,7 @@ function renderLaborCost(){
    +'<div style="display:flex;justify-content:space-between"><span>6名の支給見込</span><b>¥'+num(totalPay)+'</b></div>'
    +'<div style="display:flex;justify-content:space-between"><span>石上三四郎・麻里子（固定）</span><b>¥'+num(fixedOnly)+'</b></div>'
    +'<div style="display:flex;justify-content:space-between;border-top:1px solid #C8E6C9;padding-top:4px"><span>給与合計</span><b>¥'+num(grossPay)+'</b></div>'
-   +'<div style="display:flex;justify-content:space-between;color:#64748B;font-size:12px"><span>＋会社負担の社会保険（概算15.5%）</span><span>¥'+num(company-grossPay)+'</span></div>'
+   +'<div style="display:flex;justify-content:space-between;color:#64748B;font-size:12px"><span>＋会社負担の社会保険（概算'+(Math.round(SOCIAL_INSURANCE_RATE*1000)/10)+'%）</span><span>¥'+num(company-grossPay)+'</span></div>'
    +'<div style="display:flex;justify-content:space-between;font-size:15px;color:#1B5E20;border-top:2px solid #1B5E20;padding-top:5px"><b>会社が払う総額</b><b>¥'+num(company)+'</b></div>'
    +'<div style="display:flex;justify-content:space-between;margin-top:4px"><span>売上（税抜・アプリ集計）</span><b>¥'+num(shopSales)+'</b></div>'
    +'<div style="display:flex;justify-content:space-between;font-size:16px;color:'+(ratio>55?'#C62828':(ratio>50?'#E65100':'#1B5E20'))+'"><b>人件費率</b><b>'+(shopSales>0?ratio.toFixed(1)+'%':'—')+'</b></div>'
@@ -9922,7 +9923,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "24.0";
+var APP_VERSION = "24.1";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
