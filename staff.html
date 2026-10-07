@@ -2706,6 +2706,9 @@ var WHATS_NEW_ITEMS=[
   '📋 日報タブの「みんなの報告」はなくなりました。報告はいままで通り「報告」タブで見られます'
 ];
 function showWhatsNew(){
+  // v24.3: 更新のたびに説明を出さない（石上さん要望 10/7）。見た印だけ付けて何も表示しない
+  try{ if(state.lastSeenVersion!==APP_VERSION){ state.lastSeenVersion=APP_VERSION; try{ saveLocal(); }catch(e){} } }catch(e){}
+  return;
   try{
     if(state.lastSeenVersion===APP_VERSION) return;
     var ov=document.createElement('div');
@@ -6585,7 +6588,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "24.2";
+var APP_VERSION = "24.3";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
