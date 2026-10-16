@@ -3922,7 +3922,7 @@ function normalizeCloudConfig(){
    税理士など社外の方に数字を見てもらうときに、誤操作でデータが壊れないようにするためのもの。
    ボタンを隠すだけでなく、通信の入口(callCloud)で読み取り以外を止める ===== */
 var IS_VIEW_ONLY = (function(){ try{ return /(^|[?&])view=1(&|$)/.test(location.search); }catch(e){ return false; } })();
-var VIEW_ONLY_READS = { getAll:1 };
+var VIEW_ONLY_READS = { getAll:1, getSince:1, whoami:1 }; // 【v24.8】差分同期（getSince）も読み取りなので許可（以前は2回目以降の同期が止まっていた）
 function applyViewOnlyMode(){
   if(!IS_VIEW_ONLY) return;
   try{
