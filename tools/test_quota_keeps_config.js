@@ -16,7 +16,7 @@ function run(file,KEY,label){
  };
  let toasts=[];
  global.showToast=t=>toasts.push(t);
- global._costCache={}; global.syncQueue=[]; global.LOCAL_RECORD_DAYS=150;
+ global._costCache={}; global.syncQueue=[]; global.LOCAL_RECORD_DAYS=150; global._quotaLevel=0;
  global._quotaWarned=false;
  const big=[]; for(let i=0;i<400;i++) big.push({id:1000+i, time:'2026-09-01T00:00:00Z', total:10000, _cs:1, pad:'x'.repeat(50)});
  big.push({id:99999, time:'2026-09-14T00:00:00Z', total:8800, pad:'y'.repeat(50)});   // 未送信（_cs なし）

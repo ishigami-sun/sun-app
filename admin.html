@@ -4337,7 +4337,7 @@ function pushAndSync(cb, silent, snap){
         var merged=cloudList.filter(function(c){ return !delSet[String(c.id)]; });
         var have={}; for(var i=0;i<merged.length;i++) have[String(merged[i].id)]=true;
         for(var i=0;i<toPush.length;i++){ if(!have[String(toPush[i].id)]) merged.push(toPush[i]); }
-        if(_recordDays()>0){ var _cut2=Date.now()-_recordDays()*86400000, _keep={}; for(var _k=0;_k<toPush.length;_k++) _keep[String(toPush[_k].id)]=1; merged=merged.filter(function(r){ var t=new Date(r&&r.time).getTime(); return !(t>0 && t<_cut2 && !_keep[String(r.id)]); }); }
+        if(_memRecordDays()>0){ var _cut2=Date.now()-_memRecordDays()*86400000, _keep={}; for(var _k=0;_k<toPush.length;_k++) _keep[String(toPush[_k].id)]=1; merged=merged.filter(function(r){ var t=new Date(r&&r.time).getTime(); return !(t>0 && t<_cut2 && !_keep[String(r.id)]); }); }
         state.records=merged;
       }
       state._csReady=1;
@@ -4481,7 +4481,7 @@ function _applyFullResponse(res, silent, cb){
       state.lastFullPullAt=Date.now();
       if(res.now) state.syncSince=Number(res.now)||0;   // サーバーが差分に対応していれば、次回からは差分だけ受け取る
       try{ _confirmDeletesAgainst(_cloudIds); }catch(e){}
-      if(_recordDays()>0){ var _cut=Date.now()-_recordDays()*86400000; state.records=state.records.filter(function(r){ var t=new Date(r&&r.time).getTime(); return !(t>0 && t<_cut && _cloudIds[String(r.id)]); }); }
+      if(_memRecordDays()>0){ var _cut=Date.now()-_memRecordDays()*86400000; state.records=state.records.filter(function(r){ var t=new Date(r&&r.time).getTime(); return !(t>0 && t<_cut && _cloudIds[String(r.id)]); }); }
       if(res.masters) _applyCloudMasters(res.masters);
       saveLocal();
       renderAll();
@@ -4557,6 +4557,9 @@ function migrateToCloud(){
 
 // ローカル保存（即時）
 var _quotaWarned=false;
+var _quotaLevel=0;   // 【v24.5】この起動中に保存が通った軽さの段階（毎回 全体→失敗→… を繰り返して重くならないように）
+// 【v24.5】画面に持つ日報の日数。容量不足の端末でも画面は減らさない（60日に詰めるのは保存用の写しだけ: _recordDays）
+function _memRecordDays(){ return LOCAL_RECORD_DAYS; }
 var LOCAL_RECORD_DAYS = 0; // ローカルに保持する日報の日数（0=全件）。クラウドが正本なので端末には直近分だけあればよい
 // この端末が保持する日報の日数。容量不足で日報を外したことがある端末は、以後60日だけ保持する
 // （全件を取り直すたびに容量オーバー→全部外す、を繰り返さないため）
@@ -4586,6 +4589,8 @@ function _shrinkForQuota(level, snap){
       if(snap){ delete T._rcRows; delete T._rcSummary; }   // 照合結果の表示用キャッシュ（保存しなくてよい）
       var cut=Date.now()-_recordDays()*86400000, n0=(T.records||[]).length;
       T.records=(T.records||[]).filter(function(r){ if(r && !r._cs) return true; var t=new Date(r&&r.time).getTime(); return !(t>0 && t<cut); });
+      // 写しから外した時は、次に開いた時に差分ではなく全件から取り込む（画面は全期間を持つため）
+      if(snap && T.records.length<n0){ T.syncSince=0; T.lastFullPullAt=0; }
       return T.records.length<n0;
     }
     if(level===3){
@@ -4635,7 +4640,11 @@ function saveLocal(){
   state._syncQueue=syncQueue; /* 未送信キューも一緒に永続化（リロードで消えないように） */
   var _snap=null;   // 【v24.5】容量不足の時は「保存用の写し」だけを軽くする（画面のデータは減らさない）
   for(var lv=0; lv<=3; lv++){
-    try{ localStorage.setItem('sun_cloud_admin',JSON.stringify(_snap||state)); _costCache={}; return; }
+    if(lv<_quotaLevel){   // この起動中に通らなかった段階は試さずに軽くする
+      if(!_snap){ _snap={}; for(var _sq in state) _snap[_sq]=state[_sq]; }
+      _shrinkForQuota(lv+1, _snap); continue;
+    }
+    try{ localStorage.setItem('sun_cloud_admin',JSON.stringify(_snap||state)); _quotaLevel=lv; _costCache={}; return; }
     catch(e){
       var isQuota = e && (e.name==='QuotaExceededError' || /quota/i.test(String(e&&e.message||e)));
       if(!isQuota){ _costCache={}; return; }
