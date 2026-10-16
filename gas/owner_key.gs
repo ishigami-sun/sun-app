@@ -8,6 +8,9 @@
    返さない。スタッフの端末がマスタを送ってきても、これらはサーバーにある値をそのまま守る。
 
    ■ 安全のための作り
+     - 役割に関係なく、saveMasters で送られてこなかった管理者専用の項目はサーバーの値を残す（省いても消えない）。
+     - マスタの保存は LockService で1件ずつ（全消し→書き直しの途中を他の端末が読まないように）。
+     - OWNER_KEY がスタッフ用と同じ値なら「未登録」扱い（whoami の ownerKeySameAsStaff で分かる）。
      - OWNER_KEY が未登録の間は、今までとまったく同じ動き（SECRET_KEY で全部見える）。
        → このファイルを貼って新バージョンでデプロイしても、それだけでは何も変わらない。
      - OWNER_KEY を登録した瞬間から、スタッフ用の合言葉は上の項目が見えなくなる。
@@ -29,17 +32,25 @@
 const ADMIN_ONLY_MASTERS_ = ['expenses', 'staffTypes', 'payroll', 'hpsTowel', 'laborSales'];
 
 function ownerKey_() {
-  try { return String(PropertiesService.getScriptProperties().getProperty('OWNER_KEY') || ''); }
-  catch (e) { return ''; }
+  let k = '';
+  try { k = String(PropertiesService.getScriptProperties().getProperty('OWNER_KEY') || '').trim(); }
+  catch (e) { k = ''; }
+  // スタッフ用と同じ値が登録されていたら「未登録」と同じに扱う（分けたつもりで何も守られない事故を防ぐ。whoami で分かる）
+  if (k && k === String(SECRET_KEY).trim()) return '';
+  return k;
+}
+function ownerKeySameAsStaff_() {
+  try { const k = String(PropertiesService.getScriptProperties().getProperty('OWNER_KEY') || '').trim(); return !!k && k === String(SECRET_KEY).trim(); }
+  catch (e) { return false; }
 }
 
 // 'owner' / 'staff' / ''（不一致）
 function roleOf_(key) {
-  key = String(key || '');
+  key = String(key || '').trim();
   if (!key) return '';
   const ok = ownerKey_();
   if (ok && key === ok) return 'owner';
-  if (key === SECRET_KEY) return ok ? 'staff' : 'owner';   // オーナー用が未登録の間は今までどおり全部見える
+  if (key === String(SECRET_KEY).trim()) return ok ? 'staff' : 'owner';   // オーナー用が未登録の間は今までどおり全部見える
   return '';
 }
 
@@ -54,12 +65,13 @@ function hideAdminOnly_(res) {
   return res;
 }
 
-// スタッフが送ってきたマスタの、管理者専用の項目をサーバーの今の値に差し替える
-// （送ってきた値は使わない。サーバーに無い項目は送ってきても捨てる）
-function keepServerAdminOnly_(masters) {
+// 保存する前に、管理者専用の項目をサーバーの今の値で補う
+//   staff … 送ってきた値は使わず、必ずサーバーの値にする（サーバーに無い項目は送ってきても捨てる）
+//   owner … 送ってきた項目はそのまま。送ってこなかった項目はサーバーの値を残す（省いただけで消えないように）
+function keepServerAdminOnly_(masters, staff) {
   const out = {};
   if (masters && typeof masters === 'object') { for (const k in masters) out[k] = masters[k]; }
-  for (let i = 0; i < ADMIN_ONLY_MASTERS_.length; i++) delete out[ADMIN_ONLY_MASTERS_[i]];
+  if (staff) { for (let i = 0; i < ADMIN_ONLY_MASTERS_.length; i++) delete out[ADMIN_ONLY_MASTERS_[i]]; }
   const { mastersSheet } = ensureSheets();
   const last = mastersSheet.getLastRow();
   if (last > 1) {
@@ -67,6 +79,7 @@ function keepServerAdminOnly_(masters) {
     for (let i = 0; i < rows.length; i++) {
       const name = String(rows[i][0] || '');
       if (ADMIN_ONLY_MASTERS_.indexOf(name) < 0 || !rows[i][1]) continue;
+      if (!staff && Object.prototype.hasOwnProperty.call(out, name)) continue;   // オーナーが送ってきた項目はそのまま
       try { out[name] = JSON.parse(rows[i][1]); }
       catch (e) { throw new Error('admin master unreadable: ' + name); }   // 読めない時は保存しない（消さないため）
     }
@@ -83,16 +96,22 @@ function doPost(e) {
     const staff = (role === 'staff');
     const action = data.action;
     switch (action) {
-      case 'whoami': return jsonResponse({ ok: true, role: role, ownerKeySet: !!ownerKey_() });
+      case 'whoami': return jsonResponse({ ok: true, role: role, ownerKeySet: !!ownerKey_(), ownerKeySameAsStaff: ownerKeySameAsStaff_() });
       case 'getAll': { const r = getAll(); r.now = Date.now(); return jsonResponse(staff ? hideAdminOnly_(r) : r); }
       case 'getSince': { const r = getSince(data.since); return jsonResponse(staff ? hideAdminOnly_(r) : r); }
       case 'addRecord': { const r = addRecord(data.record); if (r && r.ok !== false) logChange_('add', data.record && data.record.id); return jsonResponse(r); }
       case 'updateRecord': { const r = updateRecord(data.record); if (r && r.ok !== false) logChange_('add', data.record && data.record.id); return jsonResponse(r); }
       case 'deleteRecord': { const r = deleteRecord(data.id); if (r && r.ok !== false) logChange_('del', data.id); return jsonResponse(r); }
       case 'saveMasters': {
-        const m = staff ? keepServerAdminOnly_(data.masters) : data.masters;
-        const r = saveMasters(m); if (r && r.ok !== false) logChange_('masters', '');
-        return jsonResponse(staff ? Object.assign({}, r, { adminOnlyHidden: true }) : r);
+        // 読む→書くの間に他の端末の保存が割り込まないように、スクリプト全体で1件ずつにする
+        // （本番の saveMasters はシートを全消し→書き直すので、途中を読まれると管理者専用の行が無いように見える）
+        const lock = LockService.getScriptLock();
+        lock.waitLock(25000);
+        try {
+          const m = keepServerAdminOnly_(data.masters, staff);
+          const r = saveMasters(m); if (r && r.ok !== false) logChange_('masters', '');
+          return jsonResponse(staff ? Object.assign({}, r, { adminOnlyHidden: true }) : r);
+        } finally { lock.releaseLock(); }
       }
       case 'bulkImport': { const r = bulkImport(data.records); if (r && r.ok !== false) { (data.records || []).forEach(function(x){ logChange_('add', x && x.id); }); } return jsonResponse(r); }
       case 'verifyPin': return jsonResponse(verifyPin(data.staffName, data.pin));

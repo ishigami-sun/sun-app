@@ -21,6 +21,7 @@ function makeEnv(ownerKey){
   const ctx={
     SpreadsheetApp:{ getActiveSpreadsheet:()=>({ getSheetByName:n=>sheets[n]?sheet(n):null, insertSheet:n=>{ sheets[n]={rows:[]}; return sheet(n);} }) },
     PropertiesService:{ getScriptProperties:()=>({ getProperty:k=>props[k]||null }) },
+    LockService:{ getScriptLock:()=>({ waitLock(){ ctx._locks=(ctx._locks||0)+1; }, releaseLock(){ ctx._unlocks=(ctx._unlocks||0)+1; } }) },
     ContentService:{ createTextOutput:s=>({s, setMimeType(){return this;}}), MimeType:{JSON:'json'} },
     Utilities:{ formatDate:()=>'' }, Date, JSON, Object, Number, String, Math, Error,
     _sheets:sheets, _sheet:sheet
@@ -61,8 +62,11 @@ let r=E.call('STAFF-KEY','getAll');
 t('未登録: 今までの合言葉で全部見える（経費・給与あり・印なし）', r.ok && r.masters.expenses && r.masters.payroll && !r.adminOnlyHidden);
 t('未登録: whoami は owner・ownerKeySet=false', E.call('STAFF-KEY','whoami').role==='owner' && E.call('STAFF-KEY','whoami').ownerKeySet===false);
 t('未登録: 違う合言葉は unauthorized', E.call('WRONG','getAll').error==='unauthorized');
-E.call('STAFF-KEY','saveMasters',{masters:{menus:[]}});
-t('未登録: saveMasters は今までどおり送った内容で置き換え（従来動作）', !E.call('STAFF-KEY','getAll').masters.expenses);
+E.call('STAFF-KEY','saveMasters',{masters:{menus:[], staff:['甲']}});
+r=E.call('STAFF-KEY','getAll');
+t('未登録: 送った項目（メニュー等）は置き換わる', r.masters.menus.length===0 && r.masters.staff[0]==='甲');
+t('未登録でも、送らなかった管理者専用の項目（経費・給与設定）は消えない', r.masters.expenses['2026-09'].rent===999 && r.masters.payroll._setup);
+t('マスタの保存は鍵をかけて1件ずつ（かけたら必ず外す）', E.ctx._locks>=1 && E.ctx._locks===E.ctx._unlocks);
 
 // 2. OWNER_KEY 登録後
 E=makeEnv('OWNER-KEY');
@@ -78,6 +82,10 @@ r=E.call('OWNER-KEY','getAll');
 t('登録後: スタッフの saveMasters でメニューは更新される', s.ok && r.masters.menus.length===2);
 t('登録後: スタッフの古い経費では上書きされない', r.masters.expenses['2026-09'].rent===999);
 t('登録後: スタッフが送らなかった給与設定・区分も消えない', r.masters.payroll._setup.rows[0].app==='甲' && r.masters.staffTypes.a==='stylist');
+// オーナーが管理者専用の項目を省いて送っても消えない（staff 版の控えを拾った端末など）
+E.call('OWNER-KEY','saveMasters',{masters:{menus:[{id:7}]}});
+r=E.call('OWNER-KEY','getAll');
+t('登録後: オーナー用で管理者専用の項目を省いて送っても消えない', r.masters.menus[0].id===7 && r.masters.expenses['2026-09'].rent===999 && r.masters.payroll._setup.rows[0].app==='甲' && r.masters.staffTypes.a==='stylist');
 // オーナーは更新できる
 E.call('OWNER-KEY','saveMasters',{masters:Object.assign({},r.masters,{expenses:{'2026-09':{rent:1234,updatedAt:'new'}}})});
 t('登録後: オーナーの saveMasters で経費が更新される', E.call('OWNER-KEY','getAll').masters.expenses['2026-09'].rent===1234);
@@ -91,6 +99,13 @@ t('登録後: オーナーの差分同期は従来どおり', go.ok && !go.admin
 const ms=E.ctx._sheets.masters.rows; const idx=ms.findIndex(x=>x[0]==='payroll'); ms[idx][1]='{壊れたJSON';
 s=E.call('STAFF-KEY','saveMasters',{masters:{menus:[]}});
 t('登録後: 管理者専用の行が壊れていたらスタッフの保存は失敗（何も消さない）', s.ok===false && E.ctx._sheets.masters.rows[idx][1]==='{壊れたJSON' && E.ctx._sheets.masters.rows.some(x=>x[0]==='menus'&&x[1]));
+
+// 2b. OWNER_KEY がスタッフ用と同じ値・前後に空白
+let E2=makeEnv('STAFF-KEY');
+let w=E2.call('STAFF-KEY','whoami');
+t('OWNER_KEY がスタッフ用と同じなら未登録扱い（全員オーナー扱いで守れていないことが whoami で分かる）', w.role==='owner' && w.ownerKeySet===false && w.ownerKeySameAsStaff===true);
+E2=makeEnv('  OWNER-KEY \n');
+t('OWNER_KEY の前後の空白は無視して照合', E2.call('OWNER-KEY','whoami').role==='owner' && E2.call(' STAFF-KEY ','whoami').role==='staff');
 
 // 3. アプリ側と同じ項目一覧
 const S=fs.readFileSync(path.join(ROOT,'staff.html'),'utf8');

@@ -142,8 +142,10 @@ What's New もスタッフ用は「使い方」だけにする（管理者向け
   `OWNER_KEY` 未登録の間は従来どおり（SECRET_KEY で全部見える）。`whoami` アクションで role を確かめられる。
   アプリは `callCloud` の応答で `_noteAdminOnlyHidden()` を呼び、staff は `_adminMasters` を消す、admin は `state._ownerKeyNeeded` を立てて
   給与集計・人件費・P&L に「オーナー用の合言葉になっていません」を出す。管理画面の切り替えは設定リンク `admin.html#k=<オーナー用>`（`_probeKey` 経由）。
-  **`OWNER_KEY` を消して元に戻す時は注意**: 消した直後の staff 端末は控えが空なので、取り込み（getAll）前に saveMasters すると管理者専用マスタが消える。
-  戻す時はまず staff が一度同期して控えを取り戻すのを待つか、`saveMasters` の取り直しが入る経路だけになっていることを確認する。
+  **役割に関係なく、saveMasters で送られてこなかった管理者専用の項目はサーバーの値を残す**（owner は送った項目だけ置き換え、staff は常にサーバーの値）。
+  マスタの保存は `LockService` で1件ずつ。`OWNER_KEY` がスタッフ用と同じなら未登録扱い（`whoami` の `ownerKeySameAsStaff`）。前後の空白は無視。
+  **サーバーを owner_key.gs より前の doPost に戻してはいけない**（控えを消した staff v24.8 が空のまま送り、管理者専用マスタが消える）。
+  無効にしたい時は `OWNER_KEY` を消すだけにする（この doPost のままなら、省いた項目は消えない）。
   回帰テスト: `node tools/test_owner_key_server.js`（模擬スプレッドシートで gas/ を実行）
 - 日報の重複は `dedupeRecordsById()` が同一IDを自動で1件に統合する
 - **`state.records` からローカル分を落としてよいのは `_cs` 印が付いているものだけ**（v22.7）。
