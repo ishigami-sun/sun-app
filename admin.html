@@ -4688,10 +4688,20 @@ function _pullReportsThenPush(next){
     callCloud('getAll', {}, function(res){
       try{
         if(res && res.ok && res.masters){
-          // 【v24.7】送る前に、同期と同じ _applyCloudMasters で全マスタを統合する（報告・削除履歴だけでなく
-          // 経費・給与・給与設定・タオル・技術売上なども）。saveMasters はクラウドを送った内容で丸ごと置き換えるため、
-          // 取り込み済みでも中身が古い端末がそのまま送ると、他の端末が保存した新しい値がクラウドで古く戻っていた。
-          _applyCloudMasters(res.masters);
+          if(res.masters.deletedMasters && typeof mergeDeletedMasters==='function') mergeDeletedMasters(res.masters.deletedMasters);
+          if(res.masters.reports) state.reports = mergeMasterById(state.reports||[], res.masters.reports, delSetOf('reports'));
+          if(typeof ADMIN_ONLY_MASTERS!=='undefined'){
+            // 【v24.4】スタッフ版：管理者専用マスタ（経費・給与など）の控えも最新にしてから返す
+            try{ var _keep2=state._adminMasters||{}; for(var _aj=0;_aj<ADMIN_ONLY_MASTERS.length;_aj++){ var _ak2=ADMIN_ONLY_MASTERS[_aj]; if(res.masters[_ak2]!=null) _keep2[_ak2]=res.masters[_ak2]; } state._adminMasters=_keep2; }catch(e){}
+          } else {
+            // 【v24.7】管理者版：月ごとに更新日時を持つマスタ（経費・給与・給与設定・タオル・技術売上・エアレジ）は、
+            // 送る前にクラウドと統合する（新しい方が勝つ・片方にしか無い月は残る）。取り込み済みでも中身が古い端末が
+            // そのまま送ると、他の端末が保存した新しい値がクラウドで古く戻っていたため。
+            // ※ 削除履歴を持たないマスタ（研修動画・ブランドなど）はここで統合しない（端末での削除・並べ替えが戻るため）
+            var _mk=['expenses','payroll','hpsTowel','laborSales','airegi'];
+            for(var _mi=0;_mi<_mk.length;_mi++){ var _k3=_mk[_mi]; if(res.masters[_k3] && typeof mergeByMonthKey==='function') state[_k3]=mergeByMonthKey(state[_k3], res.masters[_k3]); }
+          }
+          try{ saveLocal(); }catch(e){}
         }
       }catch(e){}
       next();
