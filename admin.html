@@ -9583,7 +9583,23 @@ try{
         // 古い設定リンクを保存したアイコンから開くたびに、正しい合言葉が上書きされていたため。
         _probeKey(_hu||CLOUD_URL, _hk, function(v){
           if(v==='bad'){ try{ showToast('⚠️ このリンクの合言葉は古いので使いませんでした（今の設定のまま）'); }catch(e){} return; }
-          _adoptHash();
+          // 【v25.0】オーナー用の端末を、スタッフ用の合言葉のリンク（メモ・ブックマークに保存した前のURL）で開いた時は入れ替えない。
+          // スタッフ用も「通る」合言葉なので、確かめるだけでは防げない（開くたびに給与・経費が見えなくなっていた）。
+          var _u2=_hu||CLOUD_URL;
+          _whoami(_u2, _curKey, function(rc){
+            var curOwner = rc && rc.ok===true && rc.role==='owner' && rc.ownerKeySet;
+            if(!rc && state.staffKey && state.staffKey===_hk) curOwner=true;   // 確かめられない時も、控えたスタッフ用のリンクなら下げない
+            if(!curOwner){ _adoptHash(); return; }
+            _whoami(_u2, _hk, function(rn){
+              var linkStaff = (rn && rn.ok===true && rn.role==='staff') || (!rn && state.staffKey===_hk);
+              if(linkStaff){
+                if(!state.staffKey){ state.staffKey=_hk; try{ saveLocal(); }catch(e){} }
+                try{ showToast('🔑 このリンクはスタッフ用なので、この端末はオーナー用の合言葉のまま使います'); }catch(e){}
+                return;
+              }
+              _adoptHash();
+            });
+          });
         });
       }
     }
@@ -10188,7 +10204,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "24.9";
+var APP_VERSION = "25.0";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){

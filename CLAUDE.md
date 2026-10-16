@@ -157,6 +157,8 @@ What's New もスタッフ用は「使い方」だけにする（管理者向け
     `_altStaffKey`（`s=`）か同じ携帯の管理者版の控え（`sun_cloud_admin_conf.s`）をスタッフ用と確かめて切り替え、`_adminMasters` を捨てて全件取り込み直す。
     `adoptAdminConfigIfAny` は管理者版の staffKey を優先する。
   - 貼り付け欄（1行）は改行が消えるので、`s=` は ASCII の記号・英数字だけ読む。
+  - **admin の `#k=` は、今の合言葉がオーナー用（分割済み）でリンクがスタッフ用なら入れ替えない**（v25.0）。石上さんはメモ帳に保存したURLから毎回開くため、
+    スタッフ用の `#k=` が付いていると開くたびにオーナー用が上書きされる（スタッフ用も「通る」ので `_probeKey` では防げない）。
   回帰テスト: `node tools/test_owner_key_setup.js`
 - 日報の重複は `dedupeRecordsById()` が同一IDを自動で1件に統合する
 - **`state.records` からローカル分を落としてよいのは `_cs` 印が付いているものだけ**（v22.7）。
