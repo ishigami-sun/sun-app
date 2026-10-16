@@ -1275,18 +1275,24 @@ function adoptAdminConfigIfAny(){
     var raw=localStorage.getItem('sun_cloud_admin'); if(!raw) return false;
     var a=JSON.parse(raw); if(!a||!a.cloudKey||!a.cloudUrl) return false;
     if(a.lastSyncError) return false;   // admin側も失敗中なら真似しない
+    // 【v24.9】管理者版がオーナー用の合言葉の時は、控えているスタッフ用を取り込む（オーナー用をスタッフ版に入れない）
+    var _sk=String(a.staffKey||_adminStaffKey()||''), _orig=a.cloudKey; if(_sk) a.cloudKey=_sk;
     var changed=(a.cloudKey!==state.cloudKey)||(a.cloudUrl!==state.cloudUrl);
     if(!changed) return false;
     // 【v23.2】真似る前にサーバーに通るか確かめる（管理者版の設定が古いこともある）
-    _probeKey(a.cloudUrl, a.cloudKey, function(v){
-      if(v==='bad') return;
-      state.cloudKey=a.cloudKey; state.cloudKeyCustom=true;
+    var _take=function(){
+      state.cloudKey=a.cloudKey; state.cloudKeyCustom=true; state._roleOkKey='';
       state.cloudUrl=a.cloudUrl; state.cloudUrlCustom=(a.cloudUrl!==CLOUD_URL);
       state.lastSyncError='';
       try{ saveLocal(); }catch(e){}
       try{ updateCloudStatus(); }catch(e){}
       if(typeof showToast==='function') showToast('🔧 同じ端末の管理者版の接続設定を取り込みました');
       setTimeout(function(){ try{ syncAll(true); }catch(e){} }, 400);
+    };
+    _probeKey(a.cloudUrl, a.cloudKey, function(v){
+      if(v==='bad' && _sk && _orig && _orig!==a.cloudKey && _orig!==state.cloudKey){ a.cloudKey=_orig; _probeKey(a.cloudUrl, _orig, function(v2){ if(v2!=='bad') _take(); }); return; }   // 控えが古い時は管理者版の合言葉（取り込み後に役割を確かめる）
+      if(v==='bad') return;
+      _take();
     });
     return false;   // 取り込みは確認後に非同期で行う
   }catch(e){ return false; }
@@ -1310,7 +1316,7 @@ function extractSetupUrl(text){
   try{ var m=String(text||'').match(/[&?]u=([^&\s"'<>]+)/); if(m) return _cleanCloudUrl(decodeURIComponent(m[1])); }catch(e){}
   return '';
 }
-function applySetupKey(key, url){
+function applySetupKey(key, url, skey){
   // 【v23.2】保存する前にサーバーに通るか確かめる。断られる合言葉は保存しない
   // （古いLINEのリンクを貼って、動いていた端末を壊してしまうのを防ぐ）
   if(!applySetupKey._checked){
@@ -1321,12 +1327,13 @@ function applySetupKey(key, url){
         return;
       }
       applySetupKey._checked=true;
-      try{ applySetupKey(key, url); } finally { applySetupKey._checked=false; }
+      try{ applySetupKey(key, url, skey); } finally { applySetupKey._checked=false; }
     });
     return;
   }
   state.cloudKey = key;
   state.cloudKeyCustom = true;
+  state._altStaffKey=(skey && skey!==key)?skey:''; state._roleOkKey='';
   // 保存先はリンクに含まれていればそれを、無ければアプリ標準（昔手入力した古いURLは上書きする）
   var u = _cleanCloudUrl(url||'');
   state.cloudUrl = u || CLOUD_URL; state.cloudUrlCustom = !!(u && u!==CLOUD_URL);
@@ -1334,7 +1341,7 @@ function applySetupKey(key, url){
   try{ saveLocal(); }catch(e){}
   try{ updateCloudStatus(); }catch(e){}
   if(typeof showToast==='function') showToast('✅ 設定できました！同期しています…');
-  setTimeout(function(){ try{ syncAll(); }catch(e){} }, 400);
+  setTimeout(function(){ _staffRoleCheck(function(sw){ if(!sw){ try{ syncAll(); }catch(e){} } }); }, 400);   // 【v24.9】確かめてから同期
 }
 function closeSetupDialog(){ var o=document.getElementById('setupOverlay'); if(o) o.remove(); }
 function pasteSetupLink(){
@@ -1382,12 +1389,13 @@ function submitSetupKey(){
   var msg=document.getElementById('setupKeyMsg');
   var key=extractSetupKey(inp?inp.value:'');
   var url=extractSetupUrl(inp?inp.value:'');
+  var skey=''; try{ var _sm=String(inp?inp.value:'').match(/[&?]s=([^\s&#"'<>\u0080-\uffff]+)/); if(_sm) skey=decodeURIComponent(_sm[1]).trim(); }catch(e){}
   if(!key){
     if(msg){ msg.style.color='#C62828'; msg.textContent='読み取れませんでした。石上さんのメッセージを全部コピーして貼り付けてください'; }
     return;
   }
   closeSetupDialog();
-  applySetupKey(key, url);
+  applySetupKey(key, url, skey);
 }
 function updateCloudStatus(){
   var el=document.getElementById('cloudStatus');
@@ -1775,6 +1783,61 @@ function installAutoSync(){
    ①この端末の報告・マスタを送る → ②未送信の日報と削除をクラウドへ反映 → ③全員の最新を取り込む
    画面上部のバナーをタップするとこれが走る。各タブの同期ボタンは廃止した ===== */
 var _syncAllBusy=false;
+/* ===== 🔒 スタッフ版にオーナー用の合言葉を入れたままにしない（v24.9）
+   オーナー用の設定リンク（メール）を、間違ってスタッフ版に貼った・開いた／同じ携帯の管理者版から取り込んだ時、
+   スタッフ版が給与・経費まで受け取ってしまう。同期が通った後にサーバーに役割を聞き、オーナー用（分割済み）なら
+   スタッフ用の合言葉（リンクの s= か、同じ携帯の管理者版が控えたもの）を確かめて切り替える。
+   スタッフ用が見つからなければそのまま（オーナー用のリンクはオーナーにしか届かないため、その人の端末）。 ===== */
+function _whoami(url, key, cb){
+  var done=false; function fin(v){ if(done) return; done=true; try{ cb(v); }catch(e){} }
+  try{
+    var u=_cleanCloudUrl(url)||CLOUD_URL;
+    if(!u||!key){ fin(null); return; }
+    setTimeout(function(){ fin(null); }, 12000);
+    fetch(u, { method:'POST', body:JSON.stringify({key:key, action:'whoami'}), headers:{'Content-Type':'text/plain;charset=utf-8'}, redirect:'follow' })
+      .then(function(r){ return r.text(); })
+      .then(function(t){ var res=null; try{ res=JSON.parse(t); }catch(e){} fin(res); })
+      .catch(function(){ fin(null); });
+  }catch(e){ fin(null); }
+}
+function _adminStaffKey(){
+  try{ var c=JSON.parse(localStorage.getItem('sun_cloud_admin_conf')||'null'); if(c && c.s) return String(c.s); }catch(e){}
+  return '';
+}
+var _roleCheckBusy=false;
+// done(switched) は必ず1回だけ呼ぶ（合言葉を入れた直後は、確かめてから同期する）
+function _staffRoleCheck(done){
+  var called=false; function fin(sw){ if(called) return; called=true; if(typeof done==='function'){ try{ done(!!sw); }catch(e){} } }
+  var k=String(state.cloudKey||''); if(!k || state._roleOkKey===k || _roleCheckBusy){ fin(false); return; }
+  var u=state.cloudUrl||CLOUD_URL;
+  _roleCheckBusy=true;
+  _whoami(u, k, function(r){
+    if(String(state.cloudKey||'')!==k){ _roleCheckBusy=false; fin(false); return; }
+    if(!r){ _roleCheckBusy=false; fin(false); return; }   // 分からない時は次の同期でまた確かめる
+    if(!(r.ok===true && r.role==='owner' && r.ownerKeySet)){
+      if(r.ok===true || /unknown action/i.test(String(r.error||''))){ state._roleOkKey=k; try{ saveLocal(); }catch(e){} }
+      _roleCheckBusy=false; fin(false); return;
+    }
+    var cands=[], seen={}; seen[k]=1;
+    [state._altStaffKey, _adminStaffKey()].forEach(function(c){ c=String(c||'').trim(); if(c && !seen[c]){ seen[c]=1; cands.push(c); } });
+    (function next(i){
+      if(i>=cands.length){ state._roleOkKey=k; try{ saveLocal(); }catch(e){} _roleCheckBusy=false; fin(false); return; }
+      _whoami(u, cands[i], function(r2){
+        if(String(state.cloudKey||'')!==k){ _roleCheckBusy=false; fin(false); return; }
+        if(!(r2 && r2.ok===true && r2.role==='staff')) return next(i+1);
+        state.cloudKey=cands[i]; state.cloudKeyCustom=true;
+        state.lastGoodKey=cands[i]; state._roleOkKey=cands[i]; state._altStaffKey='';
+        if(state._adminMasters) delete state._adminMasters;   // オーナー用で受け取った給与・経費などはすぐ手放す
+        state.lastFullPullAt=0;                               // 60秒以内でも省略せず、スタッフ用で取り込み直す
+        try{ saveLocal(); }catch(e){}
+        try{ updateCloudStatus(); }catch(e){}
+        _roleCheckBusy=false;
+        fin(true);
+        setTimeout(function(){ try{ syncAll(true); }catch(e){} }, 400);
+      });
+    })(0);
+  });
+}
 var _goodKeyTried=false;   // 「前に通った合言葉」に戻すのは1回だけ（無限に往復しない）
 /* ===== 🔑 合言葉の自己修復（v23.2）
    古い設定リンク（#k=…付きのアイコンやブックマーク）から開くたびに、
@@ -1817,7 +1880,7 @@ function syncAll(silent){
     if(_finDone) return;            // 二重呼び出しで表示が乱れないように
     _finDone=true;
     _syncAllBusy=false;
-    if(ok){ state.lastFullSync=Date.now(); state.lastSyncError=''; state.lastGoodKey=state.cloudKey; state.lastGoodUrl=state.cloudUrl; state.authFails=0; }
+    if(ok){ state.lastFullSync=Date.now(); state.lastSyncError=''; state.lastGoodKey=state.cloudKey; state.lastGoodUrl=state.cloudUrl; state.authFails=0; try{ setTimeout(_staffRoleCheck, 0); }catch(e){} }
     else {
       state.lastSyncError=String(err||'通信エラー');
       if(syncAuthFailedRaw()){
@@ -5584,16 +5647,19 @@ try{
     var _raw=location.hash.slice(3), _amp=_raw.indexOf('&');
     var _hk=decodeURIComponent(_amp>=0?_raw.slice(0,_amp):_raw).trim();
     var _hu=''; try{ var _um=_raw.match(/[&?]u=([^&]+)/); if(_um) _hu=_cleanCloudUrl(decodeURIComponent(_um[1])); }catch(e){}
+    var _hs=''; try{ var _sm=_raw.match(/[&?]s=([^&]+)/); if(_sm) _hs=decodeURIComponent(_sm[1]).trim(); }catch(e){}   // 【v24.9】オーナー用リンクに付くスタッフ用
     if(_hk){
       try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){ location.hash=''; }
       var _adoptHash=function(){
         state.cloudKey=_hk; state.cloudKeyCustom=true;
+        state._altStaffKey=(_hs && _hs!==_hk)?_hs:''; state._roleOkKey='';
         // 保存先はリンクに含まれていればそれを、無ければアプリ標準を使う
         try{ state.cloudUrl=_hu||CLOUD_URL; state.cloudUrlCustom=!!(_hu && _hu!==CLOUD_URL); state.lastSyncError=''; }catch(e){}
         try{ saveLocal(); }catch(e){}
         try{ updateCloudStatus(); }catch(e){}
         try{ showToast('🔑 接続キーを設定しました'); }catch(e){}
-        try{ setTimeout(function(){ syncFromCloud(); },600); }catch(e){}
+        // 【v24.9】合言葉の役割を確かめてから取り込む（オーナー用ならスタッフ用に切り替えてから）
+        try{ setTimeout(function(){ _staffRoleCheck(function(sw){ if(!sw){ try{ syncFromCloud(); }catch(e){} } }); },600); }catch(e){}
       };
       var _curKey=String(state.cloudKey||'');
       if(!_curKey || _curKey===_hk){ _adoptHash(); }
@@ -5609,6 +5675,7 @@ try{
   }
 }catch(e){}
 
+try{ setTimeout(function(){ try{ if(state.cloudKey && state._roleOkKey!==state.cloudKey) _staffRoleCheck(); }catch(e){} }, 2500); }catch(e){}   // 【v24.9】
 try{ if(typeof updateEntryDateBanner==='function') updateEntryDateBanner(); }catch(e){}
 try{ if(typeof verifySalesStartupCheck==='function') verifySalesStartupCheck(); }catch(e){}
 
@@ -6650,7 +6717,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "24.8";
+var APP_VERSION = "24.9";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){

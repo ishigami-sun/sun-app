@@ -3743,7 +3743,7 @@ function extractSetupUrl(text){
   try{ var m=String(text||'').match(/[&?]u=([^&\s"'<>]+)/); if(m) return _cleanCloudUrl(decodeURIComponent(m[1])); }catch(e){}
   return '';
 }
-function applySetupKey(key, url){
+function applySetupKey(key, url, skey){
   // 【v23.2】保存する前にサーバーに通るか確かめる。断られる合言葉は保存しない
   // （古いLINEのリンクを貼って、動いていた端末を壊してしまうのを防ぐ）
   if(!applySetupKey._checked){
@@ -3754,12 +3754,14 @@ function applySetupKey(key, url){
         return;
       }
       applySetupKey._checked=true;
-      try{ applySetupKey(key, url); } finally { applySetupKey._checked=false; }
+      try{ applySetupKey(key, url, skey); } finally { applySetupKey._checked=false; }
     });
     return;
   }
   state.cloudKey = key;
   state.cloudKeyCustom = true;
+  if(skey && skey!==key) state.staffKey = skey;
+  state._keySplit=null; state._deviceRole='';
   // 保存先はリンクに含まれていればそれを、無ければアプリ標準（昔手入力した古いURLは上書きする）
   var u = _cleanCloudUrl(url||'');
   state.cloudUrl = u || CLOUD_URL; state.cloudUrlCustom = !!(u && u!==CLOUD_URL);
@@ -3815,12 +3817,13 @@ function submitSetupKey(){
   var msg=document.getElementById('setupKeyMsg');
   var key=extractSetupKey(inp?inp.value:'');
   var url=extractSetupUrl(inp?inp.value:'');
+  var skey=''; try{ var _sm=String(inp?inp.value:'').match(/[&?]s=([^\s&#"'<>\u0080-\uffff]+)/); if(_sm) skey=decodeURIComponent(_sm[1]).trim(); }catch(e){}
   if(!key){
     if(msg){ msg.style.color='#C62828'; msg.textContent='読み取れませんでした。石上さんのメッセージを全部コピーして貼り付けてください'; }
     return;
   }
   closeSetupDialog();
-  applySetupKey(key, url);
+  applySetupKey(key, url, skey);
 }
 function updateCloudStatus(){
   var el=document.getElementById('cloudStatus');
@@ -4239,6 +4242,7 @@ function installAutoSync(){
    画面上部のバナーをタップするとこれが走る。各タブの同期ボタンは廃止した ===== */
 var _syncAllBusy=false;
 var _goodKeyTried=false;   // 「前に通った合言葉」に戻すのは1回だけ（無限に往復しない）
+var _staffKeyTried=false;  // 【v24.9】オーナー用が断られた時（OWNER_KEY を消して無効にした等）、控えたスタッフ用に戻すのも1回だけ
 /* ===== 🔑 合言葉の自己修復（v23.2）
    古い設定リンク（#k=…付きのアイコンやブックマーク）から開くたびに、
    正しい合言葉が古いものに上書きされ「合言葉が違います」に戻っていた。
@@ -4294,11 +4298,25 @@ function syncAll(silent){
     if(!ok && !_goodKeyTried && syncAuthFailedRaw() && state.lastGoodKey && state.lastGoodKey!==state.cloudKey){
       _goodKeyTried=true;
       state.cloudKey=state.lastGoodKey; state.cloudKeyCustom=true;
+      state._keySplit=null; state._deviceRole='';
       if(state.lastGoodUrl){ state.cloudUrl=state.lastGoodUrl; state.cloudUrlCustom=(state.lastGoodUrl!==CLOUD_URL); }
       state.lastSyncError='';
       _syncAllBusy=false;
       try{ saveLocal(); }catch(e){}
       try{ if(typeof showToast==='function') showToast('🔧 前に通っていた合言葉に戻して、もう一度つなぎます'); }catch(e){}
+      setTimeout(function(){ try{ syncAll(silent); }catch(e){} }, 400);
+      return;
+    }
+    // 【v24.9】オーナー用の合言葉が断られた（OWNER_KEY を消した等）。前の合言葉も同じオーナー用なので、控えたスタッフ用で1回だけやり直す
+    // 一時的な失敗で切り替えないよう、2回続けて断られた時だけ（authFails は上で数えている）
+    if(!ok && !_staffKeyTried && syncAuthFailedRaw() && (state.authFails||0)>=2 && state.staffKey && state.staffKey!==state.cloudKey){
+      _staffKeyTried=true;
+      state.cloudKey=state.staffKey; state.cloudKeyCustom=true;
+      state._keySplit=null; state._deviceRole='';
+      state.lastSyncError='';
+      _syncAllBusy=false;
+      try{ saveLocal(); }catch(e){}
+      try{ if(typeof showToast==='function') showToast('🔧 控えていた合言葉に戻して、もう一度つなぎます'); }catch(e){}
       setTimeout(function(){ try{ syncAll(silent); }catch(e){} }, 400);
       return;
     }
@@ -4636,7 +4654,7 @@ function _shrinkForQuota(level, snap){
 function _saveCloudConf(){
   try{
     localStorage.setItem('sun_cloud_admin_conf', JSON.stringify({ u:state.cloudUrl||'', k:state.cloudKey||'',
-      uc:!!state.cloudUrlCustom, kc:!!state.cloudKeyCustom, g:state.lastGoodKey||'', gu:state.lastGoodUrl||'' }));
+      uc:!!state.cloudUrlCustom, kc:!!state.cloudKeyCustom, g:state.lastGoodKey||'', gu:state.lastGoodUrl||'', s:state.staffKey||'' }));
   }catch(e){}
 }
 function _loadCloudConf(){
@@ -4647,6 +4665,7 @@ function _loadCloudConf(){
     if(!state.cloudUrl && c.u){ state.cloudUrl=c.u; state.cloudUrlCustom=!!c.uc; changed=true; }
     if(!state.cloudKey && c.k){ state.cloudKey=c.k; state.cloudKeyCustom=!!c.kc; changed=true; }
     if(!state.lastGoodKey && c.g){ state.lastGoodKey=c.g; state.lastGoodUrl=c.gu||''; changed=true; }
+    if(!state.staffKey && c.s){ state.staffKey=c.s; changed=true; }
     return changed;
   }catch(e){ return false; }
 }
@@ -8321,7 +8340,55 @@ function renderSyncStatusByStaff(){
 /* ===== 🔗 スタッフ用の設定リンク生成（v20.8）
    この端末が実際に同期できている接続設定（キー）からリンクを組み立てる。
    キーをチャット等に書き写す必要がなくなり、「渡したキーが古い」事故を防ぐ ===== */
+/* ===== 🔑 スタッフに配る合言葉を決める（v24.9）
+   オーナー用の合言葉（v24.8）に切り替えた管理画面で、この端末の合言葉（=オーナー用）をそのまま
+   スタッフ用リンク・QRに入れると、スタッフに給与・経費が見えてしまう。サーバーに役割を聞いて決める。
+   ・この端末がスタッフ用／合言葉が1つだけ（未分割）／古いサーバー → この端末の合言葉でよい
+   ・この端末がオーナー用（分割済み） → 控えたスタッフ用の合言葉（state.staffKey）を、サーバーで「staff」と確かめてから使う
+   ・分からない時は作らない（オーナー用を配るよりは、作らない方が安全） ===== */
+function _whoami(url, key, cb){
+  var done=false; function fin(v){ if(done) return; done=true; try{ cb(v); }catch(e){} }
+  try{
+    var u=_cleanCloudUrl(url)||CLOUD_URL;
+    if(!u||!key){ fin(null); return; }
+    setTimeout(function(){ fin(null); }, 12000);
+    fetch(u, { method:'POST', body:JSON.stringify({key:key, action:'whoami'}), headers:{'Content-Type':'text/plain;charset=utf-8'}, redirect:'follow' })
+      .then(function(r){ return r.text(); })
+      .then(function(t){ var res=null; try{ res=JSON.parse(t); }catch(e){} fin(res); })
+      .catch(function(){ fin(null); });
+  }catch(e){ fin(null); }
+}
+// cb(staffKey or '', info)  info: {deviceRole:'owner'|'staff'|'single'|'', reason}
+function _staffKeyForLinks(cb){
+  var k=String(state.cloudKey||''), u=state.cloudUrl||CLOUD_URL;
+  _whoami(u, k, function(r){
+    if(r && r.ok===true && r.role){
+      var split=!!r.ownerKeySet;
+      state._keySplit=split; state._deviceRole=r.role;
+      if(r.role==='staff') return cb(k, {deviceRole:'staff'});
+      if(!split) return cb(k, {deviceRole:'single'});
+      var sk=String(state.staffKey||'');
+      if(!sk || sk===k) return cb('', {deviceRole:'owner', reason:'nostaff'});
+      _whoami(u, sk, function(r2){
+        if(r2 && r2.ok===true && r2.role==='staff') return cb(sk, {deviceRole:'owner'});
+        cb('', {deviceRole:'owner', reason:(r2 && r2.ok===false)?'stale':'net'});
+      });
+      return;
+    }
+    if(r && r.ok===false && /unknown action/i.test(String(r.error||''))){ state._keySplit=false; return cb(k, {deviceRole:'single'}); }   // owner_key.gs より前のサーバー
+    // 通信できない等で分からない時：以前に分割済みと分かっている端末は作らない
+    if(state._keySplit===false || state._deviceRole==='staff') return cb(k, {deviceRole:state._deviceRole||''});   // 前に「未分割」か「この端末はスタッフ用」と確かめ済みの時だけ
+    cb('', {deviceRole:'', reason:'net'});
+  });
+}
 function buildStaffSetupLink(){
+  var box=document.getElementById('staffLinkBox'); if(!box) return;
+  if(!state.cloudKey){ _renderStaffLinkBox('', null); return; }
+  box.innerHTML='<div style="padding:10px;font-size:12px;color:#64748B">🔎 スタッフ用の合言葉を確かめています…</div>';
+  var _askedKey=String(state.cloudKey||'');
+  _staffKeyForLinks(function(sk, info){ if(String(state.cloudKey||'')!==_askedKey) return; _renderStaffLinkBox(sk, info||{}); });
+}
+function _renderStaffLinkBox(staffKey, info){
   var box=document.getElementById('staffLinkBox'); if(!box) return;
   if(!state.cloudKey){
     box.innerHTML='<div style="padding:10px;background:#FDECEA;border:1.5px solid #E05555;border-radius:8px;font-size:12px;color:#C62828;font-weight:700">この端末に接続キーが設定されていません。先に管理タブ「クラウド設定」で設定してください。</div>';
@@ -8332,9 +8399,17 @@ function buildStaffSetupLink(){
   var urlNote = syncUrlMismatch()
     ? '<div style="padding:9px 11px;background:#FDECEA;border-left:4px solid #C62828;border-radius:7px;font-size:12px;color:#C62828;font-weight:700;margin-bottom:8px">⚠️ この端末の保存先はアプリ標準と違います。<br>この端末：'+h(tail(state.cloudUrl))+'<br>アプリ標準：'+h(tail(CLOUD_URL))+'<br>スタッフのアプリは「アプリ標準」につなぎに行くため、標準側が古いとつながりません。この表示が出たら石上さんはClaudeに知らせてください。</div>'
     : '<div style="font-size:11px;color:#2E7D32;margin-bottom:6px">保存先：アプリ標準と一致（'+h(tail(CLOUD_URL))+'）</div>';
+  if(!staffKey){
+    var why = info && info.reason==='net'
+      ? 'サーバーに確かめられませんでした（電波の良い所で、もう一度「リンクを作る」を押してください）。'
+      : 'この端末はオーナー用の合言葉ですが、スタッフ用の合言葉を控えていません。メールで届いた「管理画面の設定リンク」から開き直すと作れるようになります。';
+    box.innerHTML=urlNote+'<div style="padding:10px;background:#FFF4E5;border:1.5px solid #F0B429;border-radius:8px;font-size:12px;color:#8A5A00;font-weight:700;line-height:1.7">🔒 スタッフ用のリンクは作りませんでした。<br>'+why+'<br><span style="font-weight:400">（この端末の合言葉をそのままスタッフに渡すと、給与・経費まで見えてしまうため）</span></div>';
+    return;
+  }
   var origin = location.origin + location.pathname.replace(/[^\/]*$/, '');
   // 合言葉に加えて、この端末が実際に使えている保存先も含める（標準と違う端末でも同じ設定が渡る）
-  var link = origin + 'staff.html#k=' + encodeURIComponent(state.cloudKey) + '&u=' + encodeURIComponent(state.cloudUrl||CLOUD_URL);
+  // 【v24.9】スタッフには必ずスタッフ用の合言葉を渡す（_staffKeyForLinks で決めた値）
+  var link = origin + 'staff.html#k=' + encodeURIComponent(staffKey) + '&u=' + encodeURIComponent(state.cloudUrl||CLOUD_URL);
   var s=urlNote;
   s += okNow
     ? '<div style="padding:9px 11px;background:#E8F5E9;border-left:4px solid #2E7D32;border-radius:7px;font-size:12px;color:#1B5E20;font-weight:700;margin-bottom:8px">✅ この端末は同期できています。このリンクの設定は正しいです。</div>'
@@ -8352,7 +8427,8 @@ function buildStaffSetupLink(){
   s += qrHtml;
   s += '<textarea id="staffLinkText" readonly onclick="this.select()" style="width:100%;box-sizing:border-box;height:86px;padding:9px;border:1.5px solid #90CAF9;border-radius:8px;font-size:12px;font-family:monospace;color:#0D47A1;background:#fff">'+h(link)+'</textarea>';
   s += '<button class="add-btn" style="width:100%;margin-top:8px;padding:14px;font-size:15px;background:#06C755" onclick="shareStaffSetupLink()">📨 スタッフに送る（LINEなどを選ぶ）</button>';
-  s += '<div style="margin-top:14px;padding-top:12px;border-top:1px dashed #90CAF9"><div style="font-size:12px;font-weight:800;color:#1565C0;margin-bottom:5px">👁 税理士など社外の方に見てもらう場合</div>'
+  if(info && info.deviceRole==='staff') s += '<div style="margin-top:14px;padding-top:12px;border-top:1px dashed #90CAF9;font-size:12px;color:#8A5A00;line-height:1.7"><b>👁 閲覧専用リンク</b>は、この端末をオーナー用の合言葉に切り替えてから作ってください（今の合言葉では給与・経費が見えません）。</div>';
+  else s += '<div style="margin-top:14px;padding-top:12px;border-top:1px dashed #90CAF9"><div style="font-size:12px;font-weight:800;color:#1565C0;margin-bottom:5px">👁 税理士など社外の方に見てもらう場合</div>'
     +'<div style="font-size:11px;color:#64748B;line-height:1.8;margin-bottom:7px">下のリンクは<b>閲覧専用</b>で開きます。編集・削除・設定はできません（アプリ側で通信ごと止めています）。<b>ただし数字は全部見えます。</b>信頼できる相手にだけ渡してください。</div>'
     +'<textarea id="viewLinkText" readonly onclick="this.select()" style="width:100%;box-sizing:border-box;height:70px;padding:8px;border:1.5px solid #90CAF9;border-radius:8px;font-size:11px;font-family:monospace;color:#0D47A1;background:#fff">'+h(origin+'admin.html?view=1#k='+encodeURIComponent(state.cloudKey)+'&u='+encodeURIComponent(state.cloudUrl||CLOUD_URL))+'</textarea>'
     +'<button class="add-btn" style="width:100%;margin-top:7px;background:#1565C0" onclick="copyViewLink()">📋 閲覧専用リンクをコピー</button></div>';
@@ -8545,7 +8621,8 @@ function renderLaborCost(){
 // 【v24.7】給与の実額・本名は公開コードに置かない（クラウドの給与設定 state.payroll._setup だけが正本）
 function _payrollMissingHtml(){
   if(state._ownerKeyNeeded) return '<div style="margin:8px 0 12px;padding:10px 12px;background:#FFF4E5;border:1.5px solid #F0B429;border-radius:9px;font-size:12px;color:#8A5A00;line-height:1.7">'
-    +'<b>🔑 この端末はまだオーナー用の合言葉になっていません</b><br>給与・経費などはオーナー用の合言葉でだけ表示されます。石上さんから届いた設定リンクを開いてください（ここで入力した給与・経費はクラウドに保存されません）。</div>';
+    +'<b>🔑 この端末はまだオーナー用の合言葉になっていません</b><br>給与・経費などはオーナー用の合言葉でだけ表示されます。石上さんから届いた設定リンクを開いてください（ここで入力した給与・経費はクラウドに保存されません）。'
+    +((typeof IS_VIEW_ONLY!=='undefined' && IS_VIEW_ONLY)?'':'<br><button class="add-btn" style="margin-top:8px;padding:10px 14px;background:#2C7A6E" onclick="pasteSetupLink()">📋 メールの設定リンクを貼り付ける</button>')+'</div>';
   return payrollSetup() ? '' : '<div style="margin:8px 0 12px;padding:10px 12px;background:#FFF4E5;border:1.5px solid #F0B429;border-radius:9px;font-size:12px;color:#8A5A00;line-height:1.7">'
     +'<b>⚠️ 給与設定がまだこの端末に届いていません</b><br>上の緑の帯をタップして同期してください（同期が終わると表示されます）。人件費・給与は届くまで0として表示されています。</div>';
 }
@@ -9485,10 +9562,13 @@ try{
     var _raw=location.hash.slice(3), _amp=_raw.indexOf('&');
     var _hk=decodeURIComponent(_amp>=0?_raw.slice(0,_amp):_raw).trim();
     var _hu=''; try{ var _um=_raw.match(/[&?]u=([^&]+)/); if(_um) _hu=_cleanCloudUrl(decodeURIComponent(_um[1])); }catch(e){}
+    var _hs=''; try{ var _sm=_raw.match(/[&?]s=([^&]+)/); if(_sm) _hs=decodeURIComponent(_sm[1]).trim(); }catch(e){}   // 【v24.9】オーナー用の設定リンクに付くスタッフ用の合言葉
     if(_hk){
       try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){ location.hash=''; }
       var _adoptHash=function(){
         state.cloudKey=_hk; state.cloudKeyCustom=true;
+        if(_hs && _hs!==_hk) state.staffKey=_hs;
+        state._keySplit=null; state._deviceRole='';
         // 保存先はリンクに含まれていればそれを、無ければアプリ標準を使う
         try{ state.cloudUrl=_hu||CLOUD_URL; state.cloudUrlCustom=!!(_hu && _hu!==CLOUD_URL); state.lastSyncError=''; }catch(e){}
         try{ saveLocal(); }catch(e){}
@@ -10108,7 +10188,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "24.8";
+var APP_VERSION = "24.9";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){

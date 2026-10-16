@@ -16,12 +16,13 @@ function run(file,label){
  global._cleanCloudUrl=u=>{const m=String(u||'').match(/https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec/);return m?m[0]:'';};
  let toasts=[]; global.showToast=t=>toasts.push(t);
  global.saveLocal=()=>{}; global.updateCloudStatus=()=>{}; global.syncFromCloud=()=>{};
+ global._staffRoleCheck=cb=>{ if(typeof cb==='function') cb(false); };   // v24.9: 役割の確認（ここでは「切り替えなし」）
  let syncAllCalls=0; global.syncAll=()=>{syncAllCalls++;};
  global.setTimeout=(fn,ms)=>{ if(ms<1000) fn(); return 1; };   // 12秒のタイムアウトは無視
  global.history={replaceState(){}}; global.location={hash:'',pathname:'/staff.html',search:''};
  global.syncAuthFailed=()=>/unauthorized/i.test(String(global.state.lastSyncError||''));
  global.syncAuthFailedRaw=global.syncAuthFailed;   // v23.5 で fin は生判定を使う
- eval('var _goodKeyTried=false; var _syncAllBusy=false;');
+ eval('var _goodKeyTried=false; var _staffKeyTried=false; var _syncAllBusy=false;');
  eval(grab('_probeKey')); eval(grab('applySetupKey'));
  const tick=()=>new Promise(r=>setImmediate(r));
  return (async()=>{
@@ -55,11 +56,11 @@ function run(file,label){
   const fs2=src.indexOf('  var fin=function(ok, err){'); const fe=src.indexOf('  };', fs2)+4;
   global.state={cloudKey:OLD, cloudUrl:CLOUD_URL, lastGoodKey:GOOD, lastGoodUrl:CLOUD_URL, lastSyncError:''};
   syncAllCalls=0; toasts=[];
-  eval('var silent=true; var _finDone=false; var _adoptTried=false; var _goodKeyTried=false;'+src.slice(fs2,fe)+'; fin(false,"unauthorized");');
+  eval('var silent=true; var _finDone=false; var _adoptTried=false; var _goodKeyTried=false; var _staffKeyTried=false;'+src.slice(fs2,fe)+'; fin(false,"unauthorized");');
   checks.push(['断られたら前に通った合言葉に戻してやり直す', state.cloudKey===GOOD && syncAllCalls===1 && state.lastSyncError==='']);
   // ④b 2回目は往復しない（同じ状態でもう一度 fin(false) → 戻さない）
   global.state={cloudKey:OLD, cloudUrl:CLOUD_URL, lastGoodKey:GOOD, lastGoodUrl:CLOUD_URL, lastSyncError:''}; syncAllCalls=0;
-  eval('var silent=true; var _finDone=false; var _adoptTried=false; var _goodKeyTried=true;'+src.slice(fs2,fe)+'; fin(false,"unauthorized");');
+  eval('var silent=true; var _finDone=false; var _adoptTried=false; var _goodKeyTried=true; var _staffKeyTried=false;'+src.slice(fs2,fe)+'; fin(false,"unauthorized");');
   checks.push(['戻すのは1回だけ（無限に往復しない）', state.cloudKey===OLD && syncAllCalls===0]);
   console.log('=== '+label+' ==='); checks.forEach(([n,v])=>console.log((v?'✅':'❌')+' '+n));
   return checks.every(c=>c[1]);

@@ -24,7 +24,7 @@ function run(file,label){
  global.isOnline=true; global.saveLocal=()=>{}; global.updateCloudStatus=()=>{}; global.showToast=()=>{};
  global.syncAll=()=>{}; global.CLOUD_URL='https://x/exec';
  global.state={cloudKey:'K', cloudUrl:CLOUD_URL, lastGoodKey:'K', lastGoodUrl:CLOUD_URL, lastSyncError:'', authFails:0, records:[]};
- const mk=()=>eval('var silent=true; var _finDone=false; var _adoptTried=true; var _goodKeyTried=true; var _syncAllBusy=true;'+src.slice(fs2,fe)+'; fin');
+ const mk=()=>eval('var silent=true; var _finDone=false; var _adoptTried=true; var _goodKeyTried=true; var _staffKeyTried=true; var _syncAllBusy=true;'+src.slice(fs2,fe)+'; fin');
  mk()(false,'unauthorized'); mk()(false,'unauthorized');
  checks.push(['失敗2回で authFails=2、60秒後の再試行を2回予約', state.authFails===2 && timers.filter(t=>t===60000).length===2]);
  mk()(false,'unauthorized');

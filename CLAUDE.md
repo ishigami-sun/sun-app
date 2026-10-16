@@ -147,6 +147,17 @@ What's New もスタッフ用は「使い方」だけにする（管理者向け
   **サーバーを owner_key.gs より前の doPost に戻してはいけない**（控えを消した staff v24.8 が空のまま送り、管理者専用マスタが消える）。
   無効にしたい時は `OWNER_KEY` を消すだけにする（この doPost のままなら、省いた項目は消えない）。
   回帰テスト: `node tools/test_owner_key_server.js`（模擬スプレッドシートで gas/ を実行）
+- **スタッフにオーナー用の合言葉を渡さない**（v24.9）。オーナー用の登録は `gas/owner_key_setup.gs` の `ownerKeySetup()` を
+  石上さんがエディタで実行（サーバーで合言葉を作り、本人のGmailに `admin.html#k=<オーナー用>&s=<スタッフ用>` と閲覧専用リンクを送る。
+  値は画面・ログ・チャットに出さない。Claude は合言葉を入力欄に打ち込まない）。
+  - admin: `state.staffKey`（`&s=` から。`*_conf` の `s` にも保存）。スタッフ用リンク・QR は `_staffKeyForLinks()` が `whoami` で決める
+    （この端末がオーナー用なら staffKey を `role==='staff'` と確かめて使う／分からない時は作らない）。この端末がスタッフ用の時は閲覧専用リンクを出さない。
+    オーナー用が2回続けて断られたら（OWNER_KEY を消した等）控えた staffKey で1回やり直す（`_staffKeyTried`）。
+  - staff: `_staffRoleCheck()` が合言葉を入れた直後・起動時・同期成功後に `whoami` し、オーナー用（分割済み）なら
+    `_altStaffKey`（`s=`）か同じ携帯の管理者版の控え（`sun_cloud_admin_conf.s`）をスタッフ用と確かめて切り替え、`_adminMasters` を捨てて全件取り込み直す。
+    `adoptAdminConfigIfAny` は管理者版の staffKey を優先する。
+  - 貼り付け欄（1行）は改行が消えるので、`s=` は ASCII の記号・英数字だけ読む。
+  回帰テスト: `node tools/test_owner_key_setup.js`
 - 日報の重複は `dedupeRecordsById()` が同一IDを自動で1件に統合する
 - **`state.records` からローカル分を落としてよいのは `_cs` 印が付いているものだけ**（v22.7）。
   `_cs` は「クラウドで実在を確認できた」印で、`syncFromCloud` / `pushAndSync` の取得結果と
