@@ -4258,7 +4258,8 @@ function syncAll(silent){
   // 自動同期（silent）は直近1分以内に成功していれば省略する。
   // 今日は全端末が一斉に自動同期を始めるため、サーバーへの連続アクセスを抑える。
   // 手動タップ（silent=false）はいつでも実行する
-  if(silent && state.lastFullSync && (Date.now()-state.lastFullSync) < 60*1000) return;
+  // 【v24.5】容量不足で日報を保存できなかった端末（保存側の lastFullPullAt=0）は、開き直した直後でも必ず取り込む
+  if(silent && state.lastFullSync && state.lastFullPullAt && (Date.now()-state.lastFullSync) < 60*1000) return;
   _syncAllBusy=true;
   if(!silent && typeof showToast==='function') showToast('🔄 同期中…そのままお待ちください');
   var _finDone=false;
@@ -4564,42 +4565,48 @@ function _recordDays(){
   if(state && state._lowStorage){ return (base>0 && base<60) ? base : 60; }
   return base;
 }
-function _shrinkForQuota(level){
-  // 容量超過時の自動回復。level1: 再送キューの掃除 / level2: 古い日報を端末から外す（クラウドには残る）
+function _shrinkForQuota(level, snap){
+  // 容量超過時の自動回復。level1: 再送キューの掃除 / level2: 古い日報を保存から外す / level3: 届いた日報を保存から外す
+  // 【v24.5】snap（保存用の写し）を渡された時は、写しだけを軽くする。画面用の state.records は減らさない。
+  // 以前は state 本体から日報を外していたため、容量いっぱいの端末では同期のたびに画面の日報が0件になり、
+  // 売上・人件費・給与集計がすべて0、月の選択肢が今月だけになっていた（石上さんの携帯、10/16）。
+  // クラウドには全部あるので、保存できなかった分は次に開いた時の全件取り込みで戻る。
+  var T = snap || state;
   try{
     if(level===1){
       var before=(syncQueue||[]).length;
       syncQueue=(syncQueue||[]).filter(function(it){ return it && (it.action==='addRecord'||it.action==='deleteRecord'); }).slice(-100);
-      state._syncQueue=syncQueue;
+      state._syncQueue=syncQueue; T._syncQueue=syncQueue;
       return syncQueue.length<before;
     }
-    if(level===2 && (_recordDays()>0 || true)){
-      // 容量不足の端末はここで60日に切り詰める（LOCAL_RECORD_DAYS=0 の管理者版でも効く）
+    if(level===2){
+      // 容量不足の端末は保存を60日に切り詰める（LOCAL_RECORD_DAYS=0 の管理者版でも効く）。まだ届いていない日報は残す
       if(!state._lowStorage) state._lowStorage=Date.now();
-      var cut=Date.now()-_recordDays()*86400000, n0=(state.records||[]).length;
-      state.records=(state.records||[]).filter(function(r){ var t=new Date(r&&r.time).getTime(); return !(t>0 && t<cut); });
-      return state.records.length<n0;
+      T._lowStorage=state._lowStorage;
+      if(snap){ delete T._rcRows; delete T._rcSummary; }   // 照合結果の表示用キャッシュ（保存しなくてよい）
+      var cut=Date.now()-_recordDays()*86400000, n0=(T.records||[]).length;
+      T.records=(T.records||[]).filter(function(r){ if(r && !r._cs) return true; var t=new Date(r&&r.time).getTime(); return !(t>0 && t<cut); });
+      return T.records.length<n0;
     }
     if(level===3){
       // 最後の手段。ここで諦めると設定ごと保存できず、端末が初期状態に戻ってしまう。
-      // クラウドで確認できている日報(_cs印あり)は端末から外す。クラウドには残っているので
-      // 次の同期で必要な分だけ戻る。まだ届いていない日報(_cs印なし)は絶対に外さない。
-      var m0=(state.records||[]).length;
+      // クラウドで確認できている日報(_cs印あり)は保存から外す。まだ届いていない日報(_cs印なし)は絶対に外さない。
+      var m0=(T.records||[]).length;
       if(state._csReady){
-        state.records=(state.records||[]).filter(function(r){ return r && !r._cs; });
+        T.records=(T.records||[]).filter(function(r){ return r && !r._cs; });
       } else {
-        state.records=(state.records||[]).slice(-200);
+        T.records=(T.records||[]).slice(-200);
       }
-      // 【v23.8】外したぶんは差分同期では戻ってこない。次の同期を必ず全件から始め、
+      // 【v23.8】外したぶんは差分同期では戻ってこない。次に開いた時は必ず全件から始め、
       // 以後この端末は直近60日だけ保持する（また容量オーバーで全部外す、を繰り返さない）
-      state._lowStorage=Date.now();
-      state.syncSince=0; state.lastFullPullAt=0;
-      return state.records.length<m0;
+      state._lowStorage=Date.now(); T._lowStorage=state._lowStorage;
+      T.syncSince=0; T.lastFullPullAt=0;
+      if(snap){ delete T._rcRows; delete T._rcSummary; }
+      return T.records.length<m0;
     }
   }catch(e){}
   return false;
-}
-/* ===== 🔑 接続設定だけを別枠で保存（v23.0）
+}/* ===== 🔑 接続設定だけを別枠で保存（v23.0）
    端末の保存容量がいっぱいだと localStorage.setItem がすべて失敗し、
    同期の設定（保存先URL・合言葉）まで保存されずに消えていた。
    結果、設定して同期 → 容量オーバーで保存できない → 開き直すと
@@ -4626,12 +4633,14 @@ function saveLocal(){
   _saveCloudConf();   // 先に設定だけ確保する（本体の保存が失敗しても設定は残る）
   try{ if(state.deletedIds && state.deletedIds.length>2000){ state.deletedIds=state.deletedIds.slice(-1000); } }catch(e){}
   state._syncQueue=syncQueue; /* 未送信キューも一緒に永続化（リロードで消えないように） */
+  var _snap=null;   // 【v24.5】容量不足の時は「保存用の写し」だけを軽くする（画面のデータは減らさない）
   for(var lv=0; lv<=3; lv++){
-    try{ localStorage.setItem('sun_cloud_admin',JSON.stringify(state)); _costCache={}; return; }
+    try{ localStorage.setItem('sun_cloud_admin',JSON.stringify(_snap||state)); _costCache={}; return; }
     catch(e){
       var isQuota = e && (e.name==='QuotaExceededError' || /quota/i.test(String(e&&e.message||e)));
       if(!isQuota){ _costCache={}; return; }
-      _shrinkForQuota(lv+1);   // 軽くしてもう一度
+      if(!_snap){ _snap={}; for(var _sk in state) _snap[_sk]=state[_sk]; }
+      _shrinkForQuota(lv+1, _snap);   // 写しを軽くしてもう一度
     }
   }
   if(!_quotaWarned){ _quotaWarned=true; try{ showToast('⚠️ この端末は保存容量がいっぱいなので、直近60日分だけ手元に置きます（クラウドには全部残っています）'); }catch(x){} }
@@ -10066,7 +10075,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "24.4";
+var APP_VERSION = "24.5";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){

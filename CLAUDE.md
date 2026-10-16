@@ -109,6 +109,14 @@ What's New もスタッフ用は「使い方」だけにする（管理者向け
   端末が保持する日数は `_recordDays()`（通常は `LOCAL_RECORD_DAYS`、`_lowStorage` の端末は60日。admin の 0=全件 でも60）。
   `canDelta` は `state.records.length>0` を要求する。**同じ端末に admin と staff の両方を入れると localStorage を
   2重に使う**（石上さんの携帯）。回帰テスト: `node tools/test_low_storage.js`
+- **容量不足でも画面用の `state.records` は減らさない**（v24.5）。`saveLocal` は保存に失敗したら state の写し（`_snap`）を作り、
+  `_shrinkForQuota(level, _snap)` で**写しだけ**を軽くして保存する（level2: 60日＋未送信、level3: 未送信だけ＋写しの
+  `syncSince=0`/`lastFullPullAt=0`、照合キャッシュ `_rcRows` は写しから外す）。`_lowStorage` は state にも立てる。
+  `syncAll` は `lastFullPullAt` が 0 の時は60秒以内でも省略しない（保存できなかった端末は開き直したら必ず全件取り込む）。
+
+  > 過去の事故: 以前は state 本体から日報を外していたため、容量いっぱいの端末（admin と staff を同じ携帯に入れた石上さん）で
+  > 同期のたびに画面の日報が0件になり、売上・人件費・給与集計が0、月の選択肢が今月だけになった（10/16）。
+  > 回帰テスト: `node tools/test_quota_keeps_display.js`
 - **マスタ送信（saveMasters）は必ず `_mastersPayload()` の全項目で送る**（v24.2）。サーバーの saveMasters は
   「送った項目だけ」で masters シート全体を置き換える。項目を減らして送る経路を1つでも作ると、
   経費・給与・laborSales・hpsTowel・staffTypes（admin 専用）がクラウドから消える。
@@ -179,7 +187,7 @@ What's New もスタッフ用は「使い方」だけにする（管理者向け
 
 ## いまの宿題（2026-09-13 時点）
 
-- **v24.5: 給与のシード値 `_PAYROLL_SEED_ROWS` / `_PAYROLL_SEED_FIXED` を admin.html から消す**（公開コードから実額と本名を外す）。
+- **v24.6: 給与のシード値 `_PAYROLL_SEED_ROWS` / `_PAYROLL_SEED_FIXED` を admin.html から消す**（公開コードから実額と本名を外す）。
   消す前に、石上さんの管理画面（管理タブ「⚙️ 給与設定」）で給与設定がクラウドに入ったことを確認する
   （別の端末の管理画面にも同じ値が出れば確認できた）。`payrollRows()` / `payrollFixedOnly()` のフォールバックは空配列にする。
   あわせて `renderPayrollExport()` 内の「アシスタントの施術売上」参考欄に、アプリ名と姓が直書きされている。
@@ -210,7 +218,7 @@ admin の管理タブ「⚙️ 給与設定」で編集し、`state.payroll._set
 - rows の項目: `app`（アプリ名・姓ベース）／`xls`（給与明細の氏名）／`row`（エクセル行）／`base`／`ot`／`post`／`postName`／`commute`／`assistant`
 - fixedOnly の項目: `name`／`amount`（歩合なしの役員等）
 - `_ensurePayrollSetup()` が `init()` で、`_setup` が無い端末にだけ初期値（`_PAYROLL_SEED_*`）を古い日時で入れる。
-  あとから誰かが編集した値が必ず勝つ。**v24.5 でこの初期値を消す**（いまの宿題）。
+  あとから誰かが編集した値が必ず勝つ。**v24.6 でこの初期値を消す**（いまの宿題）。
 - 給与額に変更があったら「⚙️ 給与設定」で直す。コードは触らない。
 
 **技術歩合（特別技術手当）** — 税抜売上に対する段階積み上げ。**50万円未満は歩合ゼロ**（大きな段差）。
