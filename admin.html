@@ -4592,7 +4592,8 @@ function _shrinkForQuota(level, snap){
       var cut=Date.now()-_recordDays()*86400000, n0=(T.records||[]).length;
       T.records=(T.records||[]).filter(function(r){ if(r && !r._cs) return true; var t=new Date(r&&r.time).getTime(); return !(t>0 && t<cut); });
       // 写しから外した時は、次に開いた時に差分ではなく全件から取り込む（画面は全期間を持つため）
-      if(snap && T.records.length<n0){ T.syncSince=0; T.lastFullPullAt=0; }
+      // （画面のほうが保存より長く持っている時だけ。staff の容量不足時は画面も60日なので、日付の境目で外れても全件にしない）
+      if(snap && T.records.length<n0 && (_memRecordDays()===0 || _memRecordDays()>_recordDays())){ T.syncSince=0; T.lastFullPullAt=0; }
       return T.records.length<n0;
     }
     if(level===3){
