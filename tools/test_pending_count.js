@@ -21,7 +21,7 @@ function run(file,label){
  global.isOnline=true; global.normalizeCloudConfig=()=>false; global.saveLocal=()=>{}; global.updateCloudStatus=()=>{};
  global._enqueueRetry=()=>{}; global.IS_VIEW_ONLY=false; global.VIEW_ONLY_READS={getAll:1};
  global.fetch=()=>Promise.resolve({ status:200, text:()=>Promise.resolve(JSON.stringify({ok:true})) });
- eval(grab('callCloud'));
+ eval(grab('_noteAdminOnlyHidden')); eval(grab('callCloud'));
  return new Promise(res=>{
    callCloud('addRecord', {record:{id:2,total:200}}, function(){
      const rec2=state.records.find(r=>r.id===2);

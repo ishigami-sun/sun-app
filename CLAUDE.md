@@ -136,6 +136,15 @@ What's New もスタッフ用は「使い方」だけにする（管理者向け
   > `save()`→`saveMastersToCloud()` を呼び、取り込み前の空のマスタで saveMasters していた。模擬サーバーで
   > admin・staff とも、クラウドの経費・給与（月別）が消えることを再現（10/16）。
   > 回帰テスト: `node tools/test_new_device_no_push.js`
+- **オーナー用の合言葉（v24.8・サーバー `gas/owner_key.gs`）**: スクリプト プロパティ `OWNER_KEY` を登録すると、
+  `SECRET_KEY`（スタッフ用）の応答から管理者専用マスタ（`ADMIN_ONLY_MASTERS` と同じ5項目）を外し `adminOnlyHidden:true` を付ける。
+  スタッフ用の saveMasters は管理者専用の項目をサーバーの今の値に差し替えて保存する（送った値は使わない・行が壊れていたら保存しない）。
+  `OWNER_KEY` 未登録の間は従来どおり（SECRET_KEY で全部見える）。`whoami` アクションで role を確かめられる。
+  アプリは `callCloud` の応答で `_noteAdminOnlyHidden()` を呼び、staff は `_adminMasters` を消す、admin は `state._ownerKeyNeeded` を立てて
+  給与集計・人件費・P&L に「オーナー用の合言葉になっていません」を出す。管理画面の切り替えは設定リンク `admin.html#k=<オーナー用>`（`_probeKey` 経由）。
+  **`OWNER_KEY` を消して元に戻す時は注意**: 消した直後の staff 端末は控えが空なので、取り込み（getAll）前に saveMasters すると管理者専用マスタが消える。
+  戻す時はまず staff が一度同期して控えを取り戻すのを待つか、`saveMasters` の取り直しが入る経路だけになっていることを確認する。
+  回帰テスト: `node tools/test_owner_key_server.js`（模擬スプレッドシートで gas/ を実行）
 - 日報の重複は `dedupeRecordsById()` が同一IDを自動で1件に統合する
 - **`state.records` からローカル分を落としてよいのは `_cs` 印が付いているものだけ**（v22.7）。
   `_cs` は「クラウドで実在を確認できた」印で、`syncFromCloud` / `pushAndSync` の取得結果と
