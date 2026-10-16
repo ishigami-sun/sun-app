@@ -31,7 +31,8 @@ for(const f of ['admin.html','staff.html']){
   const src=fs.readFileSync('/home/user/sun-app/'+f,'utf8'); const cc=grab(src,'callCloud');
   t(f+': callCloud は取り込み前の saveMasters を送らない', /action==='saveMasters' && !state\.lastFullSync/.test(cc) && cc.indexOf("action==='saveMasters' && !state.lastFullSync") < cc.indexOf('fetch('));
   const pr=grab(src,'_pullReportsThenPush');
-  t(f+': 送信前の取り直しで管理者専用マスタの控えも更新する', /ADMIN_ONLY_MASTERS/.test(pr) && /_adminMasters/.test(pr));
+  t(f+': 送信前の取り直しで、staff は管理者専用マスタの控え・admin は月別マスタを統合する', /ADMIN_ONLY_MASTERS/.test(pr) && /_adminMasters/.test(pr) && /'expenses','payroll','hpsTowel','laborSales','airegi'/.test(pr) && /mergeByMonthKey/.test(pr));
+  t(f+': 削除履歴の無いマスタ（研修動画など）は送信前に統合しない', !/_applyCloudMasters/.test(pr) && !/eduVideos/.test(pr.replace(/\/\/.*$/mg,'')));
 }
 // admin と staff で同じ中身であること
 const A=fs.readFileSync('/home/user/sun-app/admin.html','utf8'), S=fs.readFileSync('/home/user/sun-app/staff.html','utf8');

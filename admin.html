@@ -4690,10 +4690,16 @@ function _pullReportsThenPush(next){
         if(res && res.ok && res.masters){
           if(res.masters.deletedMasters && typeof mergeDeletedMasters==='function') mergeDeletedMasters(res.masters.deletedMasters);
           if(res.masters.reports) state.reports = mergeMasterById(state.reports||[], res.masters.reports, delSetOf('reports'));
-          // 【v24.4】スタッフ版：管理者専用マスタ（経費・給与など）の控えも最新にしてから返す。
-          // 古い控えのまま送ると、直前に管理者が保存した経費・給与設定がクラウドで古い内容に戻る
           if(typeof ADMIN_ONLY_MASTERS!=='undefined'){
+            // 【v24.4】スタッフ版：管理者専用マスタ（経費・給与など）の控えも最新にしてから返す
             try{ var _keep2=state._adminMasters||{}; for(var _aj=0;_aj<ADMIN_ONLY_MASTERS.length;_aj++){ var _ak2=ADMIN_ONLY_MASTERS[_aj]; if(res.masters[_ak2]!=null) _keep2[_ak2]=res.masters[_ak2]; } state._adminMasters=_keep2; }catch(e){}
+          } else {
+            // 【v24.7】管理者版：月ごとに更新日時を持つマスタ（経費・給与・給与設定・タオル・技術売上・エアレジ）は、
+            // 送る前にクラウドと統合する（新しい方が勝つ・片方にしか無い月は残る）。取り込み済みでも中身が古い端末が
+            // そのまま送ると、他の端末が保存した新しい値がクラウドで古く戻っていたため。
+            // ※ 削除履歴を持たないマスタ（研修動画・ブランドなど）はここで統合しない（端末での削除・並べ替えが戻るため）
+            var _mk=['expenses','payroll','hpsTowel','laborSales','airegi'];
+            for(var _mi=0;_mi<_mk.length;_mi++){ var _k3=_mk[_mi]; if(res.masters[_k3] && typeof mergeByMonthKey==='function') state[_k3]=mergeByMonthKey(state[_k3], res.masters[_k3]); }
           }
           try{ saveLocal(); }catch(e){}
         }
@@ -4875,7 +4881,6 @@ function init(){
   /* PIN無効 */
 
   if(!state.staff||!state.staff.length) state.staff=['石上（代表）','花岡（店長）','林（副店長）','東（数字リーダー）','堀井（教育リーダー）','梅田','カノン'];
-  try{ _ensurePayrollSetup(); }catch(e){}
   try{ if(typeof migrateStaffRoles==='function') migrateStaffRoles(); }catch(e){} // 2026/8〜の役職変更を名簿に反映（既存端末）
   if(!state.mediaList||!state.mediaList.length) state.mediaList=['ホットペッパー','楽天ビューティー','Instagram','LINE','Google','ホームページ','口コミ','紹介','ビューティーメリット','友達紹介','DM','TikTok','その他'];
   // 支払い方法は代表5種に固定（毎回上書き・編集不可・同期でも変わらない）
@@ -8481,7 +8486,7 @@ function renderLaborCost(){
   for(var key in agg) shopSales+=Math.round(agg[key].menuInc/1.1)+Math.round(agg[key].sell/1.1);
   var ratio = shopSales>0 ? (company/shopSales*100) : 0;
 
-  var s='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:620px">';
+  var s=_payrollMissingHtml()+'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:620px">';
   s+='<tr style="background:#E8F5E9"><th style="border:1px solid #A5D6A7;padding:5px">氏名</th>'
    +'<th style="border:1px solid #A5D6A7;padding:5px">技術売上(税抜)</th><th style="border:1px solid #A5D6A7;padding:5px">技術歩合</th>'
    +'<th style="border:1px solid #A5D6A7;padding:5px">物販歩合</th><th style="border:1px solid #A5D6A7;padding:5px">HPS</th>'
@@ -8504,7 +8509,7 @@ function renderLaborCost(){
   s+='</table></div>';
   s+='<div style="margin-top:10px;padding:11px;background:#fff;border:2px solid #1B5E20;border-radius:10px;font-size:13px;line-height:2">'
    +'<div style="display:flex;justify-content:space-between"><span>6名の支給見込</span><b>¥'+num(totalPay)+'</b></div>'
-   +'<div style="display:flex;justify-content:space-between"><span>（氏名）・麻里子（固定）</span><b>¥'+num(fixedOnly)+'</b></div>'
+   +'<div style="display:flex;justify-content:space-between"><span>'+(FO.length?FO.map(function(f){ return h(f.name); }).join('・'):'役員など')+'（固定）</span><b>¥'+num(fixedOnly)+'</b></div>'
    +'<div style="display:flex;justify-content:space-between;border-top:1px solid #C8E6C9;padding-top:4px"><span>給与合計</span><b>¥'+num(grossPay)+'</b></div>'
    +'<div style="display:flex;justify-content:space-between;color:#64748B;font-size:12px"><span>＋会社負担の社会保険（概算'+(Math.round(SOCIAL_INSURANCE_RATE*1000)/10)+'%）</span><span>¥'+num(company-grossPay)+'</span></div>'
    +'<div style="display:flex;justify-content:space-between;font-size:15px;color:#1B5E20;border-top:2px solid #1B5E20;padding-top:5px"><b>会社が払う総額</b><b>¥'+num(company)+'</b></div>'
@@ -8524,20 +8529,11 @@ function renderLaborCost(){
    H列=店販売値(税込) / I列=原価 → アプリの物販データから自動集計
    P列=ヒポポタマスのタオル売上(税込) → HPSの請求書を見て手入力（アプリ外のデータ）
    歩合の計算式はエクセルと同一にしてある（照合用） ===== */
-// v24.7で削除する初期値。クラウドの給与設定（state.payroll._setup）が優先される
-var _PAYROLL_SEED_ROWS=[
-  {app:'花岡', xls:'（氏名）', row:7,  base:0, ot:0, post:0, postName:'店長手当',   commute:10000},
-  {app:'堀井', xls:'（氏名）',  row:8,  base:123450, ot:0, post:0,  postName:'リーダー手当', commute:10000},
-  {app:'東',   xls:'（氏名）',    row:9,  base:123450, ot:0, post:0,  postName:'リーダー手当', commute:10000},
-  {app:'梅田', xls:'（氏名）',  row:10, base:123450, ot:0, post:0,      postName:'',           commute:10000, assistant:true},
-  {app:'カノン', xls:'（氏名）', row:11, base:123450, ot:0, post:0,      postName:'',           commute:10000, assistant:true},
-  {app:'林',   xls:'（氏名）',    row:12, base:123450, ot:0, post:0,  postName:'副店長手当',  commute:10000}
-];
-// 歩合の対象外（固定給のみ）。v24.7で削除する初期値（クラウドの給与設定が優先）
-var _PAYROLL_SEED_FIXED=[
-  {name:'（氏名）', amount:0},
-  {name:'（氏名）', amount:0}
-];
+// 【v24.7】給与の実額・本名は公開コードに置かない（クラウドの給与設定 state.payroll._setup だけが正本）
+function _payrollMissingHtml(){
+  return payrollSetup() ? '' : '<div style="margin:8px 0 12px;padding:10px 12px;background:#FFF4E5;border:1.5px solid #F0B429;border-radius:9px;font-size:12px;color:#8A5A00;line-height:1.7">'
+    +'<b>⚠️ 給与設定がまだこの端末に届いていません</b><br>上の緑の帯をタップして同期してください（同期が終わると表示されます）。人件費・給与は届くまで0として表示されています。</div>';
+}
 /* ===== ⚙️ 給与設定（v24.4）: 固定給の実額は公開コードに置かず、クラウドの admin 専用マスタに持つ
    保存先は state.payroll._setup = {rows, fixedOnly, updatedAt}（月キーと同じ updatedAt の新しい方が勝つ） ===== */
 var PAYROLL_SEED_AT='2026-09-10T00:00:00.000Z';   // 初期値の日時（あとから編集した値が必ず勝つように古くしてある）
@@ -8545,19 +8541,8 @@ function payrollSetup(){
   var p=state.payroll&&state.payroll._setup;
   return (p&&Array.isArray(p.rows))?p:null;
 }
-function payrollRows(){ var p=payrollSetup(); return p?p.rows:_PAYROLL_SEED_ROWS; }
-function payrollFixedOnly(){ var p=payrollSetup(); return (p&&Array.isArray(p.fixedOnly))?p.fixedOnly:_PAYROLL_SEED_FIXED; }
-function _ensurePayrollSetup(){
-  try{
-    if(payrollSetup()) return;
-    if(!state.payroll||typeof state.payroll!=='object') state.payroll={};
-    state.payroll._setup={rows:JSON.parse(JSON.stringify(_PAYROLL_SEED_ROWS)), fixedOnly:JSON.parse(JSON.stringify(_PAYROLL_SEED_FIXED)), updatedAt:PAYROLL_SEED_AT};
-    // save() は呼ばない：save() はその場でマスタを送るため、起動直後（まだ取り込み前）の古い経費などで
-    // クラウドを上書きしてしまう。印だけ立てて、syncAll の「取り込み→日報→マスタ」の順で送らせる。
-    state._mastersDirty=true;
-    try{ saveLocal(); }catch(e2){}
-  }catch(e){}
-}
+function payrollRows(){ var p=payrollSetup(); return p?p.rows:[]; }
+function payrollFixedOnly(){ var p=payrollSetup(); return (p&&Array.isArray(p.fixedOnly))?p.fixedOnly:[]; }
 // 全角数字・カンマ・¥・円を許容して 0 以上の整数にする（マイナスは 0）
 function _psNum(v){
   var s=String(v==null?'':v).replace(/[０-９]/g,function(c){ return String.fromCharCode(c.charCodeAt(0)-0xFEE0); });
@@ -8595,7 +8580,7 @@ function renderPayrollSetupEditor(){
   var d=window._psDraft||{rows:payrollRows(), fixedOnly:payrollFixedOnly()};
   var su=payrollSetup();
   var at=(su&&su.updatedAt)||'';
-  var atTxt=!at?'未保存（初期値）':(at===PAYROLL_SEED_AT?'初期値（まだ編集していません）':new Date(at).toLocaleString('ja-JP'));
+  var atTxt=!at?'未登録':(at===PAYROLL_SEED_AT?'初期値（まだ編集していません）':new Date(at).toLocaleString('ja-JP'));
   var inp='width:100%;box-sizing:border-box;padding:7px;border:1.5px solid #C8E0DC;border-radius:7px;font-size:13px;';
   var lab='font-size:10px;color:#64748B;font-weight:700;margin-bottom:2px';
   function f(label,id,val,num){
@@ -8640,6 +8625,11 @@ function savePayrollSetup(){
   var fixedOnly=d.fixedOnly.filter(function(r){ return r.name; });
   for(var e2=0;e2<rows.length;e2++){ if(/['"\\<>&]/.test(rows[e2].app+rows[e2].xls)){ showToast('⚠️ 名前に記号（\' " < > & \\）は使えません'); return; } }
   if(!rows.length){ showToast('⚠️ 給与の行が1つもありません'); return; }
+  // 【v24.7】この端末にまだ給与設定が届いていない時は、同期が通ってからでないと保存しない
+  // （取り込みに失敗している端末で登録すると、新しい日時が付いてクラウドの本物を上書きしてしまう）
+  if(!payrollSetup() && !(state.lastFullSync && (Date.now()-state.lastFullSync) < 10*60*1000)){
+    showToast('⚠️ 先に上の緑の帯をタップして同期してください（クラウドの給与設定を上書きしないため）'); return;
+  }
   var seen={};
   for(var i=0;i<rows.length;i++){
     if(seen[rows[i].app]){ showToast('⚠️ アプリ名「'+rows[i].app+'」が重複しています'); return; }
@@ -8745,7 +8735,7 @@ function renderPayrollExport(){
   var towel=hpsMap(ym);
   var PR=payrollRows();
 
-  var s=renderPayrollSetupEditor();
+  var s=_payrollMissingHtml()+renderPayrollSetupEditor();
   s+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:560px">';
   s+='<tr style="background:#EAF5F3"><th style="border:1px solid #C8E0DC;padding:6px">エクセルの氏名</th>'
    +'<th style="border:1px solid #C8E0DC;padding:6px">H列<br>店販売値(税込)</th>'
@@ -8792,7 +8782,7 @@ function renderPayrollExport(){
   // アシスタントのヘッドスパ等（C列の参考）
   s+='<div style="margin-top:10px;padding:9px 11px;background:#F0F7F6;border-left:3px solid #2C7A6E;border-radius:6px;font-size:11px;color:#1A4F47;line-height:1.8">'
    +'<b>参考：アシスタントの施術売上（エクセルC列「ﾍｯﾄﾞｽﾊﾟ他」の目安）</b><br>'
-   +'梅田 '+num(Math.round((agg['梅田']||{menuInc:0}).menuInc))+'円（税込）／ 植村(カノン) '+num(Math.round((agg['カノン']||{menuInc:0}).menuInc))+'円（税込）<br>'
+   +(function(){ var a=[]; for(var ai=0;ai<PR.length;ai++){ if(PR[ai].assistant) a.push(h(PR[ai].app)+' '+num(Math.round((agg[PR[ai].app]||{menuInc:0}).menuInc))+'円（税込）'); } return a.length?a.join('／ '):'（アシスタントの登録なし）'; })()+'<br>'
    +'<span style="color:#64748B">※エクセルは税抜で入力されています。エアレジの数字と合わせてご判断ください。</span></div>';
 
   // エクセル貼り付け用
@@ -8869,10 +8859,10 @@ function setPnlCustomMonth(val){
 }
 
 /* ===== P&L 人件費（自動計算）＋経費＋損益サマリー ===== */
-var PNL_BASE=0; // 基本給+定額残業+交通費
-var PNL_POST_MANAGER=0, PNL_POST_SUB=0, PNL_POST_LEADER=0;
+var PNL_BASE=0; // 旧概算式 pnlPayroll_old_ 用（未使用・v24.7で実額を削除）
+var PNL_POST_MANAGER=0, PNL_POST_SUB=0, PNL_POST_LEADER=0; // 旧概算式用（未使用・v24.7で実額を削除）
 var PNL_AXA=30000;   // アクサ積立（損金不算入：参考のみ）
-var PNL_OFFICER_PAY=0; // 石上（代表）役員報酬
+var PNL_OFFICER_PAY=0; // 旧概算式 pnlPayroll_old_ 用（未使用）。役員報酬は「⚙️ 給与設定」の固定のみに登録する（v24.7）
 var PNL_EXP=[
   {k:'家賃（本館）', def:352000, note:'本館605,000−転貸253,000'},
   {k:'家賃（別邸）', def:374000, note:'別館'},
@@ -9160,7 +9150,7 @@ function pnlExtraHtml(filtered,totalSell,prodCost,feeAmount){
   html+=prLaborAlertHtml(laborTotal, totalSell);
   // 人件費（給与エクセルと同じ式）
   html+='<div class="pnl-section">';
-  html+='<div class="pnl-section-title">👥 人件費（給与エクセルと同じ式）</div>';
+  html+='<div class="pnl-section-title">👥 人件費（給与エクセルと同じ式）</div>'+_payrollMissingHtml();
   html+='<div style="font-size:11px;color:#64748B;margin-bottom:8px;line-height:1.7">管理タブ「人件費の見通し」と同じ計算です。技術売上はエアレジの数字を入れた月はそれを、入れていない月はアプリの税抜目安を使います。ヒポポタマスのタオルは管理タブで入力した請求額から。</div>';
   for(var i=0;i<pay.rows.length;i++){
     var rw=pay.rows[i];
@@ -10103,7 +10093,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "24.6";
+var APP_VERSION = "24.7";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
