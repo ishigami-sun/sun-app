@@ -12,7 +12,7 @@ function run(file,KEY,label){
    setItem:(k,v)=>{ const other=Object.entries(store).filter(([kk])=>kk!==k).reduce((s,[kk,vv])=>s+kk.length+vv.length,0);
      if(other+k.length+String(v).length>LIMIT){ const e=new Error('quota'); e.name='QuotaExceededError'; throw e; } store[k]=String(v); },
    removeItem:k=>{delete store[k];} }; return store; }
- global.showToast=()=>{}; global._costCache={}; global.syncQueue=[]; global._quotaWarned=false; global._quotaLevel=0;
+ global.showToast=()=>{}; global._costCache={}; global.syncQueue=[]; global._quotaWarned=false; global._quotaLevel=0; global.MEM_KEEP_ALL_ON_LOW_STORAGE=true;
  eval(grab('_recordDays')); eval(grab('_memRecordDays')); eval(grab('_shrinkForQuota')); eval(grab('_saveCloudConf')); eval(grab('_loadCloudConf')); eval(grab('saveLocal'));
  const now=Date.now(), day=86400000;
  function mk(){ const a=[];
@@ -59,8 +59,12 @@ const A=fs.readFileSync('/home/user/sun-app/admin.html','utf8'), S=fs.readFileSy
 function g(src,n){const i=src.indexOf('function '+n+'(');let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}}
 for(const [src,lbl,days] of [[A,'admin',0],[S,'staff',150]]){
   const m=src.match(/var LOCAL_RECORD_DAYS\s*=\s*(\d+)/); global.LOCAL_RECORD_DAYS=Number(m[1]);
+  const f=src.match(/var MEM_KEEP_ALL_ON_LOW_STORAGE\s*=\s*(true|false)/); global.MEM_KEEP_ALL_ON_LOW_STORAGE=(f[1]==='true');
   global.state={_lowStorage:Date.now()}; eval(g(src,'_memRecordDays')); eval(g(src,'_recordDays'));
-  all.push([lbl+': 容量不足でも画面の日数は設定どおり（'+m[1]+'）・保存は60日', _memRecordDays()===Number(m[1]) && _recordDays()===60]);
+  const lowMem=_memRecordDays(); global.state={}; const normMem=_memRecordDays(); global.state={_lowStorage:Date.now()};
+  if(lbl==='admin') all.push([lbl+': 容量不足でも画面は全期間（'+m[1]+'=全件）・保存は60日', lowMem===0 && normMem===0 && _recordDays()===60]);
+  else all.push([lbl+': 容量不足の端末は画面も60日（開くたびの全件取り込みを避ける）・通常は'+m[1]+'日', lowMem===60 && normMem===Number(m[1])]);
+  all.push([lbl+': syncAll は lastFullPullAt=0 なら60秒以内でも省略しない', /if\(silent && state\.lastFullSync && state\.lastFullPullAt && \(Date\.now\(\)-state\.lastFullSync\) < 60\*1000\) return;/.test(g(src,'syncAll'))]);
   all.push([lbl+': 画面の切り詰めに _recordDays を使っていない', !/if\(_recordDays\(\)>0\)/.test(src)]);
 }
 all.push(['_shrinkForQuota は admin と staff で同一', g(A,'_shrinkForQuota')===g(S,'_shrinkForQuota')]);

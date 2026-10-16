@@ -113,7 +113,8 @@ What's New もスタッフ用は「使い方」だけにする（管理者向け
   `_shrinkForQuota(level, _snap)` で**写しだけ**を軽くして保存する（level2: 60日＋未送信、level3: 未送信だけ＋写しの
   `syncSince=0`/`lastFullPullAt=0`、照合キャッシュ `_rcRows` は写しから外す）。`_lowStorage` は state にも立てる。
   `syncAll` は `lastFullPullAt` が 0 の時は60秒以内でも省略しない（保存できなかった端末は開き直したら必ず全件取り込む）。
-  画面用の切り詰めは `_memRecordDays()`（＝`LOCAL_RECORD_DAYS`。容量不足でも60日にしない）、保存用は `_recordDays()`（容量不足は60日）。
+  画面用の切り詰めは `_memRecordDays()`、保存用は `_recordDays()`（容量不足は60日）。admin は `MEM_KEEP_ALL_ON_LOW_STORAGE=true` で
+  容量不足でも画面は全期間（締め・P&L に必要）。staff は false で、容量不足の端末は画面も60日（保存と揃い、開くたびの全件取り込みを避ける）。
   写しから日報を外した時は level2 でも写しの `syncSince=0`/`lastFullPullAt=0`（次に開いた時は全件から）。
   `_quotaLevel` はこの起動中に保存が通った段階で、次の保存はそこから始める（入力のたびに全体の保存を4回試さない）。
 

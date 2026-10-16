@@ -6,7 +6,7 @@
 //  ⑤ 最後の全件から24時間たったら全件を取り直す
 //  ⑥ 差分にマスタ（報告など）が含まれていれば統合される
 //  ⑦ サーバーが full:true で全件を返してきたら全件として扱う
-const fs=require('fs');
+const fs=require('fs'); global.MEM_KEEP_ALL_ON_LOW_STORAGE=true; // v24.5: _memRecordDays が参照（admin相当）
 function run(file,label){
  const src=fs.readFileSync(file,'utf8');
  function grab(n){const i=src.indexOf('function '+n+'(');if(i<0)throw new Error(n+' in '+file);let d=0;

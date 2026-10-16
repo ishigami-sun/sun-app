@@ -2,7 +2,7 @@
 //  ① level3 で日報を外したら _lowStorage が立ち、syncSince / lastFullPullAt が 0 に戻る（次は全件から）
 //  ② _recordDays(): 通常は LOCAL_RECORD_DAYS、容量不足の端末は 60（admin の 0=全件 でも 60）
 //  ③ 端末の日報が0件なら、syncSince があっても getSince ではなく getAll から始める
-const fs=require('fs');
+const fs=require('fs'); global.MEM_KEEP_ALL_ON_LOW_STORAGE=true; // v24.5: _memRecordDays が参照（admin相当）
 function run(file,label,localDays){
  const src=fs.readFileSync(file,'utf8');
  function grab(n){const i=src.indexOf('function '+n+'(');if(i<0)throw new Error(n+' in '+file);let d=0;

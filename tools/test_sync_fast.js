@@ -2,7 +2,7 @@
 //  ① 直前の取り込みの控え（60秒以内）があれば pushAndSync は getAll を呼ばず、届いていない日報だけ送る
 //  ② 控えが古い（60秒超）なら従来どおり getAll してから送る
 //  ③ マスタ送信は「変更あり」か「30分経過」の時だけ。送れたら dirty が消える
-const fs=require('fs');
+const fs=require('fs'); global.MEM_KEEP_ALL_ON_LOW_STORAGE=true; // v24.5: _memRecordDays が参照（admin相当）
 function run(file,label){
  const src=fs.readFileSync(file,'utf8');
  function grab(n){const i=src.indexOf('function '+n+'(');if(i<0)throw new Error(n+' in '+file);let d=0;

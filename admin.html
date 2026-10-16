@@ -4558,8 +4558,10 @@ function migrateToCloud(){
 // ローカル保存（即時）
 var _quotaWarned=false;
 var _quotaLevel=0;   // 【v24.5】この起動中に保存が通った軽さの段階（毎回 全体→失敗→… を繰り返して重くならないように）
-// 【v24.5】画面に持つ日報の日数。容量不足の端末でも画面は減らさない（60日に詰めるのは保存用の写しだけ: _recordDays）
-function _memRecordDays(){ return LOCAL_RECORD_DAYS; }
+// 【v24.5】画面に持つ日報の日数。管理者版は容量不足でも画面は減らさない（60日に詰めるのは保存用の写しだけ: _recordDays）。
+// スタッフ版は今月・先月が見えれば足りるので、容量不足の端末は画面も60日にする（保存と揃い、開くたびの全件取り込みにならない）
+var MEM_KEEP_ALL_ON_LOW_STORAGE = true;
+function _memRecordDays(){ return (state && state._lowStorage && !MEM_KEEP_ALL_ON_LOW_STORAGE) ? _recordDays() : LOCAL_RECORD_DAYS; }
 var LOCAL_RECORD_DAYS = 0; // ローカルに保持する日報の日数（0=全件）。クラウドが正本なので端末には直近分だけあればよい
 // この端末が保持する日報の日数。容量不足で日報を外したことがある端末は、以後60日だけ保持する
 // （全件を取り直すたびに容量オーバー→全部外す、を繰り返さないため）
