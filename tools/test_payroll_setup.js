@@ -12,7 +12,7 @@ global._PAYROLL_SEED_ROWS=[{app:'甲',xls:'甲野一郎',row:7,base:100,ot:10,po
 global._PAYROLL_SEED_FIXED=[{name:'丙',amount:300}];
 eval(grabLine(A,"var PAYROLL_SEED_AT="));
 let saves=0;
-global.save=()=>{ saves++; };
+global.save=()=>{ saves++; }; let locals=0; global.saveLocal=()=>{ locals++; };
 global.window=global; global.toasts=[]; global.showToast=m=>toasts.push(m);
 global.renderPayrollExport=()=>{}; global.renderLaborCost=()=>{};
 global.h=s=>String(s==null?'':s);
@@ -26,7 +26,8 @@ t('a: _setup 無し → payrollRows はシード', payrollRows()===_PAYROLL_SEED
 _ensurePayrollSetup();
 t('a: _ensure で _setup ができる', payrollSetup() && payrollSetup().rows.length===2 && payrollSetup().fixedOnly.length===1);
 t('a: updatedAt は固定の古い日時', state.payroll._setup.updatedAt==='2026-09-10T00:00:00.000Z');
-t('a: save が1回', saves===1);
+t('a: 起動時は save() を呼ばない（取り込み前にマスタを送らない）', saves===0);
+t('a: saveLocal で端末に保存し、マスタ送信の印を立てる', locals===1 && state._mastersDirty===true);
 t('a: シードのディープコピー（同一参照でない）', state.payroll._setup.rows!==_PAYROLL_SEED_ROWS && state.payroll._setup.rows[0]!==_PAYROLL_SEED_ROWS[0]);
 state.payroll={}; saves=0; global.state.payroll=null; _ensurePayrollSetup();
 t('a: state.payroll が null でも落ちない', payrollSetup()!==null);
@@ -34,7 +35,7 @@ t('a: state.payroll が null でも落ちない', payrollSetup()!==null);
 // b. _setup 有り
 global.state={payroll:{_setup:{rows:[{app:'丁',xls:'丁山',row:9,base:1,ot:2,post:3,postName:'',commute:4}],fixedOnly:[],updatedAt:'2026-10-01T00:00:00.000Z'}}};
 saves=0; _ensurePayrollSetup();
-t('b: _setup 有りなら何もしない（save 0回）', saves===0);
+t('b: _setup 有りなら何もしない（save 0回）', saves===0 && !state._mastersDirty);
 t('b: payrollRows は _setup の値', payrollRows().length===1 && payrollRows()[0].app==='丁');
 t('b: fixedOnly が空配列でもそれを使う', payrollFixedOnly().length===0);
 

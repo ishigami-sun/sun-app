@@ -8496,7 +8496,10 @@ function _ensurePayrollSetup(){
     if(payrollSetup()) return;
     if(!state.payroll||typeof state.payroll!=='object') state.payroll={};
     state.payroll._setup={rows:JSON.parse(JSON.stringify(_PAYROLL_SEED_ROWS)), fixedOnly:JSON.parse(JSON.stringify(_PAYROLL_SEED_FIXED)), updatedAt:PAYROLL_SEED_AT};
-    save();
+    // save() は呼ばない：save() はその場でマスタを送るため、起動直後（まだ取り込み前）の古い経費などで
+    // クラウドを上書きしてしまう。印だけ立てて、syncAll の「取り込み→日報→マスタ」の順で送らせる。
+    state._mastersDirty=true;
+    try{ saveLocal(); }catch(e2){}
   }catch(e){}
 }
 // 全角数字・カンマ・¥・円を許容して 0 以上の整数にする（マイナスは 0）
