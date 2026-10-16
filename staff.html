@@ -1485,6 +1485,18 @@ function normalizeCloudConfig(){
   return changed;
 }
 // クラウドAPI呼び出し
+// 【v24.8】オーナー用の合言葉（サーバー gas/owner_key.gs）。スタッフ用の合言葉の応答には adminOnlyHidden が付き、
+// 管理者専用マスタ（経費・給与など）が入っていない。スタッフ版は手元の控え（_adminMasters）を消す（送らなくてもサーバーが守る）。
+// 管理者版でこれが付いた時は「この端末はまだスタッフ用の合言葉」なので、給与・経費の画面に案内を出す。
+function _noteAdminOnlyHidden(res, action){
+  try{
+    if(!res || res.ok===false) return;
+    if(action!=='getAll' && action!=='getSince' && action!=='saveMasters') return;
+    var hidden=!!res.adminOnlyHidden;
+    if(hidden && state._adminMasters){ delete state._adminMasters; }
+    if(typeof ADMIN_ONLY_MASTERS==='undefined') state._ownerKeyNeeded=hidden;
+  }catch(e){}
+}
 function callCloud(action, payload, callback, _tries){
   _tries=_tries||0;
   // 【v24.4】一度も取り込みに成功していない端末はマスタを送らない（どの経路から呼ばれても）。
@@ -1530,6 +1542,7 @@ function callCloud(action, payload, callback, _tries){
       });
     })
     .then(function(res){
+      _noteAdminOnlyHidden(res, action);
       if(res && res.ok===false && _isMutation(action)){
         // サーバーがアプリレベルで失敗を返した → 更新系は再送（上限付き）。黙って失わない
         // ただし合言葉違いは再送しても通らない（日報は state.records に残り、設定後の同期で送られる）
@@ -6637,7 +6650,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "24.7";
+var APP_VERSION = "24.8";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
