@@ -1487,6 +1487,14 @@ function normalizeCloudConfig(){
 // クラウドAPI呼び出し
 function callCloud(action, payload, callback, _tries){
   _tries=_tries||0;
+  // 【v24.4】一度も取り込みに成功していない端末はマスタを送らない（どの経路から呼ばれても）。
+  // 取り込み前の空のマスタで saveMasters すると、クラウドの経費・給与などが消える。syncAll の取り込み後に送る
+  if(action==='saveMasters' && !state.lastFullSync){
+    state._mastersDirty=true;
+    try{ saveLocal(); }catch(e){}
+    if(callback){ try{ callback({ok:false, deferred:true, error:'取り込み前のため後で送信'}); }catch(e){} }
+    return;
+  }
   try{ if(normalizeCloudConfig()) saveLocal(); }catch(e){}
   if(!state.cloudUrl||!state.cloudKey){
     if(callback) callback({ok:false, error:'未設定'});
@@ -2196,6 +2204,11 @@ function _pullReportsThenPush(next){
         if(res && res.ok && res.masters){
           if(res.masters.deletedMasters && typeof mergeDeletedMasters==='function') mergeDeletedMasters(res.masters.deletedMasters);
           if(res.masters.reports) state.reports = mergeMasterById(state.reports||[], res.masters.reports, delSetOf('reports'));
+          // 【v24.4】スタッフ版：管理者専用マスタ（経費・給与など）の控えも最新にしてから返す。
+          // 古い控えのまま送ると、直前に管理者が保存した経費・給与設定がクラウドで古い内容に戻る
+          if(typeof ADMIN_ONLY_MASTERS!=='undefined'){
+            try{ var _keep2=state._adminMasters||{}; for(var _aj=0;_aj<ADMIN_ONLY_MASTERS.length;_aj++){ var _ak2=ADMIN_ONLY_MASTERS[_aj]; if(res.masters[_ak2]!=null) _keep2[_ak2]=res.masters[_ak2]; } state._adminMasters=_keep2; }catch(e){}
+          }
           try{ saveLocal(); }catch(e){}
         }
       }catch(e){}

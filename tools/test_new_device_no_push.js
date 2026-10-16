@@ -26,8 +26,16 @@ for(const f of ['admin.html','staff.html']){
   calls=[]; global.state={cloudUrl:'',cloudKey:'',lastFullSync:0}; saveMastersToCloud();
   t(f+': 接続設定が無ければ何もしない', calls.length===0 && !state._mastersDirty);
 }
+// callCloud 自体にも同じ守りがある（saveMastersToCloud を通らない直接の saveMasters 経路のため）
+for(const f of ['admin.html','staff.html']){
+  const src=fs.readFileSync('/home/user/sun-app/'+f,'utf8'); const cc=grab(src,'callCloud');
+  t(f+': callCloud は取り込み前の saveMasters を送らない', /action==='saveMasters' && !state\.lastFullSync/.test(cc) && cc.indexOf("action==='saveMasters' && !state.lastFullSync") < cc.indexOf('fetch('));
+  const pr=grab(src,'_pullReportsThenPush');
+  t(f+': 送信前の取り直しで管理者専用マスタの控えも更新する', /ADMIN_ONLY_MASTERS/.test(pr) && /_adminMasters/.test(pr));
+}
 // admin と staff で同じ中身であること
 const A=fs.readFileSync('/home/user/sun-app/admin.html','utf8'), S=fs.readFileSync('/home/user/sun-app/staff.html','utf8');
 t('saveMastersToCloud は admin と staff で同一', grab(A,'saveMastersToCloud')===grab(S,'saveMastersToCloud'));
+t('_pullReportsThenPush は admin と staff で同一', grab(A,'_pullReportsThenPush')===grab(S,'_pullReportsThenPush'));
 checks.forEach(([n,v])=>console.log((v?'✅':'❌')+' '+n));
 const ok=checks.every(c=>c[1]); console.log('\n'+(ok?'すべて合格':'★失敗あり')); process.exit(ok?0:1);

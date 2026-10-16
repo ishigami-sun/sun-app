@@ -3948,6 +3948,14 @@ function applyViewOnlyMode(){
 // クラウドAPI呼び出し
 function callCloud(action, payload, callback, _tries){
   _tries=_tries||0;
+  // 【v24.4】一度も取り込みに成功していない端末はマスタを送らない（どの経路から呼ばれても）。
+  // 取り込み前の空のマスタで saveMasters すると、クラウドの経費・給与などが消える。syncAll の取り込み後に送る
+  if(action==='saveMasters' && !state.lastFullSync){
+    state._mastersDirty=true;
+    try{ saveLocal(); }catch(e){}
+    if(callback){ try{ callback({ok:false, deferred:true, error:'取り込み前のため後で送信'}); }catch(e){} }
+    return;
+  }
   try{ if(normalizeCloudConfig()) saveLocal(); }catch(e){}
   if(IS_VIEW_ONLY && !VIEW_ONLY_READS[action]){ if(callback) callback({ok:false, error:'閲覧専用モードのため変更できません'}); return; }
   if(!state.cloudUrl||!state.cloudKey){
@@ -4661,6 +4669,11 @@ function _pullReportsThenPush(next){
         if(res && res.ok && res.masters){
           if(res.masters.deletedMasters && typeof mergeDeletedMasters==='function') mergeDeletedMasters(res.masters.deletedMasters);
           if(res.masters.reports) state.reports = mergeMasterById(state.reports||[], res.masters.reports, delSetOf('reports'));
+          // 【v24.4】スタッフ版：管理者専用マスタ（経費・給与など）の控えも最新にしてから返す。
+          // 古い控えのまま送ると、直前に管理者が保存した経費・給与設定がクラウドで古い内容に戻る
+          if(typeof ADMIN_ONLY_MASTERS!=='undefined'){
+            try{ var _keep2=state._adminMasters||{}; for(var _aj=0;_aj<ADMIN_ONLY_MASTERS.length;_aj++){ var _ak2=ADMIN_ONLY_MASTERS[_aj]; if(res.masters[_ak2]!=null) _keep2[_ak2]=res.masters[_ak2]; } state._adminMasters=_keep2; }catch(e){}
+          }
           try{ saveLocal(); }catch(e){}
         }
       }catch(e){}
@@ -8515,6 +8528,7 @@ function _ensurePayrollSetup(){
 function _psNum(v){
   var s=String(v==null?'':v).replace(/[０-９]/g,function(c){ return String.fromCharCode(c.charCodeAt(0)-0xFEE0); });
   if(/^\s*[-－−ー‐]/.test(s)) return 0;
+  s=s.split(/[.．]/)[0];   // 小数点以下は切り捨て（「123450.0」が 1234500 にならないように）
   s=s.replace(/[^0-9]/g,'');
   var n=parseInt(s,10);
   return (isNaN(n)||n<0)?0:n;
@@ -8585,8 +8599,12 @@ function renderPayrollSetupEditor(){
 }
 function savePayrollSetup(){
   var d=_psRead();
+  // 名前が空なのに金額が入っている行は、黙って捨てずに止める（書き直し途中で人件費から外れないように）
+  for(var e0=0;e0<d.rows.length;e0++){ var r0=d.rows[e0]; if((!r0.app||!r0.xls) && (r0.app||r0.xls||r0.base||r0.ot||r0.post||r0.commute)){ showToast('⚠️ アプリ名と給与明細の氏名を両方入れてください（'+(e0+1)+'行目）'); return; } }
+  for(var e1=0;e1<d.fixedOnly.length;e1++){ var f0=d.fixedOnly[e1]; if(!f0.name && f0.amount){ showToast('⚠️ 固定のみの氏名が空です（'+(e1+1)+'行目）'); return; } }
   var rows=d.rows.filter(function(r){ return r.app && r.xls; });
   var fixedOnly=d.fixedOnly.filter(function(r){ return r.name; });
+  for(var e2=0;e2<rows.length;e2++){ if(/['"\\<>&]/.test(rows[e2].app+rows[e2].xls)){ showToast('⚠️ 名前に記号（\' " < > & \\）は使えません'); return; } }
   if(!rows.length){ showToast('⚠️ 給与の行が1つもありません'); return; }
   var seen={};
   for(var i=0;i<rows.length;i++){

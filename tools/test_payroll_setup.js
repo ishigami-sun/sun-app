@@ -64,6 +64,7 @@ t('f: ¥とカンマ', _psNum('¥10,000')===10000);
 t('f: 負数は0', _psNum('-5000')===0 && _psNum('－５０００')===0 && _psNum('−5')===0);
 t('f: 空・文字は0', _psNum('')===0 && _psNum('abc')===0 && _psNum(null)===0);
 t('f: 円・全角カンマ', _psNum('１，０００円')===1000);
+t('f: 小数点以下は切り捨て（10倍にならない）', _psNum('123450.0')===123450 && _psNum('１２３４５０．５')===123450 && _psNum('1,000.99')===1000);
 
 function mkDom(rows,fixed){
   const els={};
@@ -75,11 +76,11 @@ function mkDom(rows,fixed){
 }
 global.state={payroll:{}}; saves=0; toasts.length=0;
 mkDom([{app:'甲（店長）',xls:'甲野',row:'７',base:'１２３,４５０',ot:'12,345',post:'-1',com:'¥10,000',as:true},
-       {app:'',xls:'空行'},{app:'乙',xls:''},{app:'丙',xls:'丙川',base:'1'}],
-      [{name:'役員',amt:'¥1,000'},{name:'',amt:'5'}]);
+       {app:'',xls:''},{app:'丙',xls:'丙川',base:'1'}],
+      [{name:'役員',amt:'¥1,000'},{name:'',amt:''}]);
 savePayrollSetup();
 const sv=state.payroll._setup;
-t('f: 保存できる（空のapp/xls行は捨てる）', sv && sv.rows.length===2 && sv.fixedOnly.length===1 && saves===1);
+t('f: 保存できる（まったく空の行は捨てる）', sv && sv.rows.length===2 && sv.fixedOnly.length===1 && saves===1);
 t('f: 数値化が反映', sv && sv.rows[0].base===123450 && sv.rows[0].ot===12345 && sv.rows[0].post===0 && sv.rows[0].commute===10000 && sv.rows[0].row===7);
 t('f: app は staffBase で肩書きを外す', sv && sv.rows[0].app==='甲');
 t('f: assistant フラグ', sv && sv.rows[0].assistant===true && !sv.rows[1].assistant);
@@ -90,6 +91,17 @@ global.state={payroll:{}}; saves=0; toasts.length=0;
 mkDom([{app:'甲',xls:'甲野'},{app:'甲（副店長）',xls:'別人'}],[]);
 savePayrollSetup();
 t('f: app 重複は拒否（保存しない・トースト）', !state.payroll._setup && saves===0 && toasts.length===1);
+// 名前が片方だけ空で金額がある行は、黙って捨てずに止める
+global.state={payroll:{}}; saves=0; toasts.length=0;
+mkDom([{app:'甲',xls:'甲野',base:'1'},{app:'乙',xls:'',base:'123450'}],[]); savePayrollSetup();
+t('f: 氏名が空で金額がある行は保存しない（トースト）', !state.payroll._setup && saves===0 && toasts.length===1);
+global.state={payroll:{}}; saves=0; toasts.length=0;
+mkDom([{app:'甲',xls:'甲野',base:'1'}],[{name:'',amt:'5'}]); savePayrollSetup();
+t('f: 固定のみの氏名が空で金額がある行は保存しない', !state.payroll._setup && toasts.length===1);
+global.state={payroll:{}}; saves=0; toasts.length=0;
+mkDom([{app:"甲'",xls:'甲野',base:'1'}],[]); savePayrollSetup();
+t('f: 名前に記号（クォート）は保存しない', !state.payroll._setup && toasts.length===1);
+global.state={payroll:{}};
 mkDom([{app:'',xls:''}],[]); toasts.length=0; savePayrollSetup();
 t('f: 有効な行が0なら保存しない', !state.payroll._setup && toasts.length===1);
 
