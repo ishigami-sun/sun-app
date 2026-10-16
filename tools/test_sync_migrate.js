@@ -1,5 +1,5 @@
 // v22.6以前の端末が v22.7 に上がった直後の最初の同期を再現する
-const fs=require('fs');
+const fs=require('fs'); global.MEM_KEEP_ALL_ON_LOW_STORAGE=true; // v24.5: _memRecordDays が参照（admin相当）
 function run(file,label){
  const src=fs.readFileSync(file,'utf8');
  function grab(n){const i=src.indexOf('function '+n+'(');let d=0;
@@ -20,7 +20,7 @@ function run(file,label){
  global.callCloud=(a,p,cb)=>a==='getAll'?cb({ok:true,records:JSON.parse(JSON.stringify(CLOUD)),masters:null}):cb({ok:true});
  eval(grab('syncFromCloud'));
  // v23.7: syncFromCloud は全件パス _syncFromCloudFull → _applyFullResponse に委譲する
- eval(grab('_syncFromCloudFull')); eval(grab('_applyFullResponse')); eval(grab('_applyCloudMasters')); eval(grab('_confirmDeletesAgainst')); eval(grab('_recordDays'));
+ eval(grab('_syncFromCloudFull')); eval(grab('_applyFullResponse')); eval(grab('_applyCloudMasters')); eval(grab('_confirmDeletesAgainst')); eval(grab('_recordDays')); eval(grab('_memRecordDays'));
  syncFromCloud(true,()=>{});
  const ids=state.records.map(r=>r.id);
  const keptSynced=ids.includes(Date.parse('2026-09-10T01:00:00Z'));

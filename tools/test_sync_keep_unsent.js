@@ -1,4 +1,4 @@
-const fs=require('fs');
+const fs=require('fs'); global.MEM_KEEP_ALL_ON_LOW_STORAGE=true; // v24.5: _memRecordDays が参照（admin相当）
 function run(file,label){
  const src=fs.readFileSync(file,'utf8');
  function grab(name){ const i=src.indexOf('function '+name+'(');
@@ -22,7 +22,7 @@ function run(file,label){
  };
  eval(grab('syncFromCloud')); eval(grab('pushAndSync'));
  // v23.7: syncFromCloud は全件パス _syncFromCloudFull → _applyFullResponse に委譲する
- eval(grab('_syncFromCloudFull')); eval(grab('_applyFullResponse')); eval(grab('_applyCloudMasters')); eval(grab('_confirmDeletesAgainst')); eval(grab('_recordDays'));
+ eval(grab('_syncFromCloudFull')); eval(grab('_applyFullResponse')); eval(grab('_applyCloudMasters')); eval(grab('_confirmDeletesAgainst')); eval(grab('_recordDays')); eval(grab('_memRecordDays'));
  eval(grab('unsentRecordCount')); eval(grab('syncPendingCount'));
  const ok=[];
  // ① 正常同期

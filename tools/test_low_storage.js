@@ -2,7 +2,7 @@
 //  ① level3 で日報を外したら _lowStorage が立ち、syncSince / lastFullPullAt が 0 に戻る（次は全件から）
 //  ② _recordDays(): 通常は LOCAL_RECORD_DAYS、容量不足の端末は 60（admin の 0=全件 でも 60）
 //  ③ 端末の日報が0件なら、syncSince があっても getSince ではなく getAll から始める
-const fs=require('fs');
+const fs=require('fs'); global.MEM_KEEP_ALL_ON_LOW_STORAGE=true; // v24.5: _memRecordDays が参照（admin相当）
 function run(file,label,localDays){
  const src=fs.readFileSync(file,'utf8');
  function grab(n){const i=src.indexOf('function '+n+'(');if(i<0)throw new Error(n+' in '+file);let d=0;
@@ -11,7 +11,7 @@ function run(file,label,localDays){
    mergeMasterUnique:(a,b)=>b||a, mergeMasterById:(a,b)=>b||a, mergeInventory:(a,b)=>b||a, mergeByMonthKey:(a,b)=>b||a,
    attMerge:(a,b)=>b||a, mergeDeletedMasters(){}, delSetOf:()=>({}), _pushMastersNow(){}, dedupeMenus(){} });
  global.LOCAL_RECORD_DAYS=localDays;
- eval(['_recordDays','_shrinkForQuota','_pendingDeletes','_confirmDeletesAgainst','syncFromCloud','_syncFromCloudDelta','_syncFromCloudFull','_applyFullResponse','_applyCloudMasters'].map(grab).join('\n'));
+ eval(['_recordDays','_memRecordDays','_shrinkForQuota','_pendingDeletes','_confirmDeletesAgainst','syncFromCloud','_syncFromCloudDelta','_syncFromCloudFull','_applyFullResponse','_applyCloudMasters'].map(grab).join('\n'));
  const checks=[];
  // ①
  global.state={_csReady:1, syncSince:12345, lastFullPullAt:Date.now(), records:[{id:1,_cs:1},{id:2,_cs:1},{id:3}], deletedIds:[]};

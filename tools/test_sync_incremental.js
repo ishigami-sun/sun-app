@@ -6,7 +6,7 @@
 //  ⑤ 最後の全件から24時間たったら全件を取り直す
 //  ⑥ 差分にマスタ（報告など）が含まれていれば統合される
 //  ⑦ サーバーが full:true で全件を返してきたら全件として扱う
-const fs=require('fs');
+const fs=require('fs'); global.MEM_KEEP_ALL_ON_LOW_STORAGE=true; // v24.5: _memRecordDays が参照（admin相当）
 function run(file,label){
  const src=fs.readFileSync(file,'utf8');
  function grab(n){const i=src.indexOf('function '+n+'(');if(i<0)throw new Error(n+' in '+file);let d=0;
@@ -15,7 +15,7 @@ function run(file,label){
    mergeMasterUnique:(a,b)=>b||a, mergeMasterById:(a,b)=>b||a, mergeInventory:(a,b)=>b||a, mergeByMonthKey:(a,b)=>b||a,
    attMerge:(a,b)=>b||a, mergeDeletedMasters(){}, delSetOf:()=>({}), _pushMastersNow(){}, dedupeMenus(){} });
  // 関数宣言をこの run() のスコープに置くため、まとめて1回の eval にする（コールバック内の eval だと外から見えない）
- eval(['_recordDays','_pendingDeletes','_confirmDeletesAgainst','syncFromCloud','_syncFromCloudDelta','_syncFromCloudFull','_applyFullResponse','_applyCloudMasters'].map(grab).join('\n'));
+ eval(['_recordDays','_memRecordDays','_pendingDeletes','_confirmDeletesAgainst','syncFromCloud','_syncFromCloudDelta','_syncFromCloudFull','_applyFullResponse','_applyCloudMasters'].map(grab).join('\n'));
  let calls=[], script=[];
  global.callCloud=(a,p,cb)=>{ calls.push({a,p}); const r=script.shift(); cb(typeof r==='function'?r(a,p):r); };
  const checks=[], ids=()=>state.records.map(r=>r.id).sort();

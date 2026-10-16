@@ -2,7 +2,7 @@
 //  ① 直前の取り込みの控え（60秒以内）があれば pushAndSync は getAll を呼ばず、届いていない日報だけ送る
 //  ② 控えが古い（60秒超）なら従来どおり getAll してから送る
 //  ③ マスタ送信は「変更あり」か「30分経過」の時だけ。送れたら dirty が消える
-const fs=require('fs');
+const fs=require('fs'); global.MEM_KEEP_ALL_ON_LOW_STORAGE=true; // v24.5: _memRecordDays が参照（admin相当）
 function run(file,label){
  const src=fs.readFileSync(file,'utf8');
  function grab(n){const i=src.indexOf('function '+n+'(');if(i<0)throw new Error(n+' in '+file);let d=0;
@@ -10,7 +10,7 @@ function run(file,label){
  global.showToast=()=>{}; global.renderAll=()=>{}; global.saveLocal=()=>{}; global.LOCAL_RECORD_DAYS=0;
  let calls=[];
  global.callCloud=(a,p,cb)=>{ calls.push(a); if(a==='getAll') return cb({ok:true,records:[{id:1},{id:2}]}); if(a==='addRecord'){ p.record._cs=1; } cb({ok:true}); };
- eval(grab('_recordDays')); eval(grab('pushAndSync'));
+ eval(grab('_recordDays')); eval(grab('_memRecordDays')); eval(grab('pushAndSync'));
  const checks=[];
  // ① 控えあり（新しい）: getAll を呼ばない。_cs の無い 3 だけ送る。1,2 は控えに載っている
  global.state={cloudUrl:'https://x/exec',cloudKey:'K',deletedIds:[],records:[{id:1,_cs:1},{id:2,_cs:1},{id:3},{id:4,_cs:1}]};
