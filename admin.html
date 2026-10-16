@@ -4963,8 +4963,13 @@ function renderAll(){
   try{ var _rp=document.getElementById('page-reports'); if(_rp && _rp.classList.contains('active') && typeof renderReportsTab==='function') renderReportsTab(); }catch(e){}
   // 【v24.6】管理タブを開いたまま同期が終わった時も、給与集計・人件費を新しい日報で描き直す（入力中の欄がある時は描き直さない）
   try{ var _ap=document.getElementById('page-admin'); if(_ap && _ap.classList.contains('active')){
-    var _ae=document.activeElement, _busy=_ae && /^(INPUT|TEXTAREA|SELECT)$/.test(_ae.tagName) && (_ae.closest('#payrollExport')||_ae.closest('#laborCost'));
-    if(!_busy){ try{ renderPayrollExport(); }catch(e){} try{ renderLaborCost(); }catch(e){} }
+    var _ae=document.activeElement, _busy=_ae && /^(INPUT|TEXTAREA|SELECT)$/.test(_ae.tagName) && (_ae.closest('#payrollExport')||_ae.closest('#laborCost')||_ae.id==='payrollMonth'||_ae.id==='laborMonth');
+    if(!_busy){
+      // 表の横スクロール位置を控えて、描き直した後に戻す（5分ごとの自動同期で左端に戻らないように）
+      var _sx={}; ['payrollExport','laborCost'].forEach(function(id){ var el=document.getElementById(id); if(el){ _sx[id]=[].map.call(el.querySelectorAll('div'),function(d){ return d.scrollLeft||0; }); } });
+      try{ renderPayrollExport(); }catch(e){} try{ renderLaborCost(); }catch(e){}
+      ['payrollExport','laborCost'].forEach(function(id){ var el=document.getElementById(id), a=_sx[id]; if(el&&a){ [].forEach.call(el.querySelectorAll('div'),function(d,i){ if(a[i]) d.scrollLeft=a[i]; }); } });
+    }
   } }catch(e){}
 }
 
