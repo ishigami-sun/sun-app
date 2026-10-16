@@ -4639,6 +4639,15 @@ if(typeof window!=='undefined'){ try{ window.addEventListener('pagehide', flushS
 
 function saveMastersToCloud(cb){
   if(!state.cloudUrl || !state.cloudKey || typeof callCloud !== 'function') return;
+  // 【v24.4】この端末で一度もクラウドの取り込みが成功していない（新しい端末・データを消した端末）間は送らない。
+  // saveMasters はクラウドのマスタを「送った内容」で丸ごと置き換えるため、取り込む前の空のマスタを送ると
+  // 経費・給与・P&L のデータがクラウドから消える。印だけ立てて、syncAll の「取り込み→日報→マスタ」で送らせる。
+  if(!state.lastFullSync){
+    state._mastersDirty=true;
+    try{ saveLocal(); }catch(e){}
+    try{ if(cb) cb({ok:false, deferred:true}); }catch(e){}
+    return;
+  }
   // 【重要】saveMasters はクラウド側の配列を丸ごと置き換える。
   // 先に送ってしまうと、同期していない端末の古い報告一覧で
   // 他の端末が書いた報告をクラウドから消してしまう（報告が最新にならない原因）。

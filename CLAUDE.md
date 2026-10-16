@@ -117,6 +117,13 @@ What's New もスタッフ用は「使い方」だけにする（管理者向け
   > 過去の事故: staff のマスタ送信とブランド・メニュー編集が項目を減らして送っていたため、
   > スタッフ端末が同期するたびに P&L の経費・9月の技術売上・タオルがクラウドから消えた（10/7）。
   > 回帰テスト: `node tools/test_masters_keep.js`（saveMasters の呼び出しが全部 `_mastersPayload()` かを数える）
+- **一度も取り込みに成功していない端末（`!state.lastFullSync`）は `saveMastersToCloud` でマスタを送らない**（v24.4）。
+  印（`_mastersDirty`）だけ立てて、syncAll の「取り込み→日報→マスタ」で送らせる。コールバックには `{ok:false, deferred:true}`。
+
+  > 見つかった不具合: 新しい端末・データを消した端末で開くと、起動時の移行処理（`fixProductIds` / `migrateStaffRoles`）が
+  > `save()`→`saveMastersToCloud()` を呼び、取り込み前の空のマスタで saveMasters していた。模擬サーバーで
+  > admin・staff とも、クラウドの経費・給与（月別）が消えることを再現（10/16）。
+  > 回帰テスト: `node tools/test_new_device_no_push.js`
 - 日報の重複は `dedupeRecordsById()` が同一IDを自動で1件に統合する
 - **`state.records` からローカル分を落としてよいのは `_cs` 印が付いているものだけ**（v22.7）。
   `_cs` は「クラウドで実在を確認できた」印で、`syncFromCloud` / `pushAndSync` の取得結果と
