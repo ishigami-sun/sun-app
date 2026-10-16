@@ -4961,6 +4961,11 @@ function renderAll(){
   try{ var _sp=document.getElementById('page-sales'); if(_sp && _sp.classList.contains('active') && typeof renderSales==='function') renderSales(); }catch(e){}
   try{ if(typeof updateReportsBadge==='function') updateReportsBadge(); }catch(e){}
   try{ var _rp=document.getElementById('page-reports'); if(_rp && _rp.classList.contains('active') && typeof renderReportsTab==='function') renderReportsTab(); }catch(e){}
+  // 【v24.6】管理タブを開いたまま同期が終わった時も、給与集計・人件費を新しい日報で描き直す（入力中の欄がある時は描き直さない）
+  try{ var _ap=document.getElementById('page-admin'); if(_ap && _ap.classList.contains('active')){
+    var _ae=document.activeElement, _busy=_ae && /^(INPUT|TEXTAREA|SELECT)$/.test(_ae.tagName) && (_ae.closest('#payrollExport')||_ae.closest('#laborCost'));
+    if(!_busy){ try{ renderPayrollExport(); }catch(e){} try{ renderLaborCost(); }catch(e){} }
+  } }catch(e){}
 }
 
 /* STAFF COLOR */
@@ -8430,13 +8435,16 @@ function laborCostForMonth(ym){
 function renderLaborCost(){
   var el=document.getElementById('laborCost'); if(!el) return;
   var sel=document.getElementById('laborMonth');
-  if(sel && !sel.dataset.filled){
-    var months=payrollMonthList(), n=new Date();
-    var cur=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');
-    if(months.indexOf(cur)<0) months.unshift(cur);
+  var months=payrollMonthList(), n=new Date();
+  var cur=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');
+  if(months.indexOf(cur)<0) months.unshift(cur);
+  // 【v24.6】日報が増えたら選択肢を作り直す（自分で選んだ月は残す）
+  if(sel && sel.dataset.filled!==months.join(',')){
+    var def=cur, prev=sel.value;
+    if(prev && sel.dataset.def && prev!==sel.dataset.def && months.indexOf(prev)>=0) def=prev;
     var o='';
-    for(var i=0;i<months.length;i++){ var p=months[i].split('-'); o+='<option value="'+months[i]+'"'+(months[i]===cur?' selected':'')+'>'+p[0]+'年'+parseInt(p[1],10)+'月度</option>'; }
-    sel.innerHTML=o; sel.dataset.filled='1';
+    for(var i=0;i<months.length;i++){ var p=months[i].split('-'); o+='<option value="'+months[i]+'"'+(months[i]===def?' selected':'')+'>'+p[0]+'年'+parseInt(p[1],10)+'月度</option>'; }
+    sel.innerHTML=o; sel.value=def; sel.dataset.filled=months.join(','); sel.dataset.def=cur;
   }
   var ym=(sel&&sel.value)||'';
   if(!ym) return;
@@ -8511,7 +8519,7 @@ function renderLaborCost(){
    H列=店販売値(税込) / I列=原価 → アプリの物販データから自動集計
    P列=ヒポポタマスのタオル売上(税込) → HPSの請求書を見て手入力（アプリ外のデータ）
    歩合の計算式はエクセルと同一にしてある（照合用） ===== */
-// v24.6で削除する初期値。クラウドの給与設定（state.payroll._setup）が優先される
+// v24.7で削除する初期値。クラウドの給与設定（state.payroll._setup）が優先される
 var _PAYROLL_SEED_ROWS=[
   {app:'花岡', xls:'（氏名）', row:7,  base:0, ot:0, post:0, postName:'店長手当',   commute:10000},
   {app:'堀井', xls:'（氏名）',  row:8,  base:123450, ot:0, post:0,  postName:'リーダー手当', commute:10000},
@@ -8520,7 +8528,7 @@ var _PAYROLL_SEED_ROWS=[
   {app:'カノン', xls:'（氏名）', row:11, base:123450, ot:0, post:0,      postName:'',           commute:10000, assistant:true},
   {app:'林',   xls:'（氏名）',    row:12, base:123450, ot:0, post:0,  postName:'副店長手当',  commute:10000}
 ];
-// 歩合の対象外（固定給のみ）。v24.6で削除する初期値（クラウドの給与設定が優先）
+// 歩合の対象外（固定給のみ）。v24.7で削除する初期値（クラウドの給与設定が優先）
 var _PAYROLL_SEED_FIXED=[
   {name:'（氏名）', amount:0},
   {name:'（氏名）', amount:0}
@@ -8700,15 +8708,18 @@ function renderPayrollExport(){
   var el=document.getElementById('payrollExport'); if(!el) return;
   var sel=document.getElementById('payrollMonth');
   var months=payrollMonthList();
-  if(sel && !sel.dataset.filled){
-    var def=payrollDefaultMonth();
-    if(months.indexOf(def)<0) def=months[0];
+  // 【v24.6】月の選択肢は日報が増えたら作り直す（以前は最初の1回だけで、取り込み前に作られると今月だけで固まっていた）
+  if(sel && sel.dataset.filled!==months.join(',')){
+    var autoDef=payrollDefaultMonth();
+    if(months.indexOf(autoDef)<0) autoDef=months[0];
+    var def=autoDef, prev=sel.value;
+    if(prev && sel.dataset.def && prev!==sel.dataset.def && months.indexOf(prev)>=0) def=prev;   // 自分で選んだ月は残す
     var o='';
     for(var i=0;i<months.length;i++){
       var p=months[i].split('-');
       o+='<option value="'+months[i]+'"'+(months[i]===def?' selected':'')+'>'+p[0]+'年'+parseInt(p[1],10)+'月度</option>';
     }
-    sel.innerHTML=o; sel.dataset.filled='1';
+    sel.innerHTML=o; sel.value=def; sel.dataset.filled=months.join(','); sel.dataset.def=autoDef;
   }
   var ym=(sel&&sel.value)||payrollDefaultMonth();
 
@@ -10087,7 +10098,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "24.5";
+var APP_VERSION = "24.6";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
