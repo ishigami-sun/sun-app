@@ -1,4 +1,4 @@
-// 給与設定（v24.4）: 固定給はクラウドの admin 専用マスタ state.payroll._setup に置く。ダミー値のみ使う。
+// 給与設定（v24.4／v24.7でシード削除）: 固定給はクラウドの admin 専用マスタ state.payroll._setup に置く。ダミー値のみ使う。
 const fs=require('fs');
 const A=fs.readFileSync('/home/user/sun-app/admin.html','utf8');
 const S=fs.readFileSync('/home/user/sun-app/staff.html','utf8');
@@ -6,10 +6,7 @@ function grab(src,n){const i=src.indexOf('function '+n+'(');if(i<0)throw new Err
 function grabLine(src,start){const i=src.indexOf(start);if(i<0)throw new Error(start);return src.slice(i,src.indexOf(';',i)+1);}
 const checks=[]; const t=(n,v)=>checks.push([n,!!v]);
 
-// ダミーのシード（本物の値は使わない）
-global._PAYROLL_SEED_ROWS=[{app:'甲',xls:'甲野一郎',row:7,base:100,ot:10,post:5,postName:'手当',commute:1},
-                           {app:'乙',xls:'乙川二郎',row:8,base:200,ot:20,post:0,postName:'',commute:2,assistant:true}];
-global._PAYROLL_SEED_FIXED=[{name:'丙',amount:300}];
+// v24.7: 初期値（シード）はコードから削除済み。給与設定はクラウドの state.payroll._setup だけ
 eval(grabLine(A,"var PAYROLL_SEED_AT="));
 let saves=0;
 global.save=()=>{ saves++; }; let locals=0; global.saveLocal=()=>{ locals++; };
@@ -17,27 +14,22 @@ global.window=global; global.toasts=[]; global.showToast=m=>toasts.push(m);
 global.renderPayrollExport=()=>{}; global.renderLaborCost=()=>{};
 global.h=s=>String(s==null?'':s);
 eval(grab(A,'staffBase'));
-for(const f of ['payrollSetup','payrollRows','payrollFixedOnly','_ensurePayrollSetup','_psNum','_psVal','_psRead','savePayrollSetup']) eval(grab(A,f));
+for(const f of ['payrollSetup','payrollRows','payrollFixedOnly','_payrollMissingHtml','_psNum','_psVal','_psRead','savePayrollSetup']) eval(grab(A,f));
 eval(grab(A,'mergeByMonthKey'));
 
-// a. _setup 無し
+// a. _setup 無し（まだ届いていない端末）
 global.state={payroll:{}};
-t('a: _setup 無し → payrollRows はシード', payrollRows()===_PAYROLL_SEED_ROWS && payrollFixedOnly()===_PAYROLL_SEED_FIXED && payrollSetup()===null);
-_ensurePayrollSetup();
-t('a: _ensure で _setup ができる', payrollSetup() && payrollSetup().rows.length===2 && payrollSetup().fixedOnly.length===1);
-t('a: updatedAt は固定の古い日時', state.payroll._setup.updatedAt==='2026-09-10T00:00:00.000Z');
-t('a: 起動時は save() を呼ばない（取り込み前にマスタを送らない）', saves===0);
-t('a: saveLocal で端末に保存し、マスタ送信の印を立てる', locals===1 && state._mastersDirty===true);
-t('a: シードのディープコピー（同一参照でない）', state.payroll._setup.rows!==_PAYROLL_SEED_ROWS && state.payroll._setup.rows[0]!==_PAYROLL_SEED_ROWS[0]);
-state.payroll={}; saves=0; global.state.payroll=null; _ensurePayrollSetup();
-t('a: state.payroll が null でも落ちない', payrollSetup()!==null);
+t('a: _setup 無し → 行は空（コードに実額を持たない）', Array.isArray(payrollRows()) && payrollRows().length===0 && payrollFixedOnly().length===0 && payrollSetup()===null);
+t('a: _setup 無し → 「給与設定が届いていません」の案内を出す', /給与設定がまだこの端末に届いていません/.test(_payrollMissingHtml()));
+global.state={payroll:null};
+t('a: state.payroll が null でも落ちない', payrollRows().length===0 && payrollSetup()===null);
+t('a: シード・起動時の自動投入はコードから消えている', !/_PAYROLL_SEED_|_ensurePayrollSetup/.test(A));
 
 // b. _setup 有り
 global.state={payroll:{_setup:{rows:[{app:'丁',xls:'丁山',row:9,base:1,ot:2,post:3,postName:'',commute:4}],fixedOnly:[],updatedAt:'2026-10-01T00:00:00.000Z'}}};
-saves=0; _ensurePayrollSetup();
-t('b: _setup 有りなら何もしない（save 0回）', saves===0 && !state._mastersDirty);
 t('b: payrollRows は _setup の値', payrollRows().length===1 && payrollRows()[0].app==='丁');
 t('b: fixedOnly が空配列でもそれを使う', payrollFixedOnly().length===0);
+t('b: _setup 有りなら案内は出さない', _payrollMissingHtml()==='');
 
 // c. mergeByMonthKey
 const seedLocal={_setup:{rows:[{app:'旧'}],fixedOnly:[],updatedAt:'2026-09-10T00:00:00.000Z'},'2026-09':{甲:{gross:1,sell:2},updatedAt:'2026-10-02T00:00:00.000Z'}};
@@ -52,7 +44,7 @@ t('c: ローカルの新しい編集はクラウドの古い値に勝つ', m._se
 
 // d. 識別子
 t('d: admin.html に PAYROLL_ROWS / PAYROLL_FIXED_ONLY が残っていない', !/(^|[^_A-Z])PAYROLL_(ROWS|FIXED_ONLY)\b/.test(A));
-t('d: staff.html に給与設定の関数が無い', !/payrollSetup|_ensurePayrollSetup|savePayrollSetup/.test(S));
+t('d: staff.html に給与設定の関数が無い', !/payrollSetup|savePayrollSetup|_payrollMissingHtml/.test(S));
 
 // e. staff の素通し
 const mm=S.match(/var ADMIN_ONLY_MASTERS=\[([^\]]*)\]/);
@@ -75,13 +67,13 @@ function mkDom(rows,fixed){
   global.document={getElementById:id=>els[id]||null};
 }
 global.state={payroll:{}}; saves=0; toasts.length=0;
-mkDom([{app:'甲（店長）',xls:'甲野',row:'７',base:'１２３,４５０',ot:'12,345',post:'-1',com:'¥10,000',as:true},
+mkDom([{app:'甲（店長）',xls:'甲野',row:'７',base:'１２３,４５０',ot:'22,220',post:'-1',com:'¥7,770',as:true},
        {app:'',xls:''},{app:'丙',xls:'丙川',base:'1'}],
       [{name:'役員',amt:'¥1,000'},{name:'',amt:''}]);
 savePayrollSetup();
 const sv=state.payroll._setup;
 t('f: 保存できる（まったく空の行は捨てる）', sv && sv.rows.length===2 && sv.fixedOnly.length===1 && saves===1);
-t('f: 数値化が反映', sv && sv.rows[0].base===123450 && sv.rows[0].ot===12345 && sv.rows[0].post===0 && sv.rows[0].commute===10000 && sv.rows[0].row===7);
+t('f: 数値化が反映', sv && sv.rows[0].base===123450 && sv.rows[0].ot===22220 && sv.rows[0].post===0 && sv.rows[0].commute===7770 && sv.rows[0].row===7);
 t('f: app は staffBase で肩書きを外す', sv && sv.rows[0].app==='甲');
 t('f: assistant フラグ', sv && sv.rows[0].assistant===true && !sv.rows[1].assistant);
 t('f: 固定のみの金額', sv && sv.fixedOnly[0].amount===1000);
