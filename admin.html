@@ -4688,14 +4688,10 @@ function _pullReportsThenPush(next){
     callCloud('getAll', {}, function(res){
       try{
         if(res && res.ok && res.masters){
-          if(res.masters.deletedMasters && typeof mergeDeletedMasters==='function') mergeDeletedMasters(res.masters.deletedMasters);
-          if(res.masters.reports) state.reports = mergeMasterById(state.reports||[], res.masters.reports, delSetOf('reports'));
-          // 【v24.4】スタッフ版：管理者専用マスタ（経費・給与など）の控えも最新にしてから返す。
-          // 古い控えのまま送ると、直前に管理者が保存した経費・給与設定がクラウドで古い内容に戻る
-          if(typeof ADMIN_ONLY_MASTERS!=='undefined'){
-            try{ var _keep2=state._adminMasters||{}; for(var _aj=0;_aj<ADMIN_ONLY_MASTERS.length;_aj++){ var _ak2=ADMIN_ONLY_MASTERS[_aj]; if(res.masters[_ak2]!=null) _keep2[_ak2]=res.masters[_ak2]; } state._adminMasters=_keep2; }catch(e){}
-          }
-          try{ saveLocal(); }catch(e){}
+          // 【v24.7】送る前に、同期と同じ _applyCloudMasters で全マスタを統合する（報告・削除履歴だけでなく
+          // 経費・給与・給与設定・タオル・技術売上なども）。saveMasters はクラウドを送った内容で丸ごと置き換えるため、
+          // 取り込み済みでも中身が古い端末がそのまま送ると、他の端末が保存した新しい値がクラウドで古く戻っていた。
+          _applyCloudMasters(res.masters);
         }
       }catch(e){}
       next();
@@ -8526,7 +8522,7 @@ function renderLaborCost(){
 // 【v24.7】給与の実額・本名は公開コードに置かない（クラウドの給与設定 state.payroll._setup だけが正本）
 function _payrollMissingHtml(){
   return payrollSetup() ? '' : '<div style="margin:8px 0 12px;padding:10px 12px;background:#FFF4E5;border:1.5px solid #F0B429;border-radius:9px;font-size:12px;color:#8A5A00;line-height:1.7">'
-    +'<b>⚠️ 給与設定がまだこの端末に届いていません</b><br>上の緑の帯をタップして同期してください。それでも出ない時は管理タブの「⚙️ 給与設定」で登録してください（人件費・給与は0として表示されています）。</div>';
+    +'<b>⚠️ 給与設定がまだこの端末に届いていません</b><br>上の緑の帯をタップして同期してください（同期が終わると表示されます）。人件費・給与は届くまで0として表示されています。</div>';
 }
 /* ===== ⚙️ 給与設定（v24.4）: 固定給の実額は公開コードに置かず、クラウドの admin 専用マスタに持つ
    保存先は state.payroll._setup = {rows, fixedOnly, updatedAt}（月キーと同じ updatedAt の新しい方が勝つ） ===== */
@@ -8574,7 +8570,7 @@ function renderPayrollSetupEditor(){
   var d=window._psDraft||{rows:payrollRows(), fixedOnly:payrollFixedOnly()};
   var su=payrollSetup();
   var at=(su&&su.updatedAt)||'';
-  var atTxt=!at?'未保存（初期値）':(at===PAYROLL_SEED_AT?'初期値（まだ編集していません）':new Date(at).toLocaleString('ja-JP'));
+  var atTxt=!at?'未登録':(at===PAYROLL_SEED_AT?'初期値（まだ編集していません）':new Date(at).toLocaleString('ja-JP'));
   var inp='width:100%;box-sizing:border-box;padding:7px;border:1.5px solid #C8E0DC;border-radius:7px;font-size:13px;';
   var lab='font-size:10px;color:#64748B;font-weight:700;margin-bottom:2px';
   function f(label,id,val,num){
@@ -8619,6 +8615,11 @@ function savePayrollSetup(){
   var fixedOnly=d.fixedOnly.filter(function(r){ return r.name; });
   for(var e2=0;e2<rows.length;e2++){ if(/['"\\<>&]/.test(rows[e2].app+rows[e2].xls)){ showToast('⚠️ 名前に記号（\' " < > & \\）は使えません'); return; } }
   if(!rows.length){ showToast('⚠️ 給与の行が1つもありません'); return; }
+  // 【v24.7】この端末にまだ給与設定が届いていない時は、同期が通ってからでないと保存しない
+  // （取り込みに失敗している端末で登録すると、新しい日時が付いてクラウドの本物を上書きしてしまう）
+  if(!payrollSetup() && !(state.lastFullSync && (Date.now()-state.lastFullSync) < 10*60*1000)){
+    showToast('⚠️ 先に上の緑の帯をタップして同期してください（クラウドの給与設定を上書きしないため）'); return;
+  }
   var seen={};
   for(var i=0;i<rows.length;i++){
     if(seen[rows[i].app]){ showToast('⚠️ アプリ名「'+rows[i].app+'」が重複しています'); return; }
@@ -8848,8 +8849,8 @@ function setPnlCustomMonth(val){
 }
 
 /* ===== P&L 人件費（自動計算）＋経費＋損益サマリー ===== */
-var PNL_BASE=0; // 基本給+定額残業+交通費
-var PNL_POST_MANAGER=0, PNL_POST_SUB=0, PNL_POST_LEADER=0;
+var PNL_BASE=0; // 旧概算式 pnlPayroll_old_ 用（未使用・v24.7で実額を削除）
+var PNL_POST_MANAGER=0, PNL_POST_SUB=0, PNL_POST_LEADER=0; // 旧概算式用（未使用・v24.7で実額を削除）
 var PNL_AXA=30000;   // アクサ積立（損金不算入：参考のみ）
 var PNL_OFFICER_PAY=0; // 旧概算式 pnlPayroll_old_ 用（未使用）。役員報酬は「⚙️ 給与設定」の固定のみに登録する（v24.7）
 var PNL_EXP=[

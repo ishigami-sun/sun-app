@@ -66,7 +66,7 @@ function mkDom(rows,fixed){
   fixed.forEach((r,i)=>{ els['ps_fname_'+i]={value:r.name}; els['ps_famt_'+i]={value:r.amt}; });
   global.document={getElementById:id=>els[id]||null};
 }
-global.state={payroll:{}}; saves=0; toasts.length=0;
+global.state={payroll:{},lastFullSync:Date.now()}; saves=0; toasts.length=0;
 mkDom([{app:'甲（店長）',xls:'甲野',row:'７',base:'１２３,４５０',ot:'22,220',post:'-1',com:'¥7,770',as:true},
        {app:'',xls:''},{app:'丙',xls:'丙川',base:'1'}],
       [{name:'役員',amt:'¥1,000'},{name:'',amt:''}]);
@@ -79,23 +79,32 @@ t('f: assistant フラグ', sv && sv.rows[0].assistant===true && !sv.rows[1].ass
 t('f: 固定のみの金額', sv && sv.fixedOnly[0].amount===1000);
 t('f: updatedAt は新しい日時', sv && new Date(sv.updatedAt).getTime()>Date.parse('2026-10-16T00:00:00Z'));
 // 重複
-global.state={payroll:{}}; saves=0; toasts.length=0;
+global.state={payroll:{},lastFullSync:Date.now()}; saves=0; toasts.length=0;
 mkDom([{app:'甲',xls:'甲野'},{app:'甲（副店長）',xls:'別人'}],[]);
 savePayrollSetup();
 t('f: app 重複は拒否（保存しない・トースト）', !state.payroll._setup && saves===0 && toasts.length===1);
 // 名前が片方だけ空で金額がある行は、黙って捨てずに止める
-global.state={payroll:{}}; saves=0; toasts.length=0;
+global.state={payroll:{},lastFullSync:Date.now()}; saves=0; toasts.length=0;
 mkDom([{app:'甲',xls:'甲野',base:'1'},{app:'乙',xls:'',base:'123450'}],[]); savePayrollSetup();
 t('f: 氏名が空で金額がある行は保存しない（トースト）', !state.payroll._setup && saves===0 && toasts.length===1);
-global.state={payroll:{}}; saves=0; toasts.length=0;
+global.state={payroll:{},lastFullSync:Date.now()}; saves=0; toasts.length=0;
 mkDom([{app:'甲',xls:'甲野',base:'1'}],[{name:'',amt:'5'}]); savePayrollSetup();
 t('f: 固定のみの氏名が空で金額がある行は保存しない', !state.payroll._setup && toasts.length===1);
-global.state={payroll:{}}; saves=0; toasts.length=0;
+global.state={payroll:{},lastFullSync:Date.now()}; saves=0; toasts.length=0;
 mkDom([{app:"甲'",xls:'甲野',base:'1'}],[]); savePayrollSetup();
 t('f: 名前に記号（クォート）は保存しない', !state.payroll._setup && toasts.length===1);
-global.state={payroll:{}};
+global.state={payroll:{},lastFullSync:Date.now()};
 mkDom([{app:'',xls:''}],[]); toasts.length=0; savePayrollSetup();
 t('f: 有効な行が0なら保存しない', !state.payroll._setup && toasts.length===1);
+
+// g. 給与設定がまだ届いていない端末は、同期が通っていないと保存しない（クラウドの本物を上書きしない）
+global.state={payroll:{},lastFullSync:0}; saves=0; toasts.length=0;
+mkDom([{app:'甲',xls:'甲野',base:'1'}],[]); savePayrollSetup();
+t('g: 未着・未同期の端末では保存しない（トースト）', !state.payroll._setup && saves===0 && toasts.length===1 && /同期/.test(toasts[0]));
+global.state={payroll:{},lastFullSync:Date.now()-3600e3}; saves=0; toasts.length=0; savePayrollSetup();
+t('g: 最後の同期が古い（1時間前）未着端末も保存しない', !state.payroll._setup && saves===0);
+global.state={payroll:{_setup:{rows:[{app:'丁',xls:'丁山'}],fixedOnly:[],updatedAt:'2026-10-01T00:00:00.000Z'}},lastFullSync:0}; saves=0; toasts.length=0; savePayrollSetup();
+t('g: 給与設定が届いている端末は編集を保存できる', state.payroll._setup.rows[0].app==='甲' && saves===1);
 
 checks.forEach(([n,v])=>console.log((v?'✅':'❌')+' '+n));
 const ok=checks.every(c=>c[1]); console.log('\n'+(ok?'すべて合格':'★失敗あり')); process.exit(ok?0:1);
