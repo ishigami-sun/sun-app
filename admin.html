@@ -4832,6 +4832,7 @@ function init(){
   /* PIN無効 */
 
   if(!state.staff||!state.staff.length) state.staff=['石上（代表）','花岡（店長）','林（副店長）','東（数字リーダー）','堀井（教育リーダー）','梅田','カノン'];
+  try{ _ensurePayrollSetup(); }catch(e){}
   try{ if(typeof migrateStaffRoles==='function') migrateStaffRoles(); }catch(e){} // 2026/8〜の役職変更を名簿に反映（既存端末）
   if(!state.mediaList||!state.mediaList.length) state.mediaList=['ホットペッパー','楽天ビューティー','Instagram','LINE','Google','ホームページ','口コミ','紹介','ビューティーメリット','友達紹介','DM','TikTok','その他'];
   // 支払い方法は代表5種に固定（毎回上書き・編集不可・同期でも変わらない）
@@ -8362,8 +8363,9 @@ function laborAggregate(ym){
 function laborCostForMonth(ym){
   var agg=laborAggregate(ym), towel=hpsMap(ym), ovr=laborSalesMap(ym);
   var rows=[], totalPay=0, totalSales=0;
-  for(var pi=0;pi<PAYROLL_ROWS.length;pi++){
-    var R=PAYROLL_ROWS[pi], a=agg[R.app]||{menuInc:0,sell:0,profit:0};
+  var PR=payrollRows(), FO=payrollFixedOnly();
+  for(var pi=0;pi<PR.length;pi++){
+    var R=PR[pi], a=agg[R.app]||{menuInc:0,sell:0,profit:0};
     var estSales=Math.round(a.menuInc/1.1);
     var sales=(ovr[R.app]!=null)?ovr[R.app]:estSales;
     var tech = R.assistant ? Math.floor(sales*ASSISTANT_RATE) : techCommission(sales);
@@ -8375,7 +8377,7 @@ function laborCostForMonth(ym){
     rows.push({R:R,sales:sales,est:estSales,over:(ovr[R.app]!=null),tech:tech,profit:profit,rate:rate,prod:prod,hps:hps,fixed:fixed,pay:pay});
   }
   var fixedOnly=0;
-  for(var fi=0;fi<PAYROLL_FIXED_ONLY.length;fi++) fixedOnly+=PAYROLL_FIXED_ONLY[fi].amount;
+  for(var fi=0;fi<FO.length;fi++) fixedOnly+=FO[fi].amount;
   var grossPay=totalPay+fixedOnly;
   var company=Math.round(grossPay*(1+SOCIAL_INSURANCE_RATE));
   var shopSales=0;
@@ -8397,8 +8399,9 @@ function renderLaborCost(){
   if(!ym) return;
   var agg=laborAggregate(ym), towel=hpsMap(ym), ovr=laborSalesMap(ym);
   var rows=[], totalPay=0, totalSales=0, tips=[];
-  for(var pi=0;pi<PAYROLL_ROWS.length;pi++){
-    var R=PAYROLL_ROWS[pi], a=agg[R.app]||{menuInc:0,sell:0,profit:0};
+  var PR=payrollRows(), FO=payrollFixedOnly();
+  for(var pi=0;pi<PR.length;pi++){
+    var R=PR[pi], a=agg[R.app]||{menuInc:0,sell:0,profit:0};
     var estSales=Math.round(a.menuInc/1.1);          // アプリ集計の税抜（目安）
     var sales=(ovr[R.app]!=null)?ovr[R.app]:estSales;
     var tech = R.assistant ? Math.floor(sales*ASSISTANT_RATE) : techCommission(sales);
@@ -8414,7 +8417,7 @@ function renderLaborCost(){
     if(np && np.gain>0 && profit>0) tips.push('<b>'+h(R.xls)+'</b>：物販利益あと <b>¥'+num(np.need)+'</b> で歩合率が上がる（+¥'+num(np.gain)+'）');
   }
   var fixedOnly=0;
-  for(var fi=0;fi<PAYROLL_FIXED_ONLY.length;fi++) fixedOnly+=PAYROLL_FIXED_ONLY[fi].amount;
+  for(var fi=0;fi<FO.length;fi++) fixedOnly+=FO[fi].amount;
   var grossPay=totalPay+fixedOnly;
   var company=Math.round(grossPay*(1+SOCIAL_INSURANCE_RATE));
   // 店舗全体の売上（施術＋物販、税抜）
@@ -8457,7 +8460,7 @@ function renderLaborCost(){
      +'<b>💡 あと少しで歩合が増える人</b><br>'+tips.slice(0,8).join('<br>')
      +'<div style="font-size:11px;color:#8a6d4a;margin-top:5px">物販の歩合率は利益の全額にかかるので、境目（3万・5万・8万）を超えると一気に増えます</div></div>';
   }
-  s+='<div style="font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.8">※固定給は令和8年8月度の給与明細に基づく登録値です（基本給・定額残業・役職手当・通勤費）。変更があったら教えてください。<br>※所得税・住民税・本人負担の社会保険は個人差が大きいため、ここでは会社が払う総額のみを出しています。</div>';
+  s+='<div style="font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.8">※固定給は『⚙️ 給与設定』の登録値です（基本給・定額残業・役職手当・通勤費）。<br>※所得税・住民税・本人負担の社会保険は個人差が大きいため、ここでは会社が払う総額のみを出しています。</div>';
   el.innerHTML=s;
 }
 /* ===== 💴 給与エクセル用の集計（v20.1）
@@ -8465,8 +8468,8 @@ function renderLaborCost(){
    H列=店販売値(税込) / I列=原価 → アプリの物販データから自動集計
    P列=ヒポポタマスのタオル売上(税込) → HPSの請求書を見て手入力（アプリ外のデータ）
    歩合の計算式はエクセルと同一にしてある（照合用） ===== */
-var PAYROLL_ROWS=[
-  // 固定給は2026年9月10日支給（令和8年8月度）の給与明細から。変更があったらここを直す
+// v24.5で削除する初期値。クラウドの給与設定（state.payroll._setup）が優先される
+var _PAYROLL_SEED_ROWS=[
   {app:'花岡', xls:'（氏名）', row:7,  base:0, ot:0, post:0, postName:'店長手当',   commute:10000},
   {app:'堀井', xls:'（氏名）',  row:8,  base:123450, ot:0, post:0,  postName:'リーダー手当', commute:10000},
   {app:'東',   xls:'（氏名）',    row:9,  base:123450, ot:0, post:0,  postName:'リーダー手当', commute:10000},
@@ -8474,11 +8477,118 @@ var PAYROLL_ROWS=[
   {app:'カノン', xls:'（氏名）', row:11, base:123450, ot:0, post:0,      postName:'',           commute:10000, assistant:true},
   {app:'林',   xls:'（氏名）',    row:12, base:123450, ot:0, post:0,  postName:'副店長手当',  commute:10000}
 ];
-// 歩合の対象外（固定給のみ）。人件費の合計に含めるために持つ
-var PAYROLL_FIXED_ONLY=[
+// 歩合の対象外（固定給のみ）。v24.5で削除する初期値（クラウドの給与設定が優先）
+var _PAYROLL_SEED_FIXED=[
   {name:'（氏名）', amount:0},
   {name:'（氏名）', amount:0}
 ];
+/* ===== ⚙️ 給与設定（v24.4）: 固定給の実額は公開コードに置かず、クラウドの admin 専用マスタに持つ
+   保存先は state.payroll._setup = {rows, fixedOnly, updatedAt}（月キーと同じ updatedAt の新しい方が勝つ） ===== */
+var PAYROLL_SEED_AT='2026-09-10T00:00:00.000Z';   // 初期値の日時（あとから編集した値が必ず勝つように古くしてある）
+function payrollSetup(){
+  var p=state.payroll&&state.payroll._setup;
+  return (p&&Array.isArray(p.rows))?p:null;
+}
+function payrollRows(){ var p=payrollSetup(); return p?p.rows:_PAYROLL_SEED_ROWS; }
+function payrollFixedOnly(){ var p=payrollSetup(); return (p&&Array.isArray(p.fixedOnly))?p.fixedOnly:_PAYROLL_SEED_FIXED; }
+function _ensurePayrollSetup(){
+  try{
+    if(payrollSetup()) return;
+    if(!state.payroll||typeof state.payroll!=='object') state.payroll={};
+    state.payroll._setup={rows:JSON.parse(JSON.stringify(_PAYROLL_SEED_ROWS)), fixedOnly:JSON.parse(JSON.stringify(_PAYROLL_SEED_FIXED)), updatedAt:PAYROLL_SEED_AT};
+    save();
+  }catch(e){}
+}
+// 全角数字・カンマ・¥・円を許容して 0 以上の整数にする（マイナスは 0）
+function _psNum(v){
+  var s=String(v==null?'':v).replace(/[０-９]/g,function(c){ return String.fromCharCode(c.charCodeAt(0)-0xFEE0); });
+  if(/^\s*[-－−ー‐]/.test(s)) return 0;
+  s=s.replace(/[^0-9]/g,'');
+  var n=parseInt(s,10);
+  return (isNaN(n)||n<0)?0:n;
+}
+function _psVal(id){ var e=document.getElementById(id); return e?e.value:''; }
+// 画面の入力をそのまま読む（空行も残す。行の追加・削除で入力中の内容を失わないため）
+function _psRead(){
+  var rows=[], fixedOnly=[], i;
+  for(i=0; document.getElementById('ps_app_'+i); i++){
+    var a=document.getElementById('ps_as_'+i);
+    var o={app:staffBase(_psVal('ps_app_'+i)), xls:String(_psVal('ps_xls_'+i)).trim(), row:_psNum(_psVal('ps_row_'+i)),
+           base:_psNum(_psVal('ps_base_'+i)), ot:_psNum(_psVal('ps_ot_'+i)), post:_psNum(_psVal('ps_post_'+i)),
+           postName:String(_psVal('ps_pn_'+i)).trim(), commute:_psNum(_psVal('ps_com_'+i))};
+    if(a&&a.checked) o.assistant=true;
+    rows.push(o);
+  }
+  for(i=0; document.getElementById('ps_fname_'+i); i++){
+    fixedOnly.push({name:String(_psVal('ps_fname_'+i)).trim(), amount:_psNum(_psVal('ps_famt_'+i))});
+  }
+  return {rows:rows, fixedOnly:fixedOnly};
+}
+function _psRedraw(draft){ window._psDraft=draft; window._psDirty=false; window._psOpen=true; renderPayrollExport(); window._psDirty=true; }
+function psAddRow(){ var d=_psRead(); d.rows.push({app:'',xls:'',row:0,base:0,ot:0,post:0,postName:'',commute:0}); _psRedraw(d); }
+function psDelRow(i){ var d=_psRead(); d.rows.splice(i,1); _psRedraw(d); }
+function psAddFixed(){ var d=_psRead(); d.fixedOnly.push({name:'',amount:0}); _psRedraw(d); }
+function psDelFixed(i){ var d=_psRead(); d.fixedOnly.splice(i,1); _psRedraw(d); }
+function renderPayrollSetupEditor(){
+  // 入力中（未保存）の内容があれば、再描画（タオル入力・月切替など）で消さずに画面から拾い直す
+  if(window._psDirty && document.getElementById('ps_app_0')){ try{ window._psDraft=_psRead(); }catch(e){} }
+  var d=window._psDraft||{rows:payrollRows(), fixedOnly:payrollFixedOnly()};
+  var su=payrollSetup();
+  var at=(su&&su.updatedAt)||'';
+  var atTxt=!at?'未保存（初期値）':(at===PAYROLL_SEED_AT?'初期値（まだ編集していません）':new Date(at).toLocaleString('ja-JP'));
+  var inp='width:100%;box-sizing:border-box;padding:7px;border:1.5px solid #C8E0DC;border-radius:7px;font-size:13px;';
+  var lab='font-size:10px;color:#64748B;font-weight:700;margin-bottom:2px';
+  function f(label,id,val,num){
+    return '<div><div style="'+lab+'">'+label+'</div><input type="text"'+(num?' inputmode="numeric"':'')+' id="'+id+'" value="'+h(val)+'" style="'+inp+(num?'text-align:right;':'')+'"></div>';
+  }
+  var s='<details id="psDetails"'+(window._psOpen?' open':'')+' ontoggle="window._psOpen=this.open" oninput="window._psDirty=true" onchange="window._psDirty=true" style="margin-bottom:14px;border:1.5px solid #C8E0DC;border-radius:10px;background:#F8FAFA">'
+   +'<summary style="padding:10px 12px;font-size:13px;font-weight:800;color:#1A4F47;cursor:pointer">⚙️ 給与設定（固定給）</summary>'
+   +'<div style="padding:4px 12px 12px">';
+  for(var i=0;i<d.rows.length;i++){
+    var R=d.rows[i];
+    s+='<div style="border:1px solid #C8E0DC;border-radius:9px;background:#fff;padding:9px;margin-bottom:8px">'
+     +'<div style="display:grid;grid-template-columns:1fr 1fr 70px;gap:6px;margin-bottom:6px">'
+     +f('アプリ名','ps_app_'+i,R.app,false)+f('給与明細の氏名','ps_xls_'+i,R.xls,false)+f('エクセル行','ps_row_'+i,R.row,true)+'</div>'
+     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">'
+     +f('基本給','ps_base_'+i,R.base,true)+f('定額残業','ps_ot_'+i,R.ot,true)+'</div>'
+     +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px">'
+     +f('役職手当','ps_post_'+i,R.post,true)+f('手当名','ps_pn_'+i,R.postName,false)+f('通勤費','ps_com_'+i,R.commute,true)+'</div>'
+     +'<div style="display:flex;justify-content:space-between;align-items:center">'
+     +'<label style="font-size:12px;color:#1A4F47"><input type="checkbox" id="ps_as_'+i+'"'+(R.assistant?' checked':'')+'> アシスタント（ヘッドスパ等×20%）</label>'
+     +'<button type="button" onclick="psDelRow('+i+')" style="padding:5px 10px;border:1px solid #E8B4B4;background:#fff;color:#C0392B;border-radius:7px;font-size:12px">削除</button></div></div>';
+  }
+  s+='<button type="button" onclick="psAddRow()" style="padding:7px 12px;border:1.5px dashed #2C7A6E;background:#fff;color:#1A4F47;border-radius:8px;font-size:12px;font-weight:700;margin-bottom:12px">＋ 行を追加</button>'
+   +'<div style="font-size:12px;font-weight:800;color:#1A4F47;margin:4px 0 6px">固定のみ（歩合なし：役員など）</div>';
+  for(var k=0;k<d.fixedOnly.length;k++){
+    var F=d.fixedOnly[k];
+    s+='<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:end;margin-bottom:6px">'
+     +f('氏名','ps_fname_'+k,F.name,false)+f('金額','ps_famt_'+k,F.amount,true)
+     +'<button type="button" onclick="psDelFixed('+k+')" style="padding:7px 10px;border:1px solid #E8B4B4;background:#fff;color:#C0392B;border-radius:7px;font-size:12px">削除</button></div>';
+  }
+  s+='<button type="button" onclick="psAddFixed()" style="padding:7px 12px;border:1.5px dashed #2C7A6E;background:#fff;color:#1A4F47;border-radius:8px;font-size:12px;font-weight:700;margin-bottom:12px">＋ 固定のみを追加</button>'
+   +'<div><button type="button" onclick="savePayrollSetup()" style="width:100%;padding:11px;border:none;border-radius:9px;background:#2C7A6E;color:#fff;font-size:14px;font-weight:800">💾 給与設定を保存</button></div>'
+   +'<div style="font-size:11px;color:#94a3b8;margin-top:6px;line-height:1.7">最終更新：'+h(atTxt)+'<br>保存するとクラウドに送られ、他の端末の管理画面にも反映されます。</div>'
+   +'</div></details>';
+  return s;
+}
+function savePayrollSetup(){
+  var d=_psRead();
+  var rows=d.rows.filter(function(r){ return r.app && r.xls; });
+  var fixedOnly=d.fixedOnly.filter(function(r){ return r.name; });
+  if(!rows.length){ showToast('⚠️ 給与の行が1つもありません'); return; }
+  var seen={};
+  for(var i=0;i<rows.length;i++){
+    if(seen[rows[i].app]){ showToast('⚠️ アプリ名「'+rows[i].app+'」が重複しています'); return; }
+    seen[rows[i].app]=1;
+  }
+  if(!state.payroll||typeof state.payroll!=='object') state.payroll={};
+  state.payroll._setup={rows:rows, fixedOnly:fixedOnly, updatedAt:new Date().toISOString()};
+  window._psDraft=null; window._psDirty=false; window._psOpen=true;
+  save();
+  renderPayrollExport();
+  try{ renderLaborCost(); }catch(e){}
+  showToast('💾 給与設定を保存しました');
+}
 // アシスタントのヘッドスパ等の歩合率（エクセルC25）
 var ASSISTANT_RATE=0.2;
 // 技術売上の歩合（エクセルE〜J列と同一。50万未満は歩合ゼロ、以降は段階ごとの積み上げ）
@@ -8566,8 +8676,9 @@ function renderPayrollExport(){
     }
   }
   var towel=hpsMap(ym);
+  var PR=payrollRows();
 
-  var s='';
+  var s=renderPayrollSetupEditor();
   s+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:560px">';
   s+='<tr style="background:#EAF5F3"><th style="border:1px solid #C8E0DC;padding:6px">エクセルの氏名</th>'
    +'<th style="border:1px solid #C8E0DC;padding:6px">H列<br>店販売値(税込)</th>'
@@ -8576,8 +8687,8 @@ function renderPayrollExport(){
    +'<th style="border:1px solid #C8E0DC;padding:6px">参考<br>店販歩合</th>'
    +'<th style="border:1px solid #C8E0DC;padding:6px">参考<br>HPS歩合</th></tr>';
   var totSell=0, totCost=0, totTowel=0;
-  for(var pi=0;pi<PAYROLL_ROWS.length;pi++){
-    var row=PAYROLL_ROWS[pi];
+  for(var pi=0;pi<PR.length;pi++){
+    var row=PR[pi];
     var a=agg[row.app]||{sell:0,profit:0,menuInc:0,n:0};
     var sell=Math.round(a.sell), cost=Math.round(a.sell-a.profit);
     var j=sell-cost, rate=payrollRate(j), tpay=Math.floor(j*rate);
@@ -8603,7 +8714,7 @@ function renderPayrollExport(){
   var others=[];
   for(var key in agg){
     var hit=false;
-    for(var pj=0;pj<PAYROLL_ROWS.length;pj++) if(PAYROLL_ROWS[pj].app===key) hit=true;
+    for(var pj=0;pj<PR.length;pj++) if(PR[pj].app===key) hit=true;
     if(!hit && agg[key].sell>0) others.push(key);
   }
   if(others.length){
@@ -8619,8 +8730,8 @@ function renderPayrollExport(){
 
   // エクセル貼り付け用
   var tsv='氏名\tH店販売値\tI原価\tPタオル税込\n';
-  for(var ti=0;ti<PAYROLL_ROWS.length;ti++){
-    var rw=PAYROLL_ROWS[ti], ag=agg[rw.app]||{sell:0,profit:0};
+  for(var ti=0;ti<PR.length;ti++){
+    var rw=PR[ti], ag=agg[rw.app]||{sell:0,profit:0};
     tsv+=rw.xls+'\t'+Math.round(ag.sell)+'\t'+Math.round(ag.sell-ag.profit)+'\t'+(towel[rw.app]||0)+'\n';
   }
   s+='<div style="margin-top:12px"><div style="font-size:11px;color:#64748B;font-weight:700;margin-bottom:4px">📋 エクセル貼り付け用（パソコンでコピーして貼り付け）</div>'
@@ -8760,6 +8871,7 @@ function pnlStaffAgg(filtered){
 // 以前は固定給を全員（概算）・技術歩合を税込売上の1円目から・物販歩合は四捨五入・HPSなし、という概算で
 // 給与エクセルと合わなかった。管理タブ「人件費の見通し」と同じ数字が P&L にも出る。
 function pnlPayroll(filtered){
+  var FO=payrollFixedOnly();
   var mk=pnlMonthKeys(), per={}, order=[], fixedOnly=0, grossPay=0, company=0;
   function ens(name){ if(!per[name]){ per[name]={name:name,type:'stylist',fixed:0,post:0,tech:0,prod:0,hps:0,sum:0,techSales:0,spaSales:0,prodProfit:0,months:0}; order.push(name); } return per[name]; }
   for(var q=0;q<mk.keys.length;q++){
@@ -8771,7 +8883,7 @@ function pnlPayroll(filtered){
       o.tech+=x.tech; o.prod+=x.prod; o.hps+=x.hps; o.sum+=x.pay;
       o.techSales+=x.sales; if(x.R.assistant) o.spaSales+=x.sales; o.prodProfit+=x.profit; o.months++;
     }
-    for(var fi=0;fi<PAYROLL_FIXED_ONLY.length;fi++){ var F=PAYROLL_FIXED_ONLY[fi], of=ens(F.name); of.type='officer'; of.officer=true; of.sum+=F.amount; of.months++; }
+    for(var fi=0;fi<FO.length;fi++){ var F=FO[fi], of=ens(F.name); of.type='officer'; of.officer=true; of.sum+=F.amount; of.months++; }
     fixedOnly+=L.fixedOnly; grossPay+=L.grossPay; company+=L.company;
   }
   var rows=order.map(function(n){ return per[n]; });
@@ -9924,7 +10036,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "24.3";
+var APP_VERSION = "24.4";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
