@@ -8499,7 +8499,7 @@ function renderLaborCost(){
    H列=店販売値(税込) / I列=原価 → アプリの物販データから自動集計
    P列=ヒポポタマスのタオル売上(税込) → HPSの請求書を見て手入力（アプリ外のデータ）
    歩合の計算式はエクセルと同一にしてある（照合用） ===== */
-// v24.5で削除する初期値。クラウドの給与設定（state.payroll._setup）が優先される
+// v24.6で削除する初期値。クラウドの給与設定（state.payroll._setup）が優先される
 var _PAYROLL_SEED_ROWS=[
   {app:'花岡', xls:'（氏名）', row:7,  base:0, ot:0, post:0, postName:'店長手当',   commute:10000},
   {app:'堀井', xls:'（氏名）',  row:8,  base:123450, ot:0, post:0,  postName:'リーダー手当', commute:10000},
@@ -8508,7 +8508,7 @@ var _PAYROLL_SEED_ROWS=[
   {app:'カノン', xls:'（氏名）', row:11, base:123450, ot:0, post:0,      postName:'',           commute:10000, assistant:true},
   {app:'林',   xls:'（氏名）',    row:12, base:123450, ot:0, post:0,  postName:'副店長手当',  commute:10000}
 ];
-// 歩合の対象外（固定給のみ）。v24.5で削除する初期値（クラウドの給与設定が優先）
+// 歩合の対象外（固定給のみ）。v24.6で削除する初期値（クラウドの給与設定が優先）
 var _PAYROLL_SEED_FIXED=[
   {name:'（氏名）', amount:0},
   {name:'（氏名）', amount:0}
