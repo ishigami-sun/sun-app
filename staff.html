@@ -1487,6 +1487,14 @@ function normalizeCloudConfig(){
 // クラウドAPI呼び出し
 function callCloud(action, payload, callback, _tries){
   _tries=_tries||0;
+  // 【v24.4】一度も取り込みに成功していない端末はマスタを送らない（どの経路から呼ばれても）。
+  // 取り込み前の空のマスタで saveMasters すると、クラウドの経費・給与などが消える。syncAll の取り込み後に送る
+  if(action==='saveMasters' && !state.lastFullSync){
+    state._mastersDirty=true;
+    try{ saveLocal(); }catch(e){}
+    if(callback){ try{ callback({ok:false, deferred:true, error:'取り込み前のため後で送信'}); }catch(e){} }
+    return;
+  }
   try{ if(normalizeCloudConfig()) saveLocal(); }catch(e){}
   if(!state.cloudUrl||!state.cloudKey){
     if(callback) callback({ok:false, error:'未設定'});
@@ -2174,6 +2182,15 @@ if(typeof window!=='undefined'){ try{ window.addEventListener('pagehide', flushS
 // マスタをクラウドに保存する共通関数
 function saveMastersToCloud(cb){
   if(!state.cloudUrl || !state.cloudKey || typeof callCloud !== 'function') return;
+  // 【v24.4】この端末で一度もクラウドの取り込みが成功していない（新しい端末・データを消した端末）間は送らない。
+  // saveMasters はクラウドのマスタを「送った内容」で丸ごと置き換えるため、取り込む前の空のマスタを送ると
+  // 経費・給与・P&L のデータがクラウドから消える。印だけ立てて、syncAll の「取り込み→日報→マスタ」で送らせる。
+  if(!state.lastFullSync){
+    state._mastersDirty=true;
+    try{ saveLocal(); }catch(e){}
+    try{ if(cb) cb({ok:false, deferred:true}); }catch(e){}
+    return;
+  }
   // 【重要】saveMasters はクラウド側の配列を丸ごと置き換える。
   // 先に送ってしまうと、同期していない端末の古い報告一覧で
   // 他の端末が書いた報告をクラウドから消してしまう（報告が最新にならない原因）。
@@ -2187,6 +2204,11 @@ function _pullReportsThenPush(next){
         if(res && res.ok && res.masters){
           if(res.masters.deletedMasters && typeof mergeDeletedMasters==='function') mergeDeletedMasters(res.masters.deletedMasters);
           if(res.masters.reports) state.reports = mergeMasterById(state.reports||[], res.masters.reports, delSetOf('reports'));
+          // 【v24.4】スタッフ版：管理者専用マスタ（経費・給与など）の控えも最新にしてから返す。
+          // 古い控えのまま送ると、直前に管理者が保存した経費・給与設定がクラウドで古い内容に戻る
+          if(typeof ADMIN_ONLY_MASTERS!=='undefined'){
+            try{ var _keep2=state._adminMasters||{}; for(var _aj=0;_aj<ADMIN_ONLY_MASTERS.length;_aj++){ var _ak2=ADMIN_ONLY_MASTERS[_aj]; if(res.masters[_ak2]!=null) _keep2[_ak2]=res.masters[_ak2]; } state._adminMasters=_keep2; }catch(e){}
+          }
           try{ saveLocal(); }catch(e){}
         }
       }catch(e){}
@@ -6588,7 +6610,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "24.3";
+var APP_VERSION = "24.4";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
