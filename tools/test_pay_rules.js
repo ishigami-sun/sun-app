@@ -164,5 +164,24 @@ global.staffBase=x=>String(x||'').replace(/[（(].*$/,'').trim();
   t('⑤歩合が空なら給与ルール（段階制）で計算＝以前と同じ', by('無').tech===techCommission(800000));
   t('⑤アシスタントも歩合0%を入れれば0', by('助').tech===0);
 }
+// ---- ⑥ 一人ずつ「売上によって%が変わる」 ----
+{
+  global.state={payroll:{_rules:null}};
+  const D=PAY_RULES_DEFAULT.tech;
+  const same={tMode:'tier',tTiers:{mode:'tiered',threshold:D.threshold,tiers:D.tiers}};
+  let eq=0; for(let k=0;k<3000;k++){ const x=Math.floor(Math.random()*4000000); if(rowCommission(same,x,'employee')===techCommission(x)) eq++; }
+  t('⑥段階を白金台と同じに入れると、共通ルールと1円まで同じ（3000件）', eq===3000);
+  const W={tMode:'tier',tTiers:{mode:'whole',threshold:0,tiers:[{upto:1000000,rate:10},{upto:0,rate:20}]}};
+  t('⑥売上全体にその%：80万×10%＝80,000／120万×20%＝240,000', rowCommission(W,800000,'employee')===80000 && rowCommission(W,1200000,'employee')===240000);
+  const S={tMode:'tier',tTiers:{mode:'tiered',threshold:300000,tiers:[{upto:1000000,rate:10},{upto:0,rate:20}]}};
+  t('⑥超えた分だけ：120万＝100万×10%＋20万×20%＝140,000、30万未満は0', rowCommission(S,1200000,'employee')===140000 && rowCommission(S,299999,'employee')===0);
+  const C={kind:'contractor',cRate:40,tMode:'tier',tTiers:{mode:'tiered',threshold:0,tiers:[{upto:500000,rate:40},{upto:0,rate:50}]}};
+  t('⑥業務委託も段階にできる：80万＝50万×40%＋30万×50%＝350,000', rowCommission(C,800000,'contractor')===350000);
+  t('⑥業務委託の一律%は今までどおり', rowCommission({kind:'contractor',cRate:40},1000000,'contractor')===400000);
+  const bad=[{tMode:'tier',tTiers:{tiers:[{upto:0,rate:10}]}},{tMode:'tier',tTiers:{tiers:[{upto:500000,rate:10},{upto:300000,rate:20},{upto:0,rate:30}]}},{tMode:'tier',tTiers:{tiers:[{upto:500000,rate:150},{upto:0,rate:20}]}}];
+  t('⑥段階が壊れていたら保存時に止める（問題を言葉で返す）', bad.every(b=>_rowTierProblems(b).length>0) && _rowTierProblems(S).length===0);
+  t('⑥一律を選んで空なら0%（共通ルールにならない）', rowCommission({tMode:'flat'},1000000,'employee')===0);
+  t('⑥何も選んでいない行は今までどおり共通ルール', rowCommission({},800000,'employee')===techCommission(800000));
+}
 checks.forEach(([n,v])=>console.log((v?'✅':'❌')+' '+n));
 const ok=checks.every(c=>c[1]); console.log('\n'+(ok?'すべて合格':'★失敗あり')); process.exit(ok?0:1);
