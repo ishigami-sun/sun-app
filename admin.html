@@ -8509,24 +8509,43 @@ function laborAggregate(ym){
 //         company（会社負担の社会保険込み）, totalSales（技術売上税抜の合計）, shopSales（店舗売上税抜）
 function laborCostForMonth(ym){
   var agg=laborAggregate(ym), towel=hpsMap(ym), ovr=laborSalesMap(ym);
-  var rows=[], totalPay=0, totalSales=0;
+  var rows=[], totalPay=0, totalSales=0, noSocial=0;
   var PR=payrollRows(), FO=payrollFixedOnly();
   for(var pi=0;pi<PR.length;pi++){
-    var R=PR[pi], a=agg[R.app]||{menuInc:0,sell:0,profit:0};
+    var R=PR[pi], a=agg[R.app]||{menuInc:0,sell:0,profit:0}, kind=rowKind(R);
     var estSales=techBaseFromInc(a.menuInc);
     var sales=(ovr[R.app]!=null)?ovr[R.app]:estSales;
-    var tech = R.assistant ? Math.floor(sales*assistantRate()) : techCommission(sales);
     var profit=productBase(a.sell, a.profit), pc=productCommission(profit), rate=pc.rate, prod=pc.amount;
     var tw=towel[R.app]||0, hps=hpsPay(tw);
-    var fixed=R.base+R.ot+R.post+R.commute;
-    var pay=payTotal(fixed, tech, prod, hps);
+    var tech, fixed, pay, hours=null, social=true;
+    if(kind==='contractor'){
+      // 業務委託：技術売上×取り分%（税込／税抜は行ごとに選ぶ）。物販は選んだ時だけ物販歩合を足す。給与ではないので社会保険は掛からない
+      estSales = R.cBasis==='inc' ? Math.round(a.menuInc) : Math.round(a.menuInc/1.1);
+      sales=(ovr[R.app]!=null)?ovr[R.app]:estSales;
+      tech=_payRound('floor', sales*_pct(R.cRate||0));
+      if(!R.cProd){ prod=0; rate=0; }
+      hps=0; fixed=0; pay=tech+prod; social=false;
+    } else if(kind==='parttime'){
+      // アルバイト：時給×働いた時間（出勤簿から。管理画面で手入力も可）＋通勤費
+      var hh=ovr[R.app+'#h'];
+      hours=(hh!=null)?hh:partTimeHours(ym, R.app);
+      fixed=Math.round((R.wage||0)*hours)+(R.commute||0);
+      tech=0; if(!R.ptProd){ prod=0; rate=0; }
+      hps=0; pay=fixed+prod; social=!!R.social;
+    } else {
+      tech = kind==='assistant' ? Math.floor(sales*assistantRate()) : techCommission(sales);
+      fixed=R.base+R.ot+R.post+R.commute;
+      pay=payTotal(fixed, tech, prod, hps);
+    }
+    if(!social) noSocial+=pay;
     totalPay+=pay; totalSales+=sales;
-    rows.push({R:R,sales:sales,est:estSales,over:(ovr[R.app]!=null),tech:tech,profit:profit,rate:rate,prod:prod,hps:hps,fixed:fixed,pay:pay});
+    rows.push({R:R,kind:kind,sales:sales,est:estSales,over:(ovr[R.app]!=null),tech:tech,profit:profit,rate:rate,prod:prod,hps:hps,fixed:fixed,pay:pay,hours:hours,hoursOver:(ovr[R.app+'#h']!=null),social:social});
   }
   var fixedOnly=0;
   for(var fi=0;fi<FO.length;fi++) fixedOnly+=FO[fi].amount;
   var grossPay=totalPay+fixedOnly;
-  var company=Math.round(grossPay*(1+socialRate()));
+  // 会社負担の社会保険は、社員・役員（と社会保険ありのアルバイト）の分だけに掛ける
+  var company=Math.round((grossPay-noSocial)*(1+socialRate()))+noSocial;
   var shopSales=0;
   for(var key in agg) shopSales+=Math.round(agg[key].menuInc/1.1)+Math.round(agg[key].sell/1.1);
   return {ym:ym, rows:rows, totalPay:totalPay, totalSales:totalSales, fixedOnly:fixedOnly, grossPay:grossPay, company:company, shopSales:shopSales};
@@ -8552,7 +8571,7 @@ function renderLaborCost(){
   var rows=L.rows, totalPay=L.totalPay, totalSales=L.totalSales, tips=[];
   for(var pi=0;pi<rows.length;pi++){
     var R=rows[pi].R, sales=rows[pi].sales, profit=rows[pi].profit;
-    var nt=R.assistant?null:nextTechTier(sales);
+    var nt=(rows[pi].kind!=='employee')?null:nextTechTier(sales);
     if(nt && nt.gain>0) tips.push('<b>'+h(R.xls)+'</b>：技術売上あと <b>¥'+num(nt.need)+'</b> で'+(sales<(payRules().tech.threshold||0)?'歩合が発生':'歩合率が上がる')+'（+¥'+num(nt.gain)+'）');
     var np=nextProductTier(profit);
     if(np && np.gain>0 && profit>0) tips.push('<b>'+h(R.xls)+'</b>：物販'+productBasisLabel()+'あと <b>¥'+num(np.need)+'</b> で歩合率が上がる（+¥'+num(np.gain)+'）');
@@ -8562,18 +8581,25 @@ function renderLaborCost(){
 
   var s=_payrollMissingHtml()+'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:620px">';
   s+='<tr style="background:#E8F5E9"><th style="border:1px solid #A5D6A7;padding:5px">氏名</th>'
-   +'<th style="border:1px solid #A5D6A7;padding:5px">技術売上('+techBasisLabel()+')</th><th style="border:1px solid #A5D6A7;padding:5px">技術歩合</th>'
+   +'<th style="border:1px solid #A5D6A7;padding:5px">技術売上('+techBasisLabel()+')<br><span style="font-weight:400;font-size:10px">アルバイトは働いた時間</span></th><th style="border:1px solid #A5D6A7;padding:5px">技術歩合<br><span style="font-weight:400;font-size:10px">業務委託は報酬</span></th>'
    +'<th style="border:1px solid #A5D6A7;padding:5px">物販歩合</th>'+(hpsOn()?'<th style="border:1px solid #A5D6A7;padding:5px">HPS</th>':'')
    +'<th style="border:1px solid #A5D6A7;padding:5px">固定給</th><th style="border:1px solid #A5D6A7;padding:5px">支給見込</th></tr>';
   for(var ri=0;ri<rows.length;ri++){
     var x=rows[ri];
-    s+='<tr><td style="border:1px solid #C8E6C9;padding:5px"><b>'+h(x.R.xls)+'</b>'+(x.R.assistant?'<br><span style="font-size:10px;color:#94a3b8">アシスタント'+(Math.round(assistantRate()*1000)/10)+'%</span>':'')+'</td>'
-     +'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right"><input type="number" inputmode="numeric" value="'+(x.over?x.sales:'')+'" placeholder="'+num(x.est)+'" onchange="setLaborSales(\''+ym+'\',\''+x.R.app+'\',this.value)" style="width:92px;padding:5px;border:1.5px solid '+(x.over?'#2E7D32':'#C8E0DC')+';border-radius:6px;font-size:12px;text-align:right;color:#1A4F47">'
-     +'<br><span style="font-size:10px;color:#94a3b8">'+(x.over?'エアレジ入力':'アプリ目安')+'</span></td>'
+    var kl = x.kind==='assistant' ? 'アシスタント'+(Math.round(assistantRate()*1000)/10)+'%'
+           : x.kind==='contractor' ? '業務委託 売上('+(x.R.cBasis==='inc'?'税込':'税抜')+')×'+(x.R.cRate||0)+'%'
+           : x.kind==='parttime' ? 'アルバイト 時給¥'+num(x.R.wage||0) : '';
+    var inCell = x.kind==='parttime'
+      ? '<input type="text" inputmode="decimal" value="'+(x.hoursOver?x.hours:'')+'" placeholder="'+x.hours+'" onchange="setLaborHours(\''+ym+'\',\''+x.R.app+'\',this.value)" style="width:70px;padding:5px;border:1.5px solid '+(x.hoursOver?'#2E7D32':'#C8E0DC')+';border-radius:6px;font-size:12px;text-align:right;color:#1A4F47">時間'
+        +'<br><span style="font-size:10px;color:#94a3b8">'+(x.hoursOver?'手入力':'出勤簿から')+'</span>'
+      : '<input type="number" inputmode="numeric" value="'+(x.over?x.sales:'')+'" placeholder="'+num(x.est)+'" onchange="setLaborSales(\''+ym+'\',\''+x.R.app+'\',this.value)" style="width:92px;padding:5px;border:1.5px solid '+(x.over?'#2E7D32':'#C8E0DC')+';border-radius:6px;font-size:12px;text-align:right;color:#1A4F47">'
+        +'<br><span style="font-size:10px;color:#94a3b8">'+(x.over?'エアレジ入力':'アプリ目安')+'</span>';
+    s+='<tr><td style="border:1px solid #C8E6C9;padding:5px"><b>'+h(x.R.xls)+'</b>'+(kl?'<br><span style="font-size:10px;color:#94a3b8">'+h(kl)+'</span>':'')+'</td>'
+     +'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right">'+inCell+'</td>'
      +'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right">'+num(x.tech)+'</td>'
      +'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right">'+num(x.prod)+'<br><span style="font-size:10px;color:#94a3b8">'+productBasisLabel()+num(x.profit)+(payRules().product.mode==='whole'?'×'+(Math.round(x.rate*1000)/10)+'%':'')+'</span></td>'
      +(hpsOn()?'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right">'+num(x.hps)+'</td>':'')
-     +'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right">'+num(x.fixed)+'</td>'
+     +'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right">'+num(x.fixed)+(x.kind==='parttime'?'<br><span style="font-size:10px;color:#94a3b8">'+x.hours+'h×¥'+num(x.R.wage||0)+'</span>':'')+'</td>'
      +'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right;font-weight:800;color:#1B5E20">'+num(x.pay)+'</td></tr>';
   }
   s+='<tr style="background:#F1F8E9;font-weight:800"><td style="border:1px solid #A5D6A7;padding:5px">'+rows.length+'名の計</td>'
@@ -8595,7 +8621,7 @@ function renderLaborCost(){
      +'<b>💡 あと少しで歩合が増える人</b><br>'+tips.slice(0,8).join('<br>')
      +(payRules().product.mode==='whole'?'<div style="font-size:11px;color:#8a6d4a;margin-top:5px">物販の歩合率は'+productBasisLabel()+'の全額にかかるので、境目（'+productBoundsText()+'）を超えると一気に増えます</div>':'')+'</div>';
   }
-  s+='<div style="font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.8">※固定給は『⚙️ 給与設定』の登録値です（基本給・定額残業・役職手当・通勤費）。<br>※所得税・住民税・本人負担の社会保険は個人差が大きいため、ここでは会社が払う総額のみを出しています。</div>';
+  s+='<div style="font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.8">※業務委託の報酬と、社会保険なしのアルバイトの給与には、会社負担の社会保険を掛けていません。<br>※固定給は『⚙️ 給与設定』の登録値です（基本給・定額残業・役職手当・通勤費）。<br>※所得税・住民税・本人負担の社会保険は個人差が大きいため、ここでは会社が払う総額のみを出しています。</div>';
   el.innerHTML=s;
 }
 /* ===== 💴 給与エクセル用の集計（v20.1）
@@ -8634,11 +8660,15 @@ function _psVal(id){ var e=document.getElementById(id); return e?e.value:''; }
 function _psRead(){
   var rows=[], fixedOnly=[], i;
   for(i=0; document.getElementById('ps_app_'+i); i++){
-    var a=document.getElementById('ps_as_'+i);
+    var _asEl=document.getElementById('ps_as_'+i);
+    var kd=_psVal('ps_kind_'+i)||((_asEl&&_asEl.checked)?'assistant':'employee');
     var o={app:staffBase(_psVal('ps_app_'+i)), xls:String(_psVal('ps_xls_'+i)).trim(), row:_psNum(_psVal('ps_row_'+i)),
            base:_psNum(_psVal('ps_base_'+i)), ot:_psNum(_psVal('ps_ot_'+i)), post:_psNum(_psVal('ps_post_'+i)),
            postName:String(_psVal('ps_pn_'+i)).trim(), commute:_psNum(_psVal('ps_com_'+i))};
-    if(a&&a.checked) o.assistant=true;
+    if(kd==='assistant') o.assistant=true;
+    if(kd==='contractor'||kd==='parttime') o.kind=kd;
+    if(kd==='contractor'){ var cr=parseFloat(String(_psVal('ps_cr_'+i)).replace(/[０-９．]/g,function(c){ return c==='．'?'.':String.fromCharCode(c.charCodeAt(0)-0xFEE0); }).replace(/[^0-9.]/g,'')); o.cRate=isFinite(cr)?cr:0; o.cBasis=_psVal('ps_cb_'+i)==='inc'?'inc':'exc'; var cp=document.getElementById('ps_cp_'+i); if(cp&&cp.checked) o.cProd=true; }
+    if(kd==='parttime'){ o.wage=_psNum(_psVal('ps_wage_'+i)); o.commute=_psNum(_psVal('ps_pcom_'+i)); var so=document.getElementById('ps_soc_'+i); if(so&&so.checked) o.social=true; var pp=document.getElementById('ps_pp_'+i); if(pp&&pp.checked) o.ptProd=true; }
     rows.push(o);
   }
   for(i=0; document.getElementById('ps_fname_'+i); i++){
@@ -8647,6 +8677,7 @@ function _psRead(){
   return {rows:rows, fixedOnly:fixedOnly};
 }
 function _psRedraw(draft){ window._psDraft=draft; window._psDirty=false; window._psOpen=true; renderPayrollExport(); window._psDirty=true; }
+function psKind(i){ _psRedraw(_psRead()); }
 function psAddRow(){ var d=_psRead(); d.rows.push({app:'',xls:'',row:0,base:0,ot:0,post:0,postName:'',commute:0}); _psRedraw(d); }
 function psDelRow(i){ var d=_psRead(); d.rows.splice(i,1); _psRedraw(d); }
 function psAddFixed(){ var d=_psRead(); d.fixedOnly.push({name:'',amount:0}); _psRedraw(d); }
@@ -8667,16 +8698,34 @@ function renderPayrollSetupEditor(){
    +'<summary style="padding:10px 12px;font-size:13px;font-weight:800;color:#1A4F47;cursor:pointer">⚙️ 給与設定（固定給）</summary>'
    +'<div style="padding:4px 12px 12px">';
   for(var i=0;i<d.rows.length;i++){
-    var R=d.rows[i];
+    var R=d.rows[i], kd=rowKind(R);
+    var kopt=''; for(var kk in PAY_KINDS) kopt+='<option value="'+kk+'"'+(kk===kd?' selected':'')+'>'+PAY_KINDS[kk]+'</option>';
+    var emp=(kd==='employee'||kd==='assistant');
     s+='<div style="border:1px solid #C8E0DC;border-radius:9px;background:#fff;padding:9px;margin-bottom:8px">'
+     +'<div style="margin-bottom:6px"><div style="'+lab+'">働き方</div><select id="ps_kind_'+i+'" onchange="psKind('+i+')" style="'+inp+'background:#fff">'+kopt+'</select></div>'
      +'<div style="display:grid;grid-template-columns:1fr 1fr 70px;gap:6px;margin-bottom:6px">'
      +f('アプリ名','ps_app_'+i,R.app,false)+f('給与明細の氏名','ps_xls_'+i,R.xls,false)+f('エクセル行','ps_row_'+i,R.row,true)+'</div>'
+     +'<div style="display:'+(emp?'block':'none')+'">'
      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">'
      +f('基本給','ps_base_'+i,R.base,true)+f('定額残業','ps_ot_'+i,R.ot,true)+'</div>'
      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px">'
      +f('役職手当','ps_post_'+i,R.post,true)+f('手当名','ps_pn_'+i,R.postName,false)+f('通勤費','ps_com_'+i,R.commute,true)+'</div>'
-     +'<div style="display:flex;justify-content:space-between;align-items:center">'
-     +'<label style="font-size:12px;color:#1A4F47"><input type="checkbox" id="ps_as_'+i+'"'+(R.assistant?' checked':'')+'> アシスタント（ヘッドスパ等×20%）</label>'
+     +(kd==='assistant'?'<div style="font-size:11px;color:#64748B;margin-bottom:6px">歩合は施術売上×アシスタントの率（給与ルールで設定）</div>':'')
+     +'</div>'
+     +'<div style="display:'+(kd==='contractor'?'block':'none')+'">'
+     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">'
+     +f('取り分（技術売上の%）','ps_cr_'+i,(R.cRate!=null?R.cRate:''),true)
+     +'<div><div style="'+lab+'">元になる売上</div><select id="ps_cb_'+i+'" style="'+inp+'background:#fff"><option value="exc"'+(R.cBasis!=='inc'?' selected':'')+'>税抜（割引後）</option><option value="inc"'+(R.cBasis==='inc'?' selected':'')+'>税込（割引後）</option></select></div></div>'
+     +'<label style="display:block;font-size:12px;color:#1A4F47;margin-bottom:6px"><input type="checkbox" id="ps_cp_'+i+'"'+(R.cProd?' checked':'')+'> 物販も報酬に含める（物販歩合のルールで計算）</label>'
+     +'</div>'
+     +'<div style="display:'+(kd==='parttime'?'block':'none')+'">'
+     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">'
+     +f('時給（円）','ps_wage_'+i,(R.wage||''),true)+f('通勤費（月）','ps_pcom_'+i,(kd==='parttime'?(R.commute||''):''),true)+'</div>'
+     +'<label style="display:block;font-size:12px;color:#1A4F47;margin-bottom:4px"><input type="checkbox" id="ps_soc_'+i+'"'+(R.social?' checked':'')+'> 社会保険に加入している</label>'
+     +'<label style="display:block;font-size:12px;color:#1A4F47;margin-bottom:6px"><input type="checkbox" id="ps_pp_'+i+'"'+(R.ptProd?' checked':'')+'> 物販歩合も払う</label>'
+     +'<div style="font-size:11px;color:#64748B;margin-bottom:6px">働いた時間は「出勤簿」タブの記録から自動で数えます（人件費の見通しで手入力も可）</div>'
+     +'</div>'
+     +'<div style="display:flex;justify-content:flex-end;align-items:center">'
      +'<button type="button" onclick="psDelRow('+i+')" style="padding:5px 10px;border:1px solid #E8B4B4;background:#fff;color:#C0392B;border-radius:7px;font-size:12px">削除</button></div></div>';
   }
   s+='<button type="button" onclick="psAddRow()" style="padding:7px 12px;border:1.5px dashed #2C7A6E;background:#fff;color:#1A4F47;border-radius:8px;font-size:12px;font-weight:700;margin-bottom:12px">＋ 行を追加</button>'
@@ -8860,6 +8909,7 @@ function savePayrollSetup(){
   var fixedOnly=d.fixedOnly.filter(function(r){ return r.name; });
   for(var e2=0;e2<rows.length;e2++){ if(/['"\\<>&]/.test(rows[e2].app+rows[e2].xls)){ showToast('⚠️ 名前に記号（\' " < > & \\）は使えません'); return; } }
   if(!rows.length){ showToast('⚠️ 給与の行が1つもありません'); return; }
+  for(var e3=0;e3<rows.length;e3++){ var r3=rows[e3]; if(r3.kind==='contractor' && !(r3.cRate>=0 && r3.cRate<=100)){ showToast('⚠️ 業務委託の取り分は0〜100%で入れてください（'+r3.app+'）'); return; } }
   // 【v24.7】この端末にまだ給与設定が届いていない時は、同期が通ってからでないと保存しない
   // （取り込みに失敗している端末で登録すると、新しい日時が付いてクラウドの本物を上書きしてしまう）
   if(!payrollSetup() && !(state.lastFullSync && (Date.now()-state.lastFullSync) < 10*60*1000)){
@@ -9013,6 +9063,28 @@ function hpsOn(){ var H=payRules().hps; return !!(H&&H.on); }
 // 1人分の支給額（固定給と歩合の合わせ方は設定で選ぶ）
 function payTotal(fixed, tech, prod, hps){
   return payRules().combine==='max' ? Math.max(fixed, tech+prod)+hps : fixed+tech+prod+hps;
+}
+/* ===== 👥 働き方の種類（v25.1）: 社員／アシスタント／業務委託（売上×%）／アルバイト（時給×時間）
+   給与設定の各行に kind を持つ。kind が無い行は今までどおり（assistant:true ならアシスタント、それ以外は社員）。 ===== */
+var PAY_KINDS={employee:'社員（スタイリスト）', assistant:'アシスタント（社員）', contractor:'業務委託', parttime:'アルバイト'};
+function rowKind(R){ return (R && R.kind && PAY_KINDS[R.kind]) ? R.kind : ((R && R.assistant) ? 'assistant' : 'employee'); }
+// アルバイトの働いた時間：出勤簿に実際に記録した日だけを合計（記録の無い日は数えない）
+function partTimeHours(ym, app){
+  var att=state.attendance||{}, min=0;
+  for(var st in att){
+    if(staffBase(st)!==app) continue;
+    var days=att[st]||{};
+    for(var ds in days){ if(String(ds).slice(0,7)===ym) min+=attWorkMin(days[ds]); }
+  }
+  return Math.round(min/60*10)/10;
+}
+function setLaborHours(ym, app, val){
+  var v=parseFloat(String(val).replace(/[０-９．]/g,function(c){ return c==='．'?'.':String.fromCharCode(c.charCodeAt(0)-0xFEE0); }).replace(/[^0-9.]/g,''));
+  var m=laborSalesMap(ym);
+  if(!isFinite(v)||v<0||String(val).trim()==='') delete m[app+'#h']; else m[app+'#h']=Math.round(v*10)/10;
+  m.updatedAt=new Date().toISOString();
+  try{ save(); }catch(e){ try{ saveLocal(); }catch(e2){} }
+  renderLaborCost();
 }
 function hpsMap(ym){
   if(!state.hpsTowel || typeof state.hpsTowel!=='object') state.hpsTowel={};
@@ -9272,8 +9344,8 @@ function pnlPayroll(filtered){
     var L=laborCostForMonth(mk.keys[q]);
     for(var i=0;i<L.rows.length;i++){
       var x=L.rows[i], o=ens(x.R.xls);
-      o.type=x.R.assistant?'assistant':'stylist';
-      o.fixed+=x.R.base+x.R.ot+x.R.commute; o.post+=x.R.post;
+      o.type=x.kind==='assistant'?'assistant':(x.kind==='employee'?'stylist':x.kind);
+      if(x.kind==='employee'||x.kind==='assistant'){ o.fixed+=x.R.base+x.R.ot+x.R.commute; o.post+=x.R.post; } else { o.fixed+=x.fixed; if(x.hours!=null) o.hours=(o.hours||0)+x.hours; }
       o.tech+=x.tech; o.prod+=x.prod; o.hps+=x.hps; o.sum+=x.pay;
       o.techSales+=x.sales; if(x.R.assistant) o.spaSales+=x.sales; o.prodProfit+=x.profit; o.months++;
     }
@@ -9491,13 +9563,20 @@ function pnlExtraHtml(filtered,totalSell,prodCost,feeAmount){
   html+='<div style="font-size:11px;color:#64748B;margin-bottom:8px;line-height:1.7">管理タブ「人件費の見通し」と同じ計算です。技術売上はエアレジの数字を入れた月はそれを、入れていない月はアプリの税抜目安を使います。ヒポポタマスのタオルは管理タブで入力した請求額から。</div>';
   for(var i=0;i<pay.rows.length;i++){
     var rw=pay.rows[i];
-    var sel='<span style="font-size:11px;padding:3px 8px;border-radius:7px;background:#EAF5F3;color:#2C7A6E;font-weight:700">'+(rw.officer?'固定':(rw.type==='assistant'?'アシスタント':'スタイリスト'))+'</span>';
+    var sel='<span style="font-size:11px;padding:3px 8px;border-radius:7px;background:#EAF5F3;color:#2C7A6E;font-weight:700">'+(rw.officer?'固定':({assistant:'アシスタント',contractor:'業務委託',parttime:'アルバイト'}[rw.type]||'スタイリスト'))+'</span>';
     html+='<div style="border:1px solid #E2E8F0;border-radius:10px;padding:10px;margin-bottom:8px">';
     html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:'+((rw.excluded)?'0':'6px')+'"><div style="font-weight:700;font-size:13px;color:#1A4F47">'+h(rw.name)+'</div>'+sel+'</div>';
     if(rw.officer){
       html+='<div style="display:flex;justify-content:space-between;font-size:12px;color:#475569"><span>役員報酬</span><span style="text-align:right;font-family:DM Sans,sans-serif">¥'+num(rw.sum)+'</span></div>';
       html+='<div style="display:flex;justify-content:space-between;border-top:1px solid #E2E8F0;margin-top:6px;padding-top:6px;font-weight:700;color:#2C7A6E"><span>合計</span><span style="font-family:DM Sans,sans-serif">¥'+num(rw.sum)+'</span></div>';
       html+='<div style="font-size:10px;color:#94a3b8;margin-top:4px">固定（歩合・役職手当なし）</div>';
+    } else if(rw.type==='contractor' || rw.type==='parttime'){
+      html+='<div style="display:grid;grid-template-columns:1fr auto;gap:3px 10px;font-size:12px;color:#475569">';
+      if(rw.type==='contractor') html+='<span>業務委託報酬（技術売上×取り分）</span><span style="text-align:right;font-family:DM Sans,sans-serif">¥'+num(rw.tech)+'</span>';
+      else html+='<span>時給×働いた時間（'+(Math.round((rw.hours||0)*10)/10)+'時間）＋通勤費</span><span style="text-align:right;font-family:DM Sans,sans-serif">¥'+num(rw.fixed)+'</span>';
+      if(rw.prod) html+='<span>物販歩合</span><span style="text-align:right;font-family:DM Sans,sans-serif">¥'+num(rw.prod)+'</span>';
+      html+='</div>';
+      html+='<div style="display:flex;justify-content:space-between;border-top:1px solid #E2E8F0;margin-top:6px;padding-top:6px;font-weight:700;color:#2C7A6E"><span>'+(rw.type==='contractor'?'支払見込（社会保険なし）':'支給見込')+'</span><span style="font-family:DM Sans,sans-serif">¥'+num(rw.sum)+'</span></div>';
     } else if(!rw.excluded){
       var techLabel=(rw.type==='assistant')?'技術歩合（ヘッドスパ等×20%）':'技術歩合（段階歩合）';
       html+='<div style="display:grid;grid-template-columns:1fr auto;gap:3px 10px;font-size:12px;color:#475569">';

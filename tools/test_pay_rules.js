@@ -122,5 +122,34 @@ t('③壊れた設定（7種類）は使わず、初期値で計算する', fb==
 global.state={payroll:{_rules:null}};
 t('③設定が無い時は初期値', payRulesIsDefault());
 
+// ---- ④ 働き方：業務委託（売上×%）とアルバイト（時給×時間） ----
+(0,eval)(grab('attWorkMin'));
+global.staffBase=x=>String(x||'').replace(/[（(].*$/,'').trim();
+{
+  const PR=[{app:'社員',xls:'社員',base:200000,ot:0,post:0,commute:0},
+            {app:'委託',xls:'委託',kind:'contractor',cRate:40,cBasis:'exc'},
+            {app:'委託込',xls:'委託込',kind:'contractor',cRate:50,cBasis:'inc',cProd:true},
+            {app:'バイト',xls:'バイト',kind:'parttime',wage:1300,commute:5000},
+            {app:'バイト保',xls:'バイト保',kind:'parttime',wage:1500,social:true}];
+  const agg={'社員':{menuInc:0,sell:0,profit:0},'委託':{menuInc:1100000,sell:0,profit:0},'委託込':{menuInc:550000,sell:33000,profit:20000},'バイト':{menuInc:0,sell:0,profit:0},'バイト保':{menuInc:0,sell:0,profit:0}};
+  const ovr={};
+  global.state={payroll:{_setup:{rows:PR,fixedOnly:[],updatedAt:'x'}}, attendance:{
+    'バイト（アルバイト）':{'2026-09-02':{status:'出勤',start:'10:00',end:'15:00',brk:60},'2026-09-03':{status:'出勤',start:'10:00',end:'14:30',brk:0},'2026-09-04':{status:'公休',start:'10:00',end:'19:00',brk:0},'2026-10-01':{status:'出勤',start:'10:00',end:'19:00',brk:0}},
+    'バイト保':{'2026-09-05':{status:'出勤',start:'09:00',end:'17:00',brk:60}} }};
+  global.laborAggregate=()=>agg; global.hpsMap=()=>({}); global.laborSalesMap=()=>ovr;
+  global.payrollRows=()=>PR; global.payrollFixedOnly=()=>[];
+  let L=laborCostForMonth('2026-09');
+  const by=k=>L.rows.find(r=>r.R.app===k);
+  t('④業務委託：税抜売上100万×40%＝400,000、社会保険なし', by('委託').pay===400000 && by('委託').social===false);
+  t('④業務委託（税込・物販込み）：55万×50%＝275,000＋物販歩合（利益2万×20%＝4,000）', by('委託込').tech===275000 && by('委託込').prod===4000 && by('委託込').pay===279000);
+  t('④アルバイト：出勤簿の記録だけ数える（4h＋4.5h＝8.5h、公休と翌月は数えない）', by('バイト').hours===8.5);
+  t('④アルバイト：1,300円×8.5h＋通勤費5,000＝16,050', by('バイト').pay===16050);
+  t('④アルバイト（社会保険あり）：7h×1,500＝10,500', by('バイト保').pay===10500 && by('バイト保').social===true);
+  const g=200000+400000+279000+16050+10500, ns=400000+279000+16050;
+  t('④会社負担の社会保険は社員と社会保険ありのアルバイトだけに掛かる', L.grossPay===g && L.company===Math.round((g-ns)*(1+socialRate()))+ns);
+  ovr['バイト#h']=20;
+  L=laborCostForMonth('2026-09');
+  t('④アルバイトの時間を手入力すると、その時間で計算（20h×1,300＋5,000）', by('バイト').pay===31000 && by('バイト').hoursOver===true);
+}
 checks.forEach(([n,v])=>console.log((v?'✅':'❌')+' '+n));
 const ok=checks.every(c=>c[1]); console.log('\n'+(ok?'すべて合格':'★失敗あり')); process.exit(ok?0:1);
