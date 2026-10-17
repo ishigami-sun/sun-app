@@ -5207,6 +5207,7 @@ function renderInputShortageWarn(){
 
 /* ===== 📣 アップデートのお知らせ（バージョンが変わったら1回だけ表示） ===== */
 var WHATS_NEW_ITEMS=[
+  '👥 管理タブ「スタッフごとの給与」で、1人ずつ働き方を選べるように。社員（基本給＋歩合）・アシスタント・業務委託（売上の何%を還元）・アルバイト（時給×出勤簿の時間）。歩合は「いつも同じ%」「売上によって%が変わる（段階）」「お店共通のルール」から選べます。今の白金台のスタッフは「お店共通のルール」のままで、計算は1円も変わりません。売上はいつも日報の税込から自動で税抜にして計算します。',
   '💰 会社負担の社会保険を15.5%（仮置き）→11.6%に。令和8年9月の給与集計表の本人負担額から逆算した実態値です（月あたり約18.7万円、人件費を多く見ていました）。P&Lと管理タブの人件費の見通しに反映',
   '📈 P&Lの人件費を、給与エクセルと同じ式（管理タブ「人件費の見通し」と共通の laborCostForMonth）に統一。以前の概算（固定給一律（概算）・税込売上1円目から歩合・HPSなし）をやめ、役員2名の固定給と会社負担の社会保険（15.5%）まで含めた「会社が払う総額」を人件費合計にしました。年表示は各月を合算',
   '💴 給与エクセル用集計のHPS物販歩合を円単位に（65.6→66）。給与エクセル R8.9度 の6人分（技術歩合・物販歩合・HPS）をアプリの式で再計算し、全員1円まで一致を確認',
@@ -8739,9 +8740,9 @@ function _psTierHtml(i,R){
   for(var k=0;k<t.length;k++){
     var last=(k===t.length-1), from=k?t[k-1].upto:0;
     s+='<div style="display:grid;grid-template-columns:'+(last?'1fr':'1fr')+' 74px 22px 26px;gap:5px;align-items:center;margin-bottom:5px">'
-      +(last?'<div id="ps_tl_'+i+'" style="'+q+'">'+(k?'¥'+num(from||0)+' より上':'すべて')+'</div>'
-            :'<div style="display:flex;align-items:center;gap:4px"><span style="'+q+'">〜</span><input type="text" inputmode="numeric" id="ps_tu_'+i+'_'+k+'" value="'+(t[k].upto||'')+'" oninput="psPreview('+i+')" style="'+box+'"><span style="'+q+'">円</span></div>')
-      +'<input type="text" inputmode="decimal" id="ps_trt_'+i+'_'+k+'" value="'+(t[k].rate!=null?t[k].rate:'')+'" oninput="psPreview('+i+')" style="'+box+'font-weight:800;color:#1A4F47">'
+      +(last?'<div id="ps_tl_'+i+'" style="'+q+'">'+(k?'¥'+num(Number(from)||0)+' より上':'すべて')+'</div>'
+            :'<div style="display:flex;align-items:center;gap:4px"><span style="'+q+'">〜</span><input type="text" inputmode="numeric" id="ps_tu_'+i+'_'+k+'" value="'+h(t[k].upto||'')+'" oninput="psPreview('+i+')" style="'+box+'"><span style="'+q+'">円</span></div>')
+      +'<input type="text" inputmode="decimal" id="ps_trt_'+i+'_'+k+'" value="'+h(String(t[k].rate!=null?t[k].rate:''))+'" oninput="psPreview('+i+')" style="'+box+'font-weight:800;color:#1A4F47">'
       +'<span style="'+q+'">%</span>'
       +((!last&&t.length>2)?'<button type="button" onclick="psTierDel('+i+','+k+')" style="border:none;background:none;color:#C0392B;font-size:16px;padding:0">×</button>':'<span></span>')
       +'</div>';
@@ -8751,7 +8752,7 @@ function _psTierHtml(i,R){
     +'<select id="ps_tw_'+i+'" onchange="psPreview('+i+')" style="'+box+'text-align:left;background:#fff;font-size:13px">'
     +'<option value="tiered"'+(c.mode!=='whole'?' selected':'')+'>超えた分だけ高い%</option>'
     +'<option value="whole"'+(c.mode==='whole'?' selected':'')+'>売上全体にその%</option></select>'
-    +'<div style="display:flex;align-items:center;gap:5px;margin-top:8px"><span style="'+q+'">売上が</span><input type="text" inputmode="numeric" id="ps_tth_'+i+'" value="'+(c.threshold||'')+'" placeholder="0" oninput="psPreview('+i+')" style="'+box+'"><span style="'+q+'">円未満なら'+(rowKind(R)==='contractor'?'還元':'歩合')+'なし</span></div>'
+    +'<div style="display:flex;align-items:center;gap:5px;margin-top:8px"><span style="'+q+'">売上が</span><input type="text" inputmode="numeric" id="ps_tth_'+i+'" value="'+h(c.threshold||'')+'" placeholder="0" oninput="psPreview('+i+')" style="'+box+'"><span style="'+q+'">円未満なら'+(rowKind(R)==='contractor'?'還元':'歩合')+'なし</span></div>'
     +'</div>';
   return s;
 }
@@ -8792,7 +8793,7 @@ function renderPayrollSetupEditor(){
     var emp=(kd==='employee'||kd==='assistant');
     var hasMore = emp ? (R.ot||R.post||R.row) : (kd==='contractor' ? (R.cProd||R.cBasis==='inc'||R.row) : (R.social||R.ptProd||R.row));
     var big='width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #2C7A6E;border-radius:8px;font-size:17px;font-weight:800;text-align:right;color:#1A4F47;';
-    function bigf(label,id,val,unit,ph,mode){ return '<div><div style="font-size:12px;color:#1A4F47;font-weight:800;margin-bottom:3px">'+label+'</div><div style="display:flex;align-items:center;gap:5px"><input type="text" inputmode="'+(mode||'numeric')+'" id="'+id+'" value="'+h(val)+'" placeholder="'+h(ph||'')+'" oninput="psPreview('+i+')" style="'+big+'"><span style="font-size:13px;font-weight:700;color:#1A4F47;white-space:nowrap">'+unit+'</span></div></div>'; }
+    function bigf(label,id,val,unit,ph,mode){ return '<div><div style="font-size:12px;color:#1A4F47;font-weight:800;margin-bottom:3px">'+label+'</div><div style="display:flex;align-items:center;gap:5px"><input type="text" inputmode="'+(mode||'numeric')+'" id="'+id+'" value="'+h(val===0?'0':val)+'" placeholder="'+h(ph||'')+'" oninput="psPreview('+i+')" style="'+big+'"><span style="font-size:13px;font-weight:700;color:#1A4F47;white-space:nowrap">'+unit+'</span></div></div>'; }
     s+='<div style="border:1px solid #C8E0DC;border-radius:10px;background:#fff;padding:10px;margin-bottom:9px">'
      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">'
      +f('名前','ps_app_'+i,R.app,false)
@@ -10677,7 +10678,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "25.0";
+var APP_VERSION = "25.1";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){

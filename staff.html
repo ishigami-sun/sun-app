@@ -5143,7 +5143,8 @@ function invEnsure(){
   invCats();
   if(state.inventory.length===0 && state.products && state.products.length){
     state.inventory = state.products.map(function(p){
-      // 自動生成のプレースホルダーは updatedAt:0（実際の入力が常に優先され、クラウドの入力済みを上書きしない）
+      // 自動生成のプレースホルダーは updatedAt:0。実際の入力(Date.now())が常に優先され、
+      // クラウド上の入力済みデータを上書きしない。
       return {id:p.id, name:p.name, category:invCats()[0], cost:(p.cost||0), qty:0, amount:0, amountManual:false, updatedAt:0};
     });
     try{ saveLocal(); }catch(e){}
@@ -6717,7 +6718,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "25.0";
+var APP_VERSION = "25.1";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){

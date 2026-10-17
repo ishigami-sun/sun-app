@@ -273,6 +273,14 @@ admin の管理タブ「⚙️ 給与設定」で編集し、`state.payroll._set
   旧概算式の定数（`PNL_BASE` / `PNL_POST_*` / `PNL_OFFICER_PAY`）は 0（`pnlPayroll_old_` 専用・未使用）。
 - 給与額に変更があったら「⚙️ 給与設定」で直す。コードは触らない。
 
+**給与ルールと働き方（v25.1）** — 計算はすべて `laborCostForMonth(ym)` の中（P&L・人件費の見通し・給与エクセルが共通で使う）。
+- お店共通のルール: `state.payroll._rules`（admin の「⚙️ 詳しい給与ルール」）。無い・壊れている時は `PAY_RULES_DEFAULT`＝白金台の決まり（v25.0 までと1円も変わらない。`tools/test_pay_rules.js` ①）。
+- 1人ずつ（`_setup.rows[]`）: `kind` = 無し(社員)／`assistant`／`contractor`（業務委託・社会保険なし）／`parttime`（`wage`×出勤簿の時間 `partTimeHours`、手入力は `laborSales[ym][app+'#h']`）。
+- 歩合の決め方 `tMode`: `'flat'`＝`tRate`%（業務委託は `cRate`）／`'tier'`＝`tTiers {mode:'tiered'|'whole', threshold, tiers:[{upto,rate}…最後 upto:0]}`／無し＝お店共通のルール。
+  計算は `rowCommission(R, 税抜売上, kind)` 1か所。白金台の既存の行は tMode 無し＝共通ルールのまま。
+- 売上は常に日報の税込→税抜（÷1.1）で計算する。画面で税込/税抜は選ばせない（石上さんの方針）。`cBasis:'inc'` は旧データ互換のみ。
+- 給与設定画面の値を innerHTML に入れる時は必ず `h()` で囲む（クラウドから来た値）。0 は `h(0)` が空になるので `h(String(x))`。
+
 **技術歩合（特別技術手当）** — 税抜売上に対する段階積み上げ。**50万円未満は歩合ゼロ**（大きな段差）。
 50万まで13.5% ／ 〜100万15% ／ 〜150万30% ／ 〜200万35% ／ 〜300万40% ／ 300万超45%。各段は切り捨て。
 アシスタントはヘッドスパ等の売上 × 20%。
