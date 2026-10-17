@@ -8513,20 +8513,20 @@ function laborCostForMonth(ym){
   var PR=payrollRows(), FO=payrollFixedOnly();
   for(var pi=0;pi<PR.length;pi++){
     var R=PR[pi], a=agg[R.app]||{menuInc:0,sell:0,profit:0};
-    var estSales=Math.round(a.menuInc/1.1);
+    var estSales=techBaseFromInc(a.menuInc);
     var sales=(ovr[R.app]!=null)?ovr[R.app]:estSales;
-    var tech = R.assistant ? Math.floor(sales*ASSISTANT_RATE) : techCommission(sales);
-    var profit=Math.round(a.profit), rate=payrollRate(profit), prod=Math.floor(profit*rate);
-    var tw=towel[R.app]||0, hps=Math.round(Math.ceil(tw/1.1*0.1)*0.8);
+    var tech = R.assistant ? Math.floor(sales*assistantRate()) : techCommission(sales);
+    var profit=productBase(a.sell, a.profit), pc=productCommission(profit), rate=pc.rate, prod=pc.amount;
+    var tw=towel[R.app]||0, hps=hpsPay(tw);
     var fixed=R.base+R.ot+R.post+R.commute;
-    var pay=fixed+tech+prod+hps;
+    var pay=payTotal(fixed, tech, prod, hps);
     totalPay+=pay; totalSales+=sales;
     rows.push({R:R,sales:sales,est:estSales,over:(ovr[R.app]!=null),tech:tech,profit:profit,rate:rate,prod:prod,hps:hps,fixed:fixed,pay:pay});
   }
   var fixedOnly=0;
   for(var fi=0;fi<FO.length;fi++) fixedOnly+=FO[fi].amount;
   var grossPay=totalPay+fixedOnly;
-  var company=Math.round(grossPay*(1+SOCIAL_INSURANCE_RATE));
+  var company=Math.round(grossPay*(1+socialRate()));
   var shopSales=0;
   for(var key in agg) shopSales+=Math.round(agg[key].menuInc/1.1)+Math.round(agg[key].sell/1.1);
   return {ym:ym, rows:rows, totalPay:totalPay, totalSales:totalSales, fixedOnly:fixedOnly, grossPay:grossPay, company:company, shopSales:shopSales};
@@ -8547,60 +8547,45 @@ function renderLaborCost(){
   }
   var ym=(sel&&sel.value)||'';
   if(!ym) return;
-  var agg=laborAggregate(ym), towel=hpsMap(ym), ovr=laborSalesMap(ym);
-  var rows=[], totalPay=0, totalSales=0, tips=[];
-  var PR=payrollRows(), FO=payrollFixedOnly();
-  for(var pi=0;pi<PR.length;pi++){
-    var R=PR[pi], a=agg[R.app]||{menuInc:0,sell:0,profit:0};
-    var estSales=Math.round(a.menuInc/1.1);          // アプリ集計の税抜（目安）
-    var sales=(ovr[R.app]!=null)?ovr[R.app]:estSales;
-    var tech = R.assistant ? Math.floor(sales*ASSISTANT_RATE) : techCommission(sales);
-    var profit=Math.round(a.profit), rate=payrollRate(profit), prod=Math.floor(profit*rate);
-    var tw=towel[R.app]||0, hps=Math.round(Math.ceil(tw/1.1*0.1)*0.8);
-    var fixed=R.base+R.ot+R.post+R.commute;
-    var pay=fixed+tech+prod+hps;
-    totalPay+=pay; totalSales+=sales;
-    rows.push({R:R,sales:sales,est:estSales,over:(ovr[R.app]!=null),tech:tech,profit:profit,rate:rate,prod:prod,hps:hps,fixed:fixed,pay:pay});
+  // 【v25.1】計算は laborCostForMonth の1か所だけ（給与ルールの設定もここで効く）
+  var L=laborCostForMonth(ym), FO=payrollFixedOnly();
+  var rows=L.rows, totalPay=L.totalPay, totalSales=L.totalSales, tips=[];
+  for(var pi=0;pi<rows.length;pi++){
+    var R=rows[pi].R, sales=rows[pi].sales, profit=rows[pi].profit;
     var nt=R.assistant?null:nextTechTier(sales);
-    if(nt && nt.gain>0) tips.push('<b>'+h(R.xls)+'</b>：技術売上あと <b>¥'+num(nt.need)+'</b> で歩合が発生（+¥'+num(nt.gain)+'）');
+    if(nt && nt.gain>0) tips.push('<b>'+h(R.xls)+'</b>：技術売上あと <b>¥'+num(nt.need)+'</b> で'+(sales<(payRules().tech.threshold||0)?'歩合が発生':'歩合率が上がる')+'（+¥'+num(nt.gain)+'）');
     var np=nextProductTier(profit);
-    if(np && np.gain>0 && profit>0) tips.push('<b>'+h(R.xls)+'</b>：物販利益あと <b>¥'+num(np.need)+'</b> で歩合率が上がる（+¥'+num(np.gain)+'）');
+    if(np && np.gain>0 && profit>0) tips.push('<b>'+h(R.xls)+'</b>：物販'+productBasisLabel()+'あと <b>¥'+num(np.need)+'</b> で歩合率が上がる（+¥'+num(np.gain)+'）');
   }
-  var fixedOnly=0;
-  for(var fi=0;fi<FO.length;fi++) fixedOnly+=FO[fi].amount;
-  var grossPay=totalPay+fixedOnly;
-  var company=Math.round(grossPay*(1+SOCIAL_INSURANCE_RATE));
-  // 店舗全体の売上（施術＋物販、税抜）
-  var shopSales=0;
-  for(var key in agg) shopSales+=Math.round(agg[key].menuInc/1.1)+Math.round(agg[key].sell/1.1);
+  var fixedOnly=L.fixedOnly, grossPay=L.grossPay, company=L.company, shopSales=L.shopSales;
   var ratio = shopSales>0 ? (company/shopSales*100) : 0;
 
   var s=_payrollMissingHtml()+'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:620px">';
   s+='<tr style="background:#E8F5E9"><th style="border:1px solid #A5D6A7;padding:5px">氏名</th>'
-   +'<th style="border:1px solid #A5D6A7;padding:5px">技術売上(税抜)</th><th style="border:1px solid #A5D6A7;padding:5px">技術歩合</th>'
-   +'<th style="border:1px solid #A5D6A7;padding:5px">物販歩合</th><th style="border:1px solid #A5D6A7;padding:5px">HPS</th>'
+   +'<th style="border:1px solid #A5D6A7;padding:5px">技術売上('+techBasisLabel()+')</th><th style="border:1px solid #A5D6A7;padding:5px">技術歩合</th>'
+   +'<th style="border:1px solid #A5D6A7;padding:5px">物販歩合</th>'+(hpsOn()?'<th style="border:1px solid #A5D6A7;padding:5px">HPS</th>':'')
    +'<th style="border:1px solid #A5D6A7;padding:5px">固定給</th><th style="border:1px solid #A5D6A7;padding:5px">支給見込</th></tr>';
   for(var ri=0;ri<rows.length;ri++){
     var x=rows[ri];
-    s+='<tr><td style="border:1px solid #C8E6C9;padding:5px"><b>'+h(x.R.xls)+'</b>'+(x.R.assistant?'<br><span style="font-size:10px;color:#94a3b8">アシスタント20%</span>':'')+'</td>'
+    s+='<tr><td style="border:1px solid #C8E6C9;padding:5px"><b>'+h(x.R.xls)+'</b>'+(x.R.assistant?'<br><span style="font-size:10px;color:#94a3b8">アシスタント'+(Math.round(assistantRate()*1000)/10)+'%</span>':'')+'</td>'
      +'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right"><input type="number" inputmode="numeric" value="'+(x.over?x.sales:'')+'" placeholder="'+num(x.est)+'" onchange="setLaborSales(\''+ym+'\',\''+x.R.app+'\',this.value)" style="width:92px;padding:5px;border:1.5px solid '+(x.over?'#2E7D32':'#C8E0DC')+';border-radius:6px;font-size:12px;text-align:right;color:#1A4F47">'
      +'<br><span style="font-size:10px;color:#94a3b8">'+(x.over?'エアレジ入力':'アプリ目安')+'</span></td>'
      +'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right">'+num(x.tech)+'</td>'
-     +'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right">'+num(x.prod)+'<br><span style="font-size:10px;color:#94a3b8">利益'+num(x.profit)+'×'+Math.round(x.rate*100)+'%</span></td>'
-     +'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right">'+num(x.hps)+'</td>'
+     +'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right">'+num(x.prod)+'<br><span style="font-size:10px;color:#94a3b8">'+productBasisLabel()+num(x.profit)+(payRules().product.mode==='whole'?'×'+(Math.round(x.rate*1000)/10)+'%':'')+'</span></td>'
+     +(hpsOn()?'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right">'+num(x.hps)+'</td>':'')
      +'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right">'+num(x.fixed)+'</td>'
      +'<td style="border:1px solid #C8E6C9;padding:5px;text-align:right;font-weight:800;color:#1B5E20">'+num(x.pay)+'</td></tr>';
   }
-  s+='<tr style="background:#F1F8E9;font-weight:800"><td style="border:1px solid #A5D6A7;padding:5px">6名の計</td>'
+  s+='<tr style="background:#F1F8E9;font-weight:800"><td style="border:1px solid #A5D6A7;padding:5px">'+rows.length+'名の計</td>'
    +'<td style="border:1px solid #A5D6A7;padding:5px;text-align:right">'+num(totalSales)+'</td>'
-   +'<td colspan="4" style="border:1px solid #A5D6A7;padding:5px;text-align:right">支給見込</td>'
+   +'<td colspan="'+(hpsOn()?4:3)+'" style="border:1px solid #A5D6A7;padding:5px;text-align:right">支給見込</td>'
    +'<td style="border:1px solid #A5D6A7;padding:5px;text-align:right">'+num(totalPay)+'</td></tr>';
   s+='</table></div>';
   s+='<div style="margin-top:10px;padding:11px;background:#fff;border:2px solid #1B5E20;border-radius:10px;font-size:13px;line-height:2">'
-   +'<div style="display:flex;justify-content:space-between"><span>6名の支給見込</span><b>¥'+num(totalPay)+'</b></div>'
+   +'<div style="display:flex;justify-content:space-between"><span>'+rows.length+'名の支給見込</span><b>¥'+num(totalPay)+'</b></div>'
    +'<div style="display:flex;justify-content:space-between"><span>'+(FO.length?FO.map(function(f){ return h(f.name); }).join('・'):'役員など')+'（固定）</span><b>¥'+num(fixedOnly)+'</b></div>'
    +'<div style="display:flex;justify-content:space-between;border-top:1px solid #C8E6C9;padding-top:4px"><span>給与合計</span><b>¥'+num(grossPay)+'</b></div>'
-   +'<div style="display:flex;justify-content:space-between;color:#64748B;font-size:12px"><span>＋会社負担の社会保険（概算'+(Math.round(SOCIAL_INSURANCE_RATE*1000)/10)+'%）</span><span>¥'+num(company-grossPay)+'</span></div>'
+   +'<div style="display:flex;justify-content:space-between;color:#64748B;font-size:12px"><span>＋会社負担の社会保険（概算'+(Math.round(socialRate()*1000)/10)+'%）</span><span>¥'+num(company-grossPay)+'</span></div>'
    +'<div style="display:flex;justify-content:space-between;font-size:15px;color:#1B5E20;border-top:2px solid #1B5E20;padding-top:5px"><b>会社が払う総額</b><b>¥'+num(company)+'</b></div>'
    +'<div style="display:flex;justify-content:space-between;margin-top:4px"><span>売上（税抜・アプリ集計）</span><b>¥'+num(shopSales)+'</b></div>'
    +'<div style="display:flex;justify-content:space-between;font-size:16px;color:'+(ratio>55?'#C62828':(ratio>50?'#E65100':'#1B5E20'))+'"><b>人件費率</b><b>'+(shopSales>0?ratio.toFixed(1)+'%':'—')+'</b></div>'
@@ -8608,7 +8593,7 @@ function renderLaborCost(){
   if(tips.length){
     s+='<div style="margin-top:10px;padding:10px 12px;background:#FFF9E6;border:1.5px solid #F0D000;border-radius:9px;font-size:12px;line-height:2">'
      +'<b>💡 あと少しで歩合が増える人</b><br>'+tips.slice(0,8).join('<br>')
-     +'<div style="font-size:11px;color:#8a6d4a;margin-top:5px">物販の歩合率は利益の全額にかかるので、境目（3万・5万・8万）を超えると一気に増えます</div></div>';
+     +(payRules().product.mode==='whole'?'<div style="font-size:11px;color:#8a6d4a;margin-top:5px">物販の歩合率は'+productBasisLabel()+'の全額にかかるので、境目（'+productBoundsText()+'）を超えると一気に増えます</div>':'')+'</div>';
   }
   s+='<div style="font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.8">※固定給は『⚙️ 給与設定』の登録値です（基本給・定額残業・役職手当・通勤費）。<br>※所得税・住民税・本人負担の社会保険は個人差が大きいため、ここでは会社が払う総額のみを出しています。</div>';
   el.innerHTML=s;
@@ -8708,6 +8693,164 @@ function renderPayrollSetupEditor(){
    +'</div></details>';
   return s;
 }
+/* ===== ⚙️ 給与ルールの設定画面（v25.1）＋ 試算 ===== */
+function _prNum(id){ var v=_psVal(id); v=String(v==null?'':v).replace(/[０-９．]/g,function(c){ return c==='．'?'.':String.fromCharCode(c.charCodeAt(0)-0xFEE0); }).replace(/[,，¥円%％\s]/g,''); var n=parseFloat(v); return isFinite(n)?n:NaN; }
+function _prTiersRead(pfx){
+  var t=[];
+  for(var i=0; document.getElementById('pr_'+pfx+'r_'+i); i++){
+    var ue=document.getElementById('pr_'+pfx+'u_'+i);
+    t.push({upto: ue ? Math.round(_psNum(ue.value)) : 0, rate:_prNum('pr_'+pfx+'r_'+i)});
+  }
+  if(t.length) t[t.length-1].upto=0;
+  return t;
+}
+function _prRead(){
+  function sel(id,def){ var e=document.getElementById(id); return e?e.value:def; }
+  var hon=document.getElementById('pr_hon');
+  return {
+    v:1,
+    tech:{basis:sel('pr_tb','exc'), mode:sel('pr_tm','tiered'), threshold:_psNum(_psVal('pr_tth')), round:sel('pr_trd','floor'), tiers:_prTiersRead('t')},
+    assistant:{rate:_prNum('pr_ar')},
+    product:{basis:sel('pr_pb','profit'), mode:sel('pr_pm','whole'), threshold:_psNum(_psVal('pr_pth')), round:sel('pr_prd','floor'), tiers:_prTiersRead('p')},
+    hps:{on:!!(hon&&hon.checked), rate:_prNum('pr_hr'), share:_prNum('pr_hs')},
+    combine:sel('pr_cb','add'),
+    social:_prNum('pr_so')
+  };
+}
+function _prRedraw(d){ window._prDraft=d; window._prOpen=true; renderPayrollExport(); }
+function prAddTier(pfx){ var d=_prRead(); var T=(pfx==='t'?d.tech:d.product).tiers; var last=T.length>1?T[T.length-2].upto:0; T.splice(T.length-1,0,{upto:last?last*2:100000, rate:T[T.length-1].rate}); _prRedraw(d); }
+function prDelTier(pfx,i){ var d=_prRead(); var T=(pfx==='t'?d.tech:d.product).tiers; if(T.length<=1) return; T.splice(i,1); T[T.length-1].upto=0; _prRedraw(d); }
+function prResetDefault(){ _prRedraw(_rulesClone(PAY_RULES_DEFAULT)); showToast('初期値（SUN白金台の決まり）を画面に入れました。「保存」を押すまで変わりません'); }
+function prChanged(){ window._prDirty=true; prTrial(); }
+function _prTierEditor(pfx, T){
+  var inp='padding:7px 6px;border:1.5px solid #C8E0DC;border-radius:7px;font-size:13px;text-align:right;box-sizing:border-box;min-width:0;';
+  var s='';
+  for(var i=0;i<T.length;i++){
+    var last=(i===T.length-1);
+    var from = i===0 ? 0 : T[i-1].upto;
+    s+='<div style="display:grid;grid-template-columns:44px 1fr 74px 26px;gap:5px;align-items:center;margin-bottom:5px;font-size:12px;color:#1A4F47">'
+     +'<span style="color:#64748B">'+(i+1)+'段目</span>'
+     +(last ? '<span>'+(T.length===1?'すべての金額':'¥'+num(from)+' 以上')+'</span>'
+            : '<span style="display:flex;align-items:center;gap:3px;min-width:0"><input type="text" inputmode="numeric" id="pr_'+pfx+'u_'+i+'" value="'+(T[i].upto?num(T[i].upto):'')+'" style="'+inp+'flex:1;width:100%" oninput="prChanged()"><span style="white-space:nowrap;font-size:11px">円未満</span></span>')
+     +'<span style="display:flex;align-items:center;gap:2px"><input type="text" inputmode="decimal" id="pr_'+pfx+'r_'+i+'" value="'+(isFinite(T[i].rate)?T[i].rate:'')+'" style="'+inp+'width:100%" oninput="prChanged()"><span>%</span></span>'
+     +(T.length>1&&!last?'<button type="button" onclick="prDelTier(\''+pfx+'\','+i+')" aria-label="この段階を削除" style="padding:4px 0;border:1px solid #E8B4B4;background:#fff;color:#C0392B;border-radius:6px;font-size:12px;line-height:1">✕</button>':'<span></span>')
+     +'</div>';
+  }
+  s+='<button type="button" onclick="prAddTier(\''+pfx+'\')" style="padding:6px 11px;border:1.5px dashed #2C7A6E;background:#fff;color:#1A4F47;border-radius:8px;font-size:12px;font-weight:700">＋ 段階を追加</button>';
+  return s;
+}
+function renderPayRulesEditor(){
+  if(window._prDirty && document.getElementById('pr_tb')){ try{ window._prDraft=_prRead(); }catch(e){} }
+  var d=window._prDraft||_rulesClone(payRules());
+  var saved=state.payroll&&state.payroll._rules;
+  var atTxt=_rulesValid(saved)?('最終更新：'+new Date(saved.updatedAt||0).toLocaleString('ja-JP')):'まだ設定していません（初期値＝SUN白金台の決まりで計算しています）';
+  var box='border:1px solid #C8E0DC;border-radius:9px;background:#fff;padding:10px;margin-bottom:9px';
+  var hd='font-size:13px;font-weight:800;color:#1A4F47;margin-bottom:7px';
+  var lab='font-size:11px;color:#64748B;font-weight:700;margin:6px 0 3px';
+  var selS='width:100%;padding:8px;border:1.5px solid #C8E0DC;border-radius:7px;font-size:13px;background:#fff;color:#1A2E2A';
+  var inp='padding:7px;border:1.5px solid #C8E0DC;border-radius:7px;font-size:13px;text-align:right;box-sizing:border-box;';
+  function opt(v,cur,label){ return '<option value="'+v+'"'+(v===cur?' selected':'')+'>'+label+'</option>'; }
+  var ro=(typeof IS_VIEW_ONLY!=='undefined' && IS_VIEW_ONLY);
+  var s='<details id="prDetails"'+(window._prOpen?' open':'')+' ontoggle="window._prOpen=this.open" style="margin-bottom:14px;border:1.5px solid #C8E0DC;border-radius:10px;background:#F8FAFA">'
+   +'<summary style="padding:10px 12px;font-size:13px;font-weight:800;color:#1A4F47;cursor:pointer">⚙️ 給与ルール（歩合の決まり）</summary>'
+   +'<div style="padding:4px 12px 12px" onchange="prChanged()">'
+   +'<div style="font-size:11px;color:#64748B;line-height:1.7;margin-bottom:8px">歩合の率や計算方法をここで決めます。下の「試算」で、保存する前に金額を確かめられます。<br>'+h(atTxt)+'</div>';
+  // 技術歩合
+  s+='<div style="'+box+'"><div style="'+hd+'">✂️ 技術歩合（スタイリスト）</div>'
+   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+   +'<div><div style="'+lab+'">元になる売上</div><select id="pr_tb" style="'+selS+'">'+opt('exc',d.tech.basis,'税抜（割引後）')+opt('inc',d.tech.basis,'税込（割引後）')+'</select></div>'
+   +'<div><div style="'+lab+'">計算方法</div><select id="pr_tm" style="'+selS+'">'+opt('tiered',d.tech.mode,'段階ごとに積み上げ')+opt('whole',d.tech.mode,'入った段階の率を全額に')+'</select></div>'
+   +'<div><div style="'+lab+'">足切り（この金額未満は歩合なし）</div><div style="display:flex;align-items:center;gap:4px"><input type="text" inputmode="numeric" id="pr_tth" value="'+(d.tech.threshold?num(d.tech.threshold):'')+'" placeholder="0＝なし" style="'+inp+'width:100%" oninput="prChanged()"><span style="font-size:12px">円</span></div></div>'
+   +'<div><div style="'+lab+'">端数</div><select id="pr_trd" style="'+selS+'">'+opt('floor',d.tech.round,'切り捨て')+opt('round',d.tech.round,'四捨五入')+opt('ceil',d.tech.round,'切り上げ')+'</select></div>'
+   +'</div><div style="'+lab+'">段階と率</div>'+_prTierEditor('t', d.tech.tiers)
+   +'<div style="'+lab+';margin-top:10px">アシスタントの歩合（施術売上に対して）</div><div style="display:flex;align-items:center;gap:4px"><input type="text" inputmode="decimal" id="pr_ar" value="'+d.assistant.rate+'" style="'+inp+'width:80px" oninput="prChanged()"><span style="font-size:12px">%</span></div>'
+   +'</div>';
+  // 物販歩合
+  s+='<div style="'+box+'"><div style="'+hd+'">🛍️ 物販歩合</div>'
+   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+   +'<div><div style="'+lab+'">元になる金額</div><select id="pr_pb" style="'+selS+'">'+opt('profit',d.product.basis,'利益（売値−仕入値）')+opt('sell_inc',d.product.basis,'売上（税込）')+opt('sell_exc',d.product.basis,'売上（税抜）')+'</select></div>'
+   +'<div><div style="'+lab+'">計算方法</div><select id="pr_pm" style="'+selS+'">'+opt('whole',d.product.mode,'入った段階の率を全額に')+opt('tiered',d.product.mode,'段階ごとに積み上げ')+'</select></div>'
+   +'<div><div style="'+lab+'">足切り（この金額未満は歩合なし）</div><div style="display:flex;align-items:center;gap:4px"><input type="text" inputmode="numeric" id="pr_pth" value="'+(d.product.threshold?num(d.product.threshold):'')+'" placeholder="0＝なし" style="'+inp+'width:100%" oninput="prChanged()"><span style="font-size:12px">円</span></div></div>'
+   +'<div><div style="'+lab+'">端数</div><select id="pr_prd" style="'+selS+'">'+opt('floor',d.product.round,'切り捨て')+opt('round',d.product.round,'四捨五入')+opt('ceil',d.product.round,'切り上げ')+'</select></div>'
+   +'</div><div style="'+lab+'">段階と率</div>'+_prTierEditor('p', d.product.tiers)
+   +'</div>';
+  // その他
+  s+='<div style="'+box+'"><div style="'+hd+'">🧾 その他</div>'
+   +'<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#1A4F47;margin-bottom:6px"><input type="checkbox" id="pr_hon"'+(d.hps&&d.hps.on?' checked':'')+'> タオル等の外部物販手当（請求書の金額から計算）を使う</label>'
+   +'<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#1A4F47;flex-wrap:wrap;margin-bottom:8px">税抜の<input type="text" inputmode="decimal" id="pr_hr" value="'+(d.hps?d.hps.rate:10)+'" style="'+inp+'width:56px" oninput="prChanged()">%（切り上げ）の<input type="text" inputmode="decimal" id="pr_hs" value="'+(d.hps?d.hps.share:80)+'" style="'+inp+'width:56px" oninput="prChanged()">%を支給</div>'
+   +'<div style="'+lab+'">固定給と歩合の合わせ方</div><select id="pr_cb" style="'+selS+'">'+opt('add',d.combine,'足し算（固定給＋歩合）')+opt('max',d.combine,'多い方（歩合が固定給を超えた分だけ増える）')+'</select>'
+   +'<div style="'+lab+'">会社負担の社会保険（給与合計に対して）</div><div style="display:flex;align-items:center;gap:4px"><input type="text" inputmode="decimal" id="pr_so" value="'+d.social+'" style="'+inp+'width:80px" oninput="prChanged()"><span style="font-size:12px">%</span></div>'
+   +'</div>';
+  // 試算
+  s+='<div style="border:2px solid #2C7A6E;border-radius:10px;background:#F0F7F6;padding:10px;margin-bottom:10px">'
+   +'<div style="'+hd+'">🧮 試算（保存前の設定で計算します）</div>'
+   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+   +'<div><div style="'+lab+'">技術売上（<span id="pr_x_tl">'+(d.tech.basis==='inc'?'税込':'税抜')+'</span>）</div><input type="text" inputmode="numeric" id="pr_x_ts" value="'+(window._prX_ts||'1200000')+'" style="'+inp+'width:100%" oninput="window._prX_ts=this.value;prTrial()"></div>'
+   +'<div><div style="'+lab+'">物販の<span id="pr_x_pl">利益</span></div><input type="text" inputmode="numeric" id="pr_x_pb" value="'+(window._prX_pb||'45000')+'" style="'+inp+'width:100%" oninput="window._prX_pb=this.value;prTrial()"></div>'
+   +'<div><div style="'+lab+'">固定給（基本給など）</div><input type="text" inputmode="numeric" id="pr_x_fx" value="'+(window._prX_fx||'250000')+'" style="'+inp+'width:100%" oninput="window._prX_fx=this.value;prTrial()"></div>'
+   +'<div id="pr_x_twbox"><div style="'+lab+'">タオル売上（税込）</div><input type="text" inputmode="numeric" id="pr_x_tw" value="'+(window._prX_tw||'0')+'" style="'+inp+'width:100%" oninput="window._prX_tw=this.value;prTrial()"></div>'
+   +'</div>'
+   +'<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#1A4F47;margin-top:6px"><input type="checkbox" id="pr_x_as"'+(window._prX_as?' checked':'')+' onchange="window._prX_as=this.checked;prTrial()"> アシスタントとして計算</label>'
+   +'<div id="pr_out" style="margin-top:8px"></div></div>';
+  s+='<div id="pr_err"></div>'
+   +(ro?'':'<button type="button" onclick="savePayRules()" style="width:100%;padding:11px;border:none;border-radius:9px;background:#2C7A6E;color:#fff;font-size:14px;font-weight:800">💾 給与ルールを保存</button>'
+   +'<button type="button" onclick="prResetDefault()" style="width:100%;margin-top:7px;padding:9px;border:1.5px solid #94A3B8;border-radius:9px;background:#fff;color:#475569;font-size:12px;font-weight:700">初期値（SUN白金台の決まり）に戻す</button>')
+   +'<div style="font-size:11px;color:#94a3b8;margin-top:6px;line-height:1.7">保存すると、給与集計・人件費の見通し・P&Lの人件費がこのルールで計算されます。クラウドに送られ、他の管理画面にも反映されます（スタッフの携帯には届きません）。</div>'
+   +'</div></details>';
+  setTimeout(function(){ try{ prTrial(); }catch(e){} }, 0);
+  return s;
+}
+function prTrial(){
+  var out=document.getElementById('pr_out'); if(!out) return;
+  var d=_prRead(), P=_rulesProblems(d), err=document.getElementById('pr_err');
+  var tl=document.getElementById('pr_x_tl'); if(tl) tl.textContent=d.tech.basis==='inc'?'税込':'税抜';
+  var pl=document.getElementById('pr_x_pl'); if(pl) pl.textContent=d.product.basis==='profit'?'利益（売値−仕入値）':(d.product.basis==='sell_inc'?'売上（税込）':'売上（税抜）');
+  var twb=document.getElementById('pr_x_twbox'); if(twb) twb.style.display=d.hps.on?'':'none';
+  if(err) err.innerHTML=P.length?'<div style="margin-bottom:8px;padding:9px 11px;background:#FDECEA;border-left:4px solid #C62828;border-radius:7px;font-size:12px;color:#C62828;line-height:1.7"><b>設定に直すところがあります</b><br>'+P.map(h).join('<br>')+'</div>':'';
+  if(P.length){ out.innerHTML='<div style="font-size:12px;color:#C62828">上の設定を直すと試算が出ます</div>'; return; }
+  var ts=_psNum(_psVal('pr_x_ts')), pb=_psNum(_psVal('pr_x_pb')), fx=_psNum(_psVal('pr_x_fx')), tw=_psNum(_psVal('pr_x_tw'));
+  var asEl=document.getElementById('pr_x_as'), asst=!!(asEl&&asEl.checked);
+  _payRulesPreview=d;
+  try{
+    var tc = asst ? {amount:Math.floor(ts*assistantRate()), parts:[], rate:assistantRate()} : _tierCalc(Math.max(0,Math.round(ts)), d.tech);
+    var pc=productCommission(pb), hp=hpsPay(tw), pay=payTotal(fx, tc.amount, pc.amount, hp), co=Math.round(pay*(1+socialRate()));
+    var row=function(a,b,strong){ return '<div style="display:flex;justify-content:space-between;gap:8px;font-size:'+(strong?'15px':'12px')+';'+(strong?'font-weight:800;color:#1B5E20;border-top:2px solid #2C7A6E;padding-top:5px;margin-top:4px':'color:#1A4F47')+'"><span>'+a+'</span><span style="white-space:nowrap">'+b+'</span></div>'; };
+    var s='';
+    if(asst){ s+=row('アシスタント歩合（¥'+num(ts)+'×'+(Math.round(assistantRate()*1000)/10)+'%）','¥'+num(tc.amount)); }
+    else if(d.tech.threshold && Math.round(ts)<d.tech.threshold){ s+=row('技術歩合（足切り ¥'+num(d.tech.threshold)+' 未満）','¥0'); }
+    else {
+      s+=row('<b>技術歩合</b>','<b>¥'+num(tc.amount)+'</b>');
+      for(var i=0;i<tc.parts.length;i++){ var q=tc.parts[i]; s+='<div style="font-size:11px;color:#64748B;display:flex;justify-content:space-between;padding-left:10px"><span>'+(d.tech.mode==='whole'?'全額 ¥'+num(q.to):'¥'+num(q.from)+'〜¥'+num(q.to))+' × '+(Math.round(q.rate*1000)/10)+'%</span><span>¥'+num(q.amount)+'</span></div>'; }
+    }
+    s+=row('<b>物販歩合</b>（'+(pc.parts.length?(d.product.mode==='whole'?'¥'+num(pb)+'×'+(Math.round(pc.rate*1000)/10)+'%':'段階ごとに積み上げ'):'対象外')+'）','<b>¥'+num(pc.amount)+'</b>');
+    if(d.hps.on) s+=row('タオル等の手当','¥'+num(hp));
+    s+=row('固定給','¥'+num(fx));
+    if(d.combine==='max') s+='<div style="font-size:11px;color:#64748B">※「多い方」：固定給 ¥'+num(fx)+' と 歩合 ¥'+num(tc.amount+pc.amount)+' の多い方'+(d.hps.on?'＋タオル手当':'')+'</div>';
+    s+=row('支給額（見込み）','¥'+num(pay),true);
+    s+='<div style="font-size:11px;color:#64748B;display:flex;justify-content:space-between"><span>会社負担の社会保険込み（'+(Math.round(socialRate()*1000)/10)+'%）</span><span>¥'+num(co)+'</span></div>';
+    var nt=asst?null:nextTechTier(ts), np=nextProductTier(pb);
+    if(nt&&nt.gain>0) s+='<div style="font-size:11px;color:#8a6d4a;margin-top:4px">💡 技術売上あと ¥'+num(nt.need)+' で +¥'+num(nt.gain)+'</div>';
+    if(np&&np.gain>0&&pb>0) s+='<div style="font-size:11px;color:#8a6d4a">💡 物販あと ¥'+num(np.need)+' で +¥'+num(np.gain)+'</div>';
+    out.innerHTML=s;
+  } finally { _payRulesPreview=null; }
+}
+function savePayRules(){
+  var d=_prRead(), P=_rulesProblems(d);
+  if(P.length){ showToast('⚠️ '+P[0]); prTrial(); return; }
+  // 【v25.1】まだクラウドから取り込めていない端末では保存しない（新しい日時で、クラウドの本物の設定を上書きしないため）
+  var has=state.payroll&&state.payroll._rules;
+  if(!has && !(state.lastFullSync && (Date.now()-state.lastFullSync) < 10*60*1000)){
+    showToast('⚠️ 先に上の緑の帯をタップして同期してください（クラウドの給与ルールを上書きしないため）'); return;
+  }
+  d.updatedAt=new Date().toISOString();
+  if(!state.payroll||typeof state.payroll!=='object') state.payroll={};
+  state.payroll._rules=d;
+  window._prDraft=null; window._prDirty=false; window._prOpen=true;
+  save();
+  renderPayrollExport();
+  try{ renderLaborCost(); }catch(e){}
+  showToast('💾 給与ルールを保存しました');
+}
 function savePayrollSetup(){
   var d=_psRead();
   // 名前が空なのに金額が入っている行は、黙って捨てずに止める（書き直し途中で人件費から外れないように）
@@ -8735,40 +8878,142 @@ function savePayrollSetup(){
   try{ renderLaborCost(); }catch(e){}
   showToast('💾 給与設定を保存しました');
 }
-// アシスタントのヘッドスパ等の歩合率（エクセルC25）
-var ASSISTANT_RATE=0.2;
-// 技術売上の歩合（エクセルE〜J列と同一。50万未満は歩合ゼロ、以降は段階ごとの積み上げ）
-function techCommission(sales){
-  var s=Math.max(0, Math.round(sales||0));
-  if(s<500000) return 0;                       // 50万未満は歩合なし（ここが大きな段差）
-  var t=0;
-  t+=Math.floor(500000*0.135);                 // 〜50万 13.5%
-  t+=Math.floor(Math.min(Math.max(s-500000,0),500000)*0.15);   // 〜100万 15%
-  t+=Math.floor(Math.min(Math.max(s-1000000,0),500000)*0.30);  // 〜150万 30%
-  t+=Math.floor(Math.min(Math.max(s-1500000,0),500000)*0.35);  // 〜200万 35%
-  t+=Math.floor(Math.min(Math.max(s-2000000,0),1000000)*0.40); // 〜300万 40%
-  t+=Math.floor(Math.max(s-3000000,0)*0.45);                   // 300万超 45%
-  return t;
+/* ===== ⚙️ 給与ルール（v25.1）: 歩合の決まりを設定値にする
+   保存先は state.payroll._rules（admin 専用マスタ payroll の1キー。月キー・_setup と同じく updatedAt の新しい方が勝つ）。
+   未設定なら PAY_RULES_DEFAULT（SUN白金台の決まり＝v25.0 までの計算式そのもの）で、計算結果は1円も変わらない。
+   率は「%」で持ち、計算の時に _pct() で小数にする（13.5→0.135 など、以前の定数と同じ値になる）。 ===== */
+var PAY_RULES_DEFAULT={
+  v:1,
+  tech:{basis:'exc', mode:'tiered', threshold:500000, round:'floor',
+        tiers:[{upto:500000,rate:13.5},{upto:1000000,rate:15},{upto:1500000,rate:30},{upto:2000000,rate:35},{upto:3000000,rate:40},{upto:0,rate:45}]},
+  assistant:{rate:20},
+  product:{basis:'profit', mode:'whole', threshold:0, round:'floor',
+           tiers:[{upto:30000,rate:20},{upto:50000,rate:30},{upto:80000,rate:35},{upto:0,rate:40}]},
+  hps:{on:true, rate:10, share:80},
+  combine:'add',
+  social:11.6
+};
+function _pct(p){ var n=Number(p); if(!isFinite(n)) n=0; return parseFloat((n/100).toFixed(10)); }
+function _payRound(mode, x){ return mode==='round'?Math.round(x):(mode==='ceil'?Math.ceil(x):Math.floor(x)); }
+function _rulesClone(o){ return JSON.parse(JSON.stringify(o)); }
+// 保存された設定を検査して、使える形にする（壊れていたら初期値）
+function _rulesValid(r){ return _rulesProblems(r).length===0; }
+// 設定の誤りを、画面に出せる言葉で返す（空なら問題なし）
+function _rulesProblems(r){
+  var P=[];
+  function tiers(t, name){
+    if(!Array.isArray(t)||!t.length){ P.push(name+'の段階がありません'); return; }
+    if(t.length>20){ P.push(name+'の段階が多すぎます（20まで）'); return; }
+    var prev=0;
+    for(var i=0;i<t.length;i++){
+      var u=Number(t[i].upto), rt=Number(t[i].rate);
+      if(!isFinite(rt)||rt<0||rt>100) P.push(name+'の'+(i+1)+'段目の率は0〜100%で入れてください');
+      if(i===t.length-1){ if(u!==0) P.push(name+'の最後の段階は「それ以上」にしてください'); }
+      else if(!(u>prev)) P.push(name+'の'+(i+1)+'段目の上限は、前の段階より大きい金額にしてください');
+      else prev=u;
+    }
+  }
+  if(!r||typeof r!=='object'||!r.tech||!r.product){ P.push('設定が読めません'); return P; }
+  if(['exc','inc'].indexOf(r.tech.basis)<0) P.push('技術歩合の売上（税抜／税込）を選んでください');
+  if(['tiered','whole'].indexOf(r.tech.mode)<0) P.push('技術歩合の計算方法を選んでください');
+  if(['profit','sell_inc','sell_exc'].indexOf(r.product.basis)<0) P.push('物販歩合の元になる金額を選んでください');
+  if(['tiered','whole'].indexOf(r.product.mode)<0) P.push('物販歩合の計算方法を選んでください');
+  tiers(r.tech.tiers,'技術歩合'); tiers(r.product.tiers,'物販歩合');
+  if(!(Number(r.tech.threshold)>=0)||!(Number(r.product.threshold)>=0)) P.push('足切りの金額は0以上で入れてください');
+  var a=Number(r.assistant&&r.assistant.rate), so=Number(r.social);
+  if(!isFinite(a)||a<0||a>100) P.push('アシスタントの率は0〜100%で入れてください');
+  if(!isFinite(so)||so<0||so>50) P.push('会社負担の社会保険は0〜50%で入れてください');
+  if(r.hps && r.hps.on){ var hr=Number(r.hps.rate), hs=Number(r.hps.share); if(!isFinite(hr)||hr<0||hr>100||!isFinite(hs)||hs<0||hs>100) P.push('タオル手当の率は0〜100%で入れてください'); }
+  if(['add','max'].indexOf(r.combine)<0) P.push('固定給と歩合の合わせ方を選んでください');
+  return P;
 }
-// 物販利益があといくらで歩合率が上がるか（率は利益全額にかかるので段差が大きい）
+var _payRulesPreview=null;   // 試算の時だけ、保存前の設定で計算する
+function payRules(){
+  if(_payRulesPreview) return _payRulesPreview;
+  var r=state.payroll&&state.payroll._rules;
+  return _rulesValid(r)?r:PAY_RULES_DEFAULT;
+}
+function payRulesIsDefault(){ return payRules()===PAY_RULES_DEFAULT; }
+// 段階表で計算する。mode='tiered'（段階ごとに積み上げ）／'whole'（入った段階の率を全額に）
+//   threshold: これ未満は0（足切り）。戻り値 {amount, rate(全額方式の率・積み上げは実効率), parts[{from,to,rate,amount}]}
+function _tierCalc(base, cfg){
+  var t=cfg.tiers, rd=cfg.round||'floor', parts=[];
+  if(cfg.mode==='whole'){
+    if(!base) return {amount:0, rate:0, parts:parts};
+    var rt=0;
+    for(var i=0;i<t.length;i++){ if(t[i].upto===0||base<t[i].upto){ rt=_pct(t[i].rate); break; } }
+    if(cfg.threshold && base<cfg.threshold) return {amount:0, rate:0, parts:parts};
+    var amt=_payRound(rd, base*rt);
+    parts.push({from:0, to:base, rate:rt, amount:amt});
+    return {amount:amt, rate:rt, parts:parts};
+  }
+  var s=Math.max(0, Math.round(base||0));
+  if(cfg.threshold && s<cfg.threshold) return {amount:0, rate:0, parts:parts};
+  var total=0, lower=0;
+  for(var k=0;k<t.length;k++){
+    var up=t[k].upto, r2=_pct(t[k].rate);
+    var portion = up===0 ? Math.max(s-lower,0) : Math.min(Math.max(s-lower,0), up-lower);
+    if(portion>0){ var a2=_payRound(rd, portion*r2); total+=a2; parts.push({from:lower, to:lower+portion, rate:r2, amount:a2}); }
+    if(up===0) break;
+    lower=up;
+  }
+  return {amount:total, rate:(s>0?total/s:0), parts:parts};
+}
+// アシスタントの歩合率（エクセルC25。初期値20%）
+function assistantRate(){ return _pct(payRules().assistant.rate); }
+var ASSISTANT_RATE=0.2;   // 互換用（計算には assistantRate() を使う）
+function socialRate(){ return _pct(payRules().social); }
+// 技術歩合の元になる売上（施術の税込・割引後 menuInc から）
+function techBaseFromInc(menuInc){ return payRules().tech.basis==='inc' ? Math.round(menuInc) : Math.round(menuInc/1.1); }
+function techBasisLabel(){ return payRules().tech.basis==='inc'?'税込':'税抜'; }
+// 技術売上の歩合（初期値：エクセルE〜J列と同一。50万未満は歩合ゼロ、以降は段階ごとの積み上げ）
+function techCommission(sales){ return _tierCalc(Math.max(0, Math.round(sales||0)), payRules().tech).amount; }
+// 物販歩合の元になる金額（profit=売値−原価／sell_inc=売値税込／sell_exc=売値税抜）
+function productBase(sell, profit){
+  var b=payRules().product.basis;
+  return b==='sell_inc' ? Math.round(sell) : (b==='sell_exc' ? Math.round(sell/1.1) : Math.round(profit));
+}
+function productBasisLabel(){ var b=payRules().product.basis; return b==='sell_inc'?'売上(税込)':(b==='sell_exc'?'売上(税抜)':'利益'); }
+function productCommission(base){ return _tierCalc(base, payRules().product); }
+// 物販があといくらで歩合率が上がるか（全額方式の時だけ。率は全額にかかるので段差が大きい）
 function nextProductTier(profit){
-  var p=Math.max(0,profit||0), bounds=[30000,50000,80000];
+  var P=payRules().product; if(P.mode!=='whole') return null;
+  var p=Math.max(0,profit||0), t=P.tiers;
+  var bounds=[]; if(P.threshold) bounds.push(P.threshold);
+  for(var b=0;b<t.length;b++) if(t[b].upto) bounds.push(t[b].upto);
+  bounds.sort(function(x,y){ return x-y; });
   for(var i=0;i<bounds.length;i++){
     if(p<bounds[i]){
-      var now=Math.floor(p*payrollRate(p)), next=Math.floor(bounds[i]*payrollRate(bounds[i]));
+      var now=productCommission(p).amount, next=productCommission(bounds[i]).amount;
       return {need:bounds[i]-p, gain:next-now, at:bounds[i]};
     }
   }
   return null;
 }
-// 技術売上があといくらで歩合が発生するか（50万の段差のみ）
-function nextTechTier(sales){
-  var s=Math.max(0,sales||0);
-  if(s>=500000 || s===0) return null;
-  return {need:500000-s, gain:techCommission(500000)};
+function productBoundsText(){
+  var P=payRules().product, a=[];
+  for(var i=0;i<P.tiers.length;i++) if(P.tiers[i].upto) a.push(P.tiers[i].upto>=10000&&P.tiers[i].upto%10000===0?(P.tiers[i].upto/10000)+'万':num(P.tiers[i].upto));
+  return a.join('・');
 }
-// エクセルの店販歩合率（J列の利益で決まる）
-function payrollRate(j){ if(!j) return 0; if(j<30000) return 0.2; if(j<50000) return 0.3; if(j<80000) return 0.35; return 0.4; }
+// 技術売上があといくらで歩合が発生するか（足切りの段差。全額方式なら次の段階の境目も）
+function nextTechTier(sales){
+  var T=payRules().tech, s=Math.max(0,sales||0);
+  if(s===0) return null;
+  if(T.threshold && s<T.threshold) return {need:T.threshold-s, gain:techCommission(T.threshold)-techCommission(s)};
+  if(T.mode==='whole'){
+    for(var i=0;i<T.tiers.length;i++){ var u=T.tiers[i].upto; if(u && s<u) return {need:u-s, gain:techCommission(u)-techCommission(s)}; }
+  }
+  return null;
+}
+// 物販歩合率（エクセルの店販歩合率。全額方式の率）
+function payrollRate(j){ return productCommission(j).rate; }
+// タオル等（ヒポポタマス）の手当：ROUNDUP(税抜×率)×支給割合
+function hpsPay(tw){ var H=payRules().hps; if(!H||!H.on) return 0; return Math.round(Math.ceil((tw||0)/1.1*_pct(H.rate))*_pct(H.share)); }
+function hpsOn(){ var H=payRules().hps; return !!(H&&H.on); }
+// 1人分の支給額（固定給と歩合の合わせ方は設定で選ぶ）
+function payTotal(fixed, tech, prod, hps){
+  return payRules().combine==='max' ? Math.max(fixed, tech+prod)+hps : fixed+tech+prod+hps;
+}
 function hpsMap(ym){
   if(!state.hpsTowel || typeof state.hpsTowel!=='object') state.hpsTowel={};
   if(!state.hpsTowel[ym]) state.hpsTowel[ym]={};
@@ -8827,36 +9072,36 @@ function renderPayrollExport(){
   var towel=hpsMap(ym);
   var PR=payrollRows();
 
-  var s=_payrollMissingHtml()+renderPayrollSetupEditor();
+  var s=_payrollMissingHtml()+renderPayrollSetupEditor()+renderPayRulesEditor();
   s+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:560px">';
   s+='<tr style="background:#EAF5F3"><th style="border:1px solid #C8E0DC;padding:6px">エクセルの氏名</th>'
    +'<th style="border:1px solid #C8E0DC;padding:6px">H列<br>店販売値(税込)</th>'
    +'<th style="border:1px solid #C8E0DC;padding:6px">I列<br>原価</th>'
-   +'<th style="border:1px solid #C8E0DC;padding:6px">P列<br>タオル税込<br><span style="font-weight:400;font-size:10px">請求書から入力</span></th>'
+   +(hpsOn()?'<th style="border:1px solid #C8E0DC;padding:6px">P列<br>タオル税込<br><span style="font-weight:400;font-size:10px">請求書から入力</span></th>':'')
    +'<th style="border:1px solid #C8E0DC;padding:6px">参考<br>店販歩合</th>'
-   +'<th style="border:1px solid #C8E0DC;padding:6px">参考<br>HPS歩合</th></tr>';
+   +(hpsOn()?'<th style="border:1px solid #C8E0DC;padding:6px">参考<br>HPS歩合</th>':'')+'</tr>';
   var totSell=0, totCost=0, totTowel=0;
   for(var pi=0;pi<PR.length;pi++){
     var row=PR[pi];
     var a=agg[row.app]||{sell:0,profit:0,menuInc:0,n:0};
     var sell=Math.round(a.sell), cost=Math.round(a.sell-a.profit);
-    var j=sell-cost, rate=payrollRate(j), tpay=Math.floor(j*rate);
+    var j=productBase(sell, sell-cost), pcx=productCommission(j), rate=pcx.rate, tpay=pcx.amount;
     var tw=towel[row.app]||0;
-    var q=tw/1.1, inc=Math.ceil(q*0.1), hps=Math.round(inc*0.8);   // 給与エクセルと同じく円単位（小数は出さない）
+    var hps=hpsPay(tw);   // 給与エクセルと同じく円単位（小数は出さない）
     totSell+=sell; totCost+=cost; totTowel+=tw;
     s+='<tr>'
      +'<td style="border:1px solid #C8E0DC;padding:6px"><b>'+h(row.xls)+'</b><br><span style="font-size:10px;color:#94a3b8">'+(row.row)+'行目／アプリ：'+h(row.app)+'</span></td>'
      +'<td style="border:1px solid #C8E0DC;padding:6px;text-align:right;font-weight:800;color:#1A4F47">'+num(sell)+'</td>'
      +'<td style="border:1px solid #C8E0DC;padding:6px;text-align:right;font-weight:800;color:#1A4F47">'+num(cost)+'</td>'
-     +'<td style="border:1px solid #C8E0DC;padding:6px;text-align:right"><input type="number" inputmode="numeric" value="'+(tw||'')+'" placeholder="0" onchange="setHpsTowel(\''+ym+'\',\''+row.app+'\',this.value)" style="width:92px;padding:6px;border:1.5px solid #F0A500;border-radius:7px;font-size:13px;font-weight:700;text-align:right;color:#1A4F47"></td>'
-     +'<td style="border:1px solid #C8E0DC;padding:6px;text-align:right;color:#64748B">'+num(tpay)+'<br><span style="font-size:10px">利益'+num(j)+'×'+Math.round(rate*100)+'%</span></td>'
-     +'<td style="border:1px solid #C8E0DC;padding:6px;text-align:right;color:#64748B">'+num(hps)+'</td></tr>';
+     +(hpsOn()?'<td style="border:1px solid #C8E0DC;padding:6px;text-align:right"><input type="number" inputmode="numeric" value="'+(tw||'')+'" placeholder="0" onchange="setHpsTowel(\''+ym+'\',\''+row.app+'\',this.value)" style="width:92px;padding:6px;border:1.5px solid #F0A500;border-radius:7px;font-size:13px;font-weight:700;text-align:right;color:#1A4F47"></td>':'')
+     +'<td style="border:1px solid #C8E0DC;padding:6px;text-align:right;color:#64748B">'+num(tpay)+'<br><span style="font-size:10px">'+productBasisLabel()+num(j)+(payRules().product.mode==='whole'?'×'+(Math.round(rate*1000)/10)+'%':'')+'</span></td>'
+     +(hpsOn()?'<td style="border:1px solid #C8E0DC;padding:6px;text-align:right;color:#64748B">'+num(hps)+'</td>':'')+'</tr>';
   }
   s+='<tr style="background:#F8FAFA;font-weight:800"><td style="border:1px solid #C8E0DC;padding:6px">合計</td>'
    +'<td style="border:1px solid #C8E0DC;padding:6px;text-align:right">'+num(totSell)+'</td>'
    +'<td style="border:1px solid #C8E0DC;padding:6px;text-align:right">'+num(totCost)+'</td>'
-   +'<td style="border:1px solid #C8E0DC;padding:6px;text-align:right">'+num(totTowel)+'</td>'
-   +'<td colspan="2" style="border:1px solid #C8E0DC;padding:6px;font-size:10px;font-weight:400;color:#64748B">タオル合計は請求書の「総計」と一致するか確認</td></tr>';
+   +(hpsOn()?'<td style="border:1px solid #C8E0DC;padding:6px;text-align:right">'+num(totTowel)+'</td>'
+   +'<td colspan="2" style="border:1px solid #C8E0DC;padding:6px;font-size:10px;font-weight:400;color:#64748B">タオル合計は請求書の「総計」と一致するか確認</td>':'<td style="border:1px solid #C8E0DC;padding:6px"></td>')+'</tr>';
   s+='</table></div>';
 
   // 給与対象外（参考）
@@ -9268,7 +9513,7 @@ function pnlExtraHtml(filtered,totalSell,prodCost,feeAmount){
     html+='</div>';
   }
   html+='<div class="pnl-row"><div class="pnl-label">給与合計（支給額）</div><div class="pnl-value">¥'+num(pay.grossPay)+'</div></div>';
-  html+='<div class="pnl-row"><div class="pnl-label pnl-sub">　＋会社負担の社会保険（概算'+Math.round(SOCIAL_INSURANCE_RATE*1000)/10+'%）</div><div class="pnl-value pnl-sub">¥'+num(pay.insurance)+'</div></div>';
+  html+='<div class="pnl-row"><div class="pnl-label pnl-sub">　＋会社負担の社会保険（概算'+Math.round(socialRate()*1000)/10+'%）</div><div class="pnl-value pnl-sub">¥'+num(pay.insurance)+'</div></div>';
   html+='<div class="pnl-row total"><div class="pnl-label">人件費合計（会社が払う総額）</div><div class="pnl-value">¥'+num(laborTotal)+'</div></div>';
   html+='<div class="pnl-row"><div class="pnl-label pnl-sub">　人件費率</div><div class="pnl-value pnl-sub">'+(Math.round(laborRate*10)/10)+'%</div></div>';
   html+='<div style="font-size:10px;color:#94a3b8;margin-top:6px">※早朝手当など給与エクセルで手入力している項目は含みません。固定給は給与明細の登録値（変更があれば教えてください）。</div>';

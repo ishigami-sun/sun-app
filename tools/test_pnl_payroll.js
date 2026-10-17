@@ -8,9 +8,10 @@ if(!fs.existsSync(FX)){ console.log('⚠️ フィクスチャが無いのでス
 const fx=JSON.parse(fs.readFileSync(FX,'utf8'));
 const src=fs.readFileSync('/home/user/sun-app/admin.html','utf8');
 function grab(n){const i=src.indexOf('function '+n+'(');if(i<0)throw new Error(n);let d=0;for(let k=src.indexOf('{',i);k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'){d--;if(!d)return src.slice(i,k+1);}}}
-eval(src.slice(src.indexOf('var ASSISTANT_RATE='), src.indexOf(';', src.indexOf('var ASSISTANT_RATE='))+1));
 eval(src.slice(src.indexOf('var SOCIAL_INSURANCE_RATE='), src.indexOf(';', src.indexOf('var SOCIAL_INSURANCE_RATE='))+1));
-eval(grab('techCommission')); eval(grab('payrollRate')); eval(grab('laborCostForMonth')); eval(grab('pnlPayroll'));
+// v25.1: 給与ルール（設定値）の計算部分をまとめて読み込む
+(0,eval)(src.slice(src.indexOf('/* ===== ⚙️ 給与ルール（v25.1）'), src.indexOf('function hpsMap(')));
+eval(grab('laborCostForMonth')); eval(grab('pnlPayroll'));
 eval(grab('payrollSetup')); eval(grab('payrollRows')); eval(grab('payrollFixedOnly'));
 const EX=fx.ex;
 global.laborAggregate=()=>{ const o={}; for(const k in EX) o[k]={menuInc:0,sell:0,profit:EX[k].profit}; return o; };
