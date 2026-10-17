@@ -23,6 +23,19 @@ node tools/check_release.js
 printf '#!/bin/sh\nnode tools/check_release.js || exit 1\n' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 ```
 
+### 1-2. main にマージする前に Engineering のレビューを通す
+
+node tools/check_release.js と node tools/check-shared.js が合格したら、
+git diff origin/main...HEAD を Engineering プラグインの code-review の観点（使えない環境では自分で）でレビューする。
+加えて次を必ず確認する:
+- 修正が staff.html と admin.html の両方に入っているか
+- キー・合言葉の実値、給与の実額、本名がコード・テスト・コミットに入っていないか
+- スタッフ版に管理項目・給与・P&L・技術的な説明が出ていないか。オーナー用/スタッフ用の合言葉の区別が崩れていないか
+- 同期の順序（取り込み→日報送信→必要時のみマスタ）を崩していないか。未送信の日報が消える・二重になる経路がないか
+- 白金台と恵比寿店（FC）のデータが混ざる経路がないか
+レビュー結果は「判定／重大／注意／石上さんにスマホで確認してほしい画面」の形で、やさしい日本語で報告する。
+重大が1つでもあれば、main にマージする前に直す。
+
 ### 2. 修正は必ず staff.html と admin.html の両方に入れる
 
 2ファイルはインラインJSがほぼ同一。片方だけ直すと端末ごとに挙動が変わる。
