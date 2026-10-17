@@ -151,5 +151,18 @@ global.staffBase=x=>String(x||'').replace(/[（(].*$/,'').trim();
   L=laborCostForMonth('2026-09');
   t('④アルバイトの時間を手入力すると、その時間で計算（20h×1,300＋5,000）', by('バイト').pay===31000 && by('バイト').hoursOver===true);
 }
+// ---- ⑤ 一人ずつの歩合%（tRate）：入っていれば売上（税抜）×%、空なら給与ルール ----
+{
+  const PR=[{app:'率',xls:'率',base:250000,ot:0,post:0,commute:10000,tRate:12},
+            {app:'無',xls:'無',base:0,ot:0,post:0,commute:0},
+            {app:'助',xls:'助',base:0,ot:0,post:0,commute:0,assistant:true,tRate:0}];
+  const agg={'率':{menuInc:1100000,sell:0,profit:0},'無':{menuInc:880000,sell:0,profit:0},'助':{menuInc:330000,sell:0,profit:0}};
+  global.state={payroll:{_setup:{rows:PR,fixedOnly:[],updatedAt:'x'}},attendance:{}};
+  global.laborAggregate=()=>agg; global.laborSalesMap=()=>({}); global.payrollRows=()=>PR;
+  const L=laborCostForMonth('2026-09'); const by=k=>L.rows.find(r=>r.R.app===k);
+  t('⑤歩合12%：税込110万→税抜100万×12%＝120,000＋基本給＋通勤費', by('率').tech===120000 && by('率').pay===380000);
+  t('⑤歩合が空なら給与ルール（段階制）で計算＝以前と同じ', by('無').tech===techCommission(800000));
+  t('⑤アシスタントも歩合0%を入れれば0', by('助').tech===0);
+}
 checks.forEach(([n,v])=>console.log((v?'✅':'❌')+' '+n));
 const ok=checks.every(c=>c[1]); console.log('\n'+(ok?'すべて合格':'★失敗あり')); process.exit(ok?0:1);

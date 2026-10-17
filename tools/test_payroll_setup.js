@@ -85,8 +85,12 @@ savePayrollSetup();
 t('f: app 重複は拒否（保存しない・トースト）', !state.payroll._setup && saves===0 && toasts.length===1);
 // 名前が片方だけ空で金額がある行は、黙って捨てずに止める
 global.state={payroll:{},lastFullSync:Date.now()}; saves=0; toasts.length=0;
+mkDom([{app:'甲',xls:'甲野',base:'1'},{app:'',xls:'乙野',base:'123450'}],[]); savePayrollSetup();
+t('f: 名前が空で金額がある行は保存しない（トースト）', !state.payroll._setup && saves===0 && toasts.length===1);
+// v25.1: 給与明細の氏名は省略できる（名前と同じになる）
+global.state={payroll:{},lastFullSync:Date.now()}; saves=0; toasts.length=0;
 mkDom([{app:'甲',xls:'甲野',base:'1'},{app:'乙',xls:'',base:'123450'}],[]); savePayrollSetup();
-t('f: 氏名が空で金額がある行は保存しない（トースト）', !state.payroll._setup && saves===0 && toasts.length===1);
+t('f: 給与明細の氏名が空なら名前と同じで保存', state.payroll._setup && state.payroll._setup.rows[1].xls==='乙');
 global.state={payroll:{},lastFullSync:Date.now()}; saves=0; toasts.length=0;
 mkDom([{app:'甲',xls:'甲野',base:'1'}],[{name:'',amt:'5'}]); savePayrollSetup();
 t('f: 固定のみの氏名が空で金額がある行は保存しない', !state.payroll._setup && toasts.length===1);
