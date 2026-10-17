@@ -183,5 +183,17 @@ global.staffBase=x=>String(x||'').replace(/[（(].*$/,'').trim();
   t('⑥一律を選んで空なら0%（共通ルールにならない）', rowCommission({tMode:'flat'},1000000,'employee')===0);
   t('⑥何も選んでいない行は今までどおり共通ルール', rowCommission({},800000,'employee')===techCommission(800000));
 }
+// ---- ⑦ レビュー指摘：クラウドの文字列の数値・kind の名前 ----
+{
+  const r=JSON.parse(JSON.stringify(PAY_RULES_DEFAULT)); r.tech.tiers=r.tech.tiers.map(t=>({upto:String(t.upto),rate:String(t.rate)})); r.tech.threshold='500000';
+  global.state={payroll:{_rules:r}};
+  global.state.payroll._rules=r;
+  const ok1=[350000,800000,3500000].every(x=>{ state.payroll._rules=null; const a=techCommission(x); state.payroll._rules=r; return techCommission(x)===a; });
+  t('⑦段階の金額が文字列でも、数値と同じ計算（350万で「それ以上」の段が効く）', ok1);
+  t('⑦kind に constructor などの名前が来ても社員扱い', rowKind({kind:'constructor'})==='employee' && rowKind({kind:'toString'})==='employee' && rowKind({kind:'contractor'})==='contractor');
+  const bad=JSON.parse(JSON.stringify(PAY_RULES_DEFAULT)); bad.hps={on:false, rate:'"><img src=x>', share:80};
+  t('⑦タオル手当がオフでも、率が数値でなければ設定として使わない', _rulesProblems(bad).length>0);
+  global.state={payroll:{}};
+}
 checks.forEach(([n,v])=>console.log((v?'✅':'❌')+' '+n));
 const ok=checks.every(c=>c[1]); console.log('\n'+(ok?'すべて合格':'★失敗あり')); process.exit(ok?0:1);
