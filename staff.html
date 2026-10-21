@@ -2877,6 +2877,22 @@ function selectCustomerName(name){
 }
 
 /* MENU LIST */
+// メニュー選択のフォルダ分け（v25.3 石上さん要望 10/21）。マスタに cat があればそれ、無ければ名前から自動で振り分ける
+var MENU_FOLDERS=['カット類','カラー類','組み合わせ類','ホットペッパー類','トリートメント類','パーマ・ストレート類','その他'];
+function menuFolderOf(m){
+  if(m && m.cat && MENU_FOLDERS.indexOf(m.cat)>=0) return m.cat;
+  var n=String((m&&m.name)||'');
+  var lo=n.toLowerCase();
+  if(lo.indexOf('hot')>=0 || n.indexOf('ホットペッパー')>=0) return 'ホットペッパー類';
+  var cut=n.indexOf('カット')>=0, color=/カラー|ブリーチ|ハイライト|白髪/.test(n), perm=/パーマ|ストレート|縮毛/.test(n), treat=/トリートメント|ヘッドスパ|炭酸|前処理/.test(n);
+  if(/[＋+]/.test(n) || (cut && (color||perm||treat))) return '組み合わせ類';
+  if(cut) return 'カット類';
+  if(color) return 'カラー類';
+  if(treat) return 'トリートメント類';
+  if(perm) return 'パーマ・ストレート類';
+  return 'その他';
+}
+function setMenuFolder(f){ state.menuFolder=f||''; renderMenuList(); }
 function renderMenuList(){
   var el=document.getElementById('menuList');
   if(!state.menus.length){ el.innerHTML='<div class="empty"><div class="empty-text">管理タブからメニューを追加</div></div>'; return; }
@@ -2886,8 +2902,33 @@ function renderMenuList(){
     var _since=Date.now()-90*24*3600*1000;
     for(var _ri=0;_ri<state.records.length;_ri++){ var _rr=state.records[_ri]; var _tt=new Date(_rr.time).getTime(); if(!(_tt>=_since)) continue; (_rr.menus||[]).forEach(function(_mm){ _useCnt[_mm.name]=(_useCnt[_mm.name]||0)+1; }); }
   }catch(e){}
-  var menusView=state.menus.slice().sort(function(a,b){ return (_useCnt[b.name]||0)-(_useCnt[a.name]||0); });
+  // フォルダごとに分ける
+  var byFolder={};
+  for(var fi=0;fi<state.menus.length;fi++){ var fm=state.menus[fi]; var fk=menuFolderOf(fm); (byFolder[fk]=byFolder[fk]||[]).push(fm); }
+  var folder=state.menuFolder||'';
+  if(folder && !byFolder[folder]) folder=state.menuFolder='';
   var html='';
+  if(!folder){
+    html+='<div style="font-size:11px;font-weight:700;color:#64748B;margin-bottom:8px;letter-spacing:1px">種類を選んでください</div>';
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+    var icons={'カット類':'✂️','カラー類':'🎨','組み合わせ類':'✂️🎨','ホットペッパー類':'🔥','トリートメント類':'✨','パーマ・ストレート類':'💫','その他':'📦'};
+    for(var oi=0;oi<MENU_FOLDERS.length;oi++){
+      var f=MENU_FOLDERS[oi]; var list=byFolder[f]; if(!list||!list.length) continue;
+      var selCnt=0; for(var si=0;si<list.length;si++){ var s=findById(state.selectedMenus,list[si].id); if(s) selCnt+=s.qty||1; }
+      html+='<div onclick="setMenuFolder(\''+h(f)+'\')" style="position:relative;padding:16px 12px;background:linear-gradient(135deg,#1A4F47,#3DA892);color:#fff;border-radius:12px;cursor:pointer;text-align:center;box-shadow:0 3px 10px rgba(26,79,71,0.2)">';
+      if(selCnt) html+='<div style="position:absolute;top:8px;right:8px;background:#F0A500;color:#fff;border-radius:999px;min-width:22px;height:22px;line-height:22px;font-size:12px;font-weight:800;padding:0 6px">'+selCnt+'</div>';
+      html+='<div style="font-size:24px;margin-bottom:4px">'+(icons[f]||'📦')+'</div>';
+      html+='<div style="font-size:14px;font-weight:700;letter-spacing:1px;margin-bottom:4px">'+h(f)+'</div>';
+      html+='<div style="font-size:10px;opacity:0.85">'+list.length+'メニュー</div>';
+      html+='</div>';
+    }
+    html+='</div>';
+    el.innerHTML=html; return;
+  }
+  html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px">';
+  html+='<button onclick="setMenuFolder(\'\')" style="padding:4px 10px;background:#fff;border:1.5px solid #3DA892;color:#3DA892;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">← 戻る</button>';
+  html+='<span style="color:#64748B">📂 '+h(folder)+'</span></div>';
+  var menusView=byFolder[folder].slice().sort(function(a,b){ return (_useCnt[b.name]||0)-(_useCnt[a.name]||0); });
   for(var i=0;i<menusView.length;i++){
     var m=menusView[i];
     var dp=m.price;
@@ -3475,7 +3516,7 @@ function submitRecord(){
     if(state.deletedIds.indexOf(editId)<0) state.deletedIds.push(editId);
   }
   state.records.push(record);
-  state.selectedMenus=[]; state.selectedProducts=[];
+  state.selectedMenus=[]; state.selectedProducts=[]; state.menuFolder='';
   document.getElementById('customerName').value='';
   state.clientType='リピーター';
   state.entryDate=''; // 登録後は通常（本日）入力に戻す
@@ -6715,7 +6756,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "25.2";
+var APP_VERSION = "25.3";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
@@ -6968,7 +7009,7 @@ function editRecord_legacyInput(id){ // 旧・入力フォーム編集（未使�
 }
 function clearEditRecord(){
   state.editingRecordId=null; state.editingOrigTime=null; state.editingCustomerName=null;
-  state.selectedMenus=[]; state.selectedProducts=[];
+  state.selectedMenus=[]; state.selectedProducts=[]; state.menuFolder='';
   state.selectedStaff=''; state.clientType='リピーター'; state.mediaType=''; state.selectedPayment='';
   var cn=document.getElementById('customerName'); if(cn) cn.value='';
   try{ saveLocal(); }catch(e){}
