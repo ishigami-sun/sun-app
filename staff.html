@@ -285,15 +285,10 @@
     </div>
   </div>
 
-  <div class="section-title">STEP 3　支払い方法</div>
-  <div class="card"><div class="toggle-group" id="paymentGroup"></div></div>
-
-  <div class="section-title">STEP 4　税区分</div>
-  <!-- 税モード選択は撤廃（常に税込） -->
   </div><!-- /grp_info -->
 
   <div id="grp_menu">
-  <div class="section-title">STEP 5　メニュー選択</div>
+  <div class="section-title">STEP 3　メニュー選択</div>
   <div class="card"><div id="menuList"></div></div>
 
   <div id="selectedMenuSection" style="display:none">
@@ -303,7 +298,7 @@
   </div><!-- /grp_menu -->
 
   <div id="grp_product">
-  <div class="section-title">STEP 6　物販（担当者ごとに選択）</div>
+  <div class="section-title">STEP 4　物販（担当者ごとに選択）</div>
   <div class="card"><div id="productList"></div></div>
 
   <div id="selectedProductSection" style="display:none">
@@ -330,6 +325,8 @@
         <div style="font-size:11px;opacity:0.75" id="netAmount">手数料差引後：¥0</div>
       </div>
     </div>
+    <div class="section-title" style="margin-top:14px">STEP 5　支払い方法</div>
+    <div class="card"><div class="toggle-group" id="paymentGroup"></div></div>
     <button class="submit-btn" onclick="submitRecord()">✅ 日報を登録する</button>
     <button onclick="quickDraftRecord()" style="width:100%;margin-top:8px;padding:12px;background:#fff;color:#E65100;border:2px solid #F0A500;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer">⏱ 仮登録（担当と金額だけ・あとで詳細）</button>
   </div>
@@ -6718,7 +6715,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "25.1";
+var APP_VERSION = "25.2";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
