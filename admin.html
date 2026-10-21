@@ -5784,10 +5784,19 @@ function renderSelectedProductEdit(){
     html+='<div class="prod-sel-header"><div class="prod-sel-name">📦 '+h(p.name)+'</div><div class="prod-sel-qty">'+p.qty+'個</div><button class="remove-btn" onclick="removeSelectedProduct('+i+')">✕</button></div>';
     html+='<div class="form-label" style="margin-bottom:5px">担当者を選択</div>';
     html+='<div class="staff-mini-grid" id="smg_'+i+'"></div>';
-    html+='<div class="prod-sell-row"><span class="prod-sell-label">販売価格（税込）：¥</span>';
-    html+='<input class="prod-sell-input" type="number" value="'+p.customSell+'" oninput="updateProductSell('+i+',this.value)">';
+    // v25.4: 税抜で打つか税込で打つか選べる（保存する customSell は常に税込）
+    var pm=(p.priceMode==='exc')?'exc':'inc';
+    var pin=(p.priceInput!=null)?p.priceInput:p.customSell;
+    html+='<div class="prod-sell-row" style="flex-wrap:wrap">';
+    html+='<span style="display:inline-flex;border:1.5px solid #2C7A6E;border-radius:8px;overflow:hidden">';
+    html+='<button type="button" onclick="setProductPriceMode('+i+',\'exc\')" style="padding:5px 10px;border:none;background:'+(pm==='exc'?'#2C7A6E':'#fff')+';color:'+(pm==='exc'?'#fff':'#2C7A6E')+';font-size:11px;font-weight:800;cursor:pointer">税抜</button>';
+    html+='<button type="button" onclick="setProductPriceMode('+i+',\'inc\')" style="padding:5px 10px;border:none;border-left:1.5px solid #2C7A6E;background:'+(pm==='inc'?'#2C7A6E':'#fff')+';color:'+(pm==='inc'?'#fff':'#2C7A6E')+';font-size:11px;font-weight:800;cursor:pointer">税込</button>';
+    html+='</span>';
+    html+='<span class="prod-sell-label">'+(pm==='inc'?'税込':'税抜')+'で入力：¥</span>';
+    html+='<input class="prod-sell-input" type="number" value="'+pin+'" oninput="updateProductSell('+i+',this.value)">';
     html+='<span class="prod-sell-label"> × '+p.qty+'</span>';
-    if(p.cost>0) html+='<span class="prod-profit-badge">利益¥'+num(prodLineProfit(p))+'</span>';
+    html+='<span id="psinc_'+i+'" style="font-size:12px;font-weight:800;color:#2C7A6E">'+(pm==='exc'?'→税込¥'+num(p.customSell):'')+'</span>';
+    if(p.cost>0) html+='<span class="prod-profit-badge" id="pprof_'+i+'">利益¥'+num(prodLineProfit(p))+'</span>';
     html+='</div>';
     html+='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px"><span style="font-size:11px;color:#64748B;font-weight:700;align-self:center">割引：</span>';
     var ppcts=[10,20,30,40,50];
@@ -5819,7 +5828,9 @@ function renderStaffMiniGrids(){
   }
 }
 function removeSelectedProduct(i){ state.selectedProducts.splice(i,1); renderProductList(); renderSelectedProductEdit(); renderSummary(); }
-function updateProductSell(i,val){ if(state.selectedProducts[i]) state.selectedProducts[i].customSell=parseInt(val)||0; renderSummary(); }
+function updateProductSell(i,val){ var p=state.selectedProducts[i]; if(!p) return; var v=parseInt(val)||0; p.priceInput=v; p.customSell=(p.priceMode==='exc')?Math.round(v*1.1):v; try{ var e=document.getElementById('psinc_'+i); if(e) e.textContent=(p.priceMode==='exc')?('→税込¥'+num(p.customSell)):''; var b=document.getElementById('pprof_'+i); if(b) b.textContent='利益¥'+num(prodLineProfit(p)); }catch(x){} renderSummary(); }
+// 物販の金額を税抜で打つか税込で打つか（v25.4）。打った数字はそのまま、customSell（保存・集計に使う税込）だけ計算し直す
+function setProductPriceMode(i,mode){ var p=state.selectedProducts[i]; if(!p) return; p.priceMode=(mode==='exc')?'exc':'inc'; var v=(p.priceInput!=null)?p.priceInput:(p.customSell||0); p.priceInput=v; p.customSell=(p.priceMode==='exc')?Math.round(v*1.1):v; renderSelectedProductEdit(); renderSummary(); }
 function updateProductStaff(i,val){ if(state.selectedProducts[i]) state.selectedProducts[i].productStaff=val; renderStaffMiniGrids(); renderProductList(); }
 // 物販1行の売上（割引適用後・税込）と利益
 function prodLineSell(p){ if(!p) return 0; var base=((p.customSell!==undefined?p.customSell:p.sell)||0)*(p.qty||1); var d=(p.discountPct>0)?Math.round(base*p.discountPct/100):0; var v=base-d; return v<0?0:v; }
@@ -10740,7 +10751,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "25.3";
+var APP_VERSION = "25.4";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
