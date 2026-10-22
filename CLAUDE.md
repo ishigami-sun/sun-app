@@ -217,6 +217,13 @@ What's New もスタッフ用は「使い方」だけにする（管理者向け
   自分で選んだ月は残す）。`renderAll` は管理タブを開いている時も描き直す（入力中の欄がある時は除く）。
   > 過去の事故: 選択肢を最初の1回だけ作っていたため、取り込み前に作られると「今月だけ」で固まり、給与集計・人件費が0のままだった（10/16）。
   > 回帰テスト: `node tools/test_month_select_refresh.js`
+- **アルバイトの出勤簿（v25.5）**: 名前は共有マスタ `state.partTimers`（admin 管理タブ「🧢 アルバイト」で登録、
+  `_mastersPayload` / `_applyCloudMasters` に入れる。削除は `markMasterDeleted('partTimers',…)`）。日報の担当者には出さない。
+  **出た日に本人が打刻するだけ**（石上さんの方針 10/22）: 社員の `attDefault`（毎日出勤を自動で入れる）は使わず、
+  `attPtSet` が `pt:1` 付きの記録を作る。打刻の無い日は作らない・数えない。取り消しは `void:1`（削除は同期で戻る）。
+  一覧・集計は `attPtDays` / `attPtMonth`。時給は admin の給与設定（`kind:'parttime'`・同じ名前）だけで、staff 版には出さない。
+  admin の出勤簿「🧢 アルバイト」が名前・時給・時間・見込み（`attRenderPtTable`、`attPtWage`）。給与計算の `partTimeHours` も同じ記録を読む。
+  回帰テスト: `node tools/test_parttime_att.js`
 - 給与エクセル用の集計は admin の管理タブ（`renderPayrollExport()`）。
   H列=店販売値(税込)・I列=原価はアプリから自動、P列=ヒポポタマスのタオルは請求書を手入力
 
