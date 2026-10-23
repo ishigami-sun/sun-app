@@ -2602,6 +2602,8 @@ function renderAll(){
   try{ if(typeof updateReportsBadge==='function') updateReportsBadge(); }catch(e){}
   try{ if(typeof updateReportStaffSelect==='function') updateReportStaffSelect(); }catch(e){}
   try{ var _rp=document.getElementById('page-reports'); if(_rp && _rp.classList.contains('active') && typeof renderReportsTab==='function') renderReportsTab(); }catch(e){}
+  // 【v25.7】出勤簿を開いたまま同期が終わった時も描き直す（名前の一覧・打刻が他の端末から届く）。出勤簿の欄を入力中なら描き直さない
+  try{ var _tp=document.getElementById('page-attend'); if(_tp && _tp.classList.contains('active') && typeof renderAttendance==='function'){ var _te=document.activeElement; if(!(_te && /^(INPUT|TEXTAREA|SELECT)$/.test(_te.tagName) && _te.closest && _te.closest('#page-attend'))) renderAttendance(); } }catch(e){}
   try{ updateEntryDateBanner(); }catch(e){}
 }
 
@@ -6839,7 +6841,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "25.6";
+var APP_VERSION = "25.7";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
