@@ -10,7 +10,7 @@ function grab(n){const i=src.indexOf('function '+n+'(');if(i<0)throw new Error(n
 let toasts=[];
 Object.assign(global,{ showToast:(t)=>toasts.push(t), save(){}, renderAll(){}, renderLaborCost(){}, num:(n)=>Number(n||0).toLocaleString('ja-JP'), h:(s)=>s==null?'':String(s),
   unmarkMasterDeleted(){}, document:{getElementById:(id)=>global._els[id]||null}, _els:{} });
-eval(['payrollSetup','payrollRows','staffBase','_ptSetWage','attPtWage','ptList','addPartTimer'].map(grab).join('\n'));
+eval(['payrollSetup','payrollRows','staffBase','_ptSetWage','attPtWage','ptList','addPartTimer','_ptSaveRow'].map(grab).join('\n'));
 const checks=[];
 // ① 既存の給与設定がある端末
 global.state={partTimers:[], staff:['石上（代表）'], payroll:{_setup:{rows:[{app:'東',xls:'東',base:1,ot:0,post:0,commute:0}],fixedOnly:[],updatedAt:'2026-10-01T00:00:00.000Z'}}, lastFullSync:Date.now()};
@@ -25,6 +25,10 @@ _ptSetWage('佐藤','1350',null); _ptSetWage('佐藤',null,'0');
 R=payrollRows().filter(r=>r.app==='佐藤')[0];
 checks.push(['② 一覧の欄で直すと同じ行が更新される（1350・通勤費0・行は2つのまま）', R.wage===1350 && R.commute===0 && payrollRows().length===2]);
 checks.push(['② 0円の時給は受け付けない', _ptSetWage('佐藤','0',null)===false && R.wage===1350]);
+global._els={ptw_0:{value:'1400',focus(){}}, ptc_0:{value:'300'}}; _ptSaveRow(0);
+checks.push(['② 一覧の「決定」で時給1400・通勤費300が保存される', payrollRows().filter(r=>r.app==='佐藤')[0].wage===1400 && payrollRows().filter(r=>r.app==='佐藤')[0].commute===300]);
+global._els={ptw_0:{value:'',focus(){}}, ptc_0:{value:'300'}}; toasts=[]; _ptSaveRow(0);
+checks.push(['② 時給が空のまま決定 → 保存しない', payrollRows().filter(r=>r.app==='佐藤')[0].wage===1400 && /時給/.test(toasts.join(''))]);
 // ③
 global.state={partTimers:[], staff:[], payroll:{}, lastFullSync:0}; toasts=[];
 global._els={newPartTimer:{value:'田中'}, newPartTimerWage:{value:'1100'}, newPartTimerCommute:{value:''}};

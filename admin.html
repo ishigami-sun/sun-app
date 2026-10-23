@@ -7281,6 +7281,8 @@ function addPartTimer(){ var el=document.getElementById('newPartTimer'); var v=e
   if(we&&we.value!==''&&!(w>0)){ showToast('⚠️ 時給は1円以上で入れてください'); return; }
   if(w>0){ var okw=_ptSetWage(v, w, (c>=0?c:0), true); if(!okw) return; }
   unmarkMasterDeleted('partTimers',v); state.partTimers.push(v); el.value=''; if(we) we.value=''; if(ce) ce.value=''; save(); renderAll(); showToast('✅ '+v+'をアルバイトに追加しました'+(w>0?'（時給¥'+num(w)+'）':'')); }
+// 一覧の「決定」: 時給・通勤費の欄を読んで保存（v26.0。打っただけでは保存しない）
+function _ptSaveRow(i){ var nm=ptList()[i]; if(nm==null) return; var we=document.getElementById('ptw_'+i), ce=document.getElementById('ptc_'+i); var w=we?we.value:'', c=ce?ce.value:''; if(w===''){ showToast('⚠️ 時給を入れてください'); if(we) we.focus(); return; } _ptSetWage(nm, w, (c===''?0:c)); }
 // アルバイトの時給・通勤費を給与設定（state.payroll._setup.rows・働き方＝アルバイト）に書く（v25.9）
 // 給与設定がまだこの端末に届いていない時は、同期が通ってからでないと作らない（クラウドの本物を新しい日時で上書きしないため）
 function _ptSetWage(name, wage, commute, quiet){
@@ -10457,8 +10459,9 @@ function renderAdminLists(){
   var sle = document.getElementById('staffList'); if(sle) sle.innerHTML=sl;
   var ptl=''; var _ptsL=ptList(); for(var i=0;i<_ptsL.length;i++){ var _pw=(typeof attPtWage==='function')?attPtWage(_ptsL[i]):null; var _pn=h(_ptsL[i]).replace(/'/g,"\\'");
     ptl+='<div class="item-row" style="flex-wrap:wrap;gap:6px"><div class="item-row-name" style="flex:1 1 100px">'+h(_ptsL[i])+'</div>'
-      +'<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:#64748B">時給 ¥<input type="number" inputmode="numeric" value="'+(_pw?h(String(_pw.wage)):'')+'" placeholder="未設定" onchange="_ptSetWage(\''+_pn+'\',this.value,null)" style="width:70px;padding:5px 6px;border:1.5px solid '+(_pw?'#C8E0DC':'#E05555')+';border-radius:7px;font-size:13px;font-weight:700;text-align:right;color:#1A4F47;background:#fff"></label>'
-      +'<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:#64748B">通勤費 ¥<input type="number" inputmode="numeric" value="'+(_pw&&_pw.commute?h(String(_pw.commute)):'')+'" placeholder="0" onchange="_ptSetWage(\''+_pn+'\',null,this.value)" style="width:70px;padding:5px 6px;border:1.5px solid #C8E0DC;border-radius:7px;font-size:13px;text-align:right;color:#1A4F47;background:#fff"></label>'
+      +'<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:#64748B">時給 ¥<input type="number" inputmode="numeric" id="ptw_'+i+'" value="'+(_pw?h(String(_pw.wage)):'')+'" placeholder="未設定" style="width:70px;padding:5px 6px;border:1.5px solid '+(_pw?'#C8E0DC':'#E05555')+';border-radius:7px;font-size:13px;font-weight:700;text-align:right;color:#1A4F47;background:#fff"></label>'
+      +'<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:#64748B">通勤費 ¥<input type="number" inputmode="numeric" id="ptc_'+i+'" value="'+(_pw&&_pw.commute?h(String(_pw.commute)):'')+'" placeholder="0" style="width:70px;padding:5px 6px;border:1.5px solid #C8E0DC;border-radius:7px;font-size:13px;text-align:right;color:#1A4F47;background:#fff"></label>'
+      +'<button onclick="_ptSaveRow('+i+')" style="padding:7px 14px;border:none;background:#2C7A6E;color:#fff;border-radius:8px;font-size:13px;font-weight:800;cursor:pointer">決定</button>'
       +'<button class="item-row-del" onclick="removePartTimer('+i+')">✕</button></div>'; }
   var ptle = document.getElementById('partTimerList'); if(ptle) ptle.innerHTML=ptl||'<div style="font-size:12px;color:#94a3b8;padding:6px">まだ登録がありません</div>';
   var ml=''; for(var i=0;i<state.mediaList.length;i++) ml+='<div class="item-row"><div class="item-row-name">'+h(state.mediaList[i])+'</div><button class="item-row-del" onclick="removeMedia('+i+')">✕</button></div>';
@@ -10914,7 +10917,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "25.9";
+var APP_VERSION = "26.0";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
