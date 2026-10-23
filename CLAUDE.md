@@ -226,6 +226,10 @@ What's New もスタッフ用は「使い方」だけにする（管理者向け
   **名前の一覧（staff・partTimers）は `_pullReportsThenPush` でも統合してから送る**（v25.6）。
   > 過去の事故: 管理版で足した名前を、まだ受け取っていない端末が空の一覧で saveMasters して消した（10/23）。
   回帰テスト: `node tools/test_parttime_att.js`
+- **目標タブの着地予想（v25.8）**: `calcFixedActual` が「今日より前」の実績 `before` と出勤日数 `daysBefore` も返す。
+  `goalForecastDays()`＝月曜定休を除く営業日（昨日まで／今日から月末）、スタッフは残りの 1/6 を公休として引く（`staffEst`）。
+  着地＝before＋(before÷daysBefore)×残り日数（`goalForecast`）。今日の途中の実績はペースに入れない。
+  残り出勤日は `state.paceDays['YYYY-MM|姓']`（売上タブの分析と同じキー）で直せる。回帰テスト: `node tools/test_goal_forecast.js`
 - 給与エクセル用の集計は admin の管理タブ（`renderPayrollExport()`）。
   H列=店販売値(税込)・I列=原価はアプリから自動、P列=ヒポポタマスのタオルは請求書を手入力
 
