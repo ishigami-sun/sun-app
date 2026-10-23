@@ -39,6 +39,7 @@ function run(file,label){
   const payload=grab(src,'_mastersPayload');
   checks.push(['⑤ マスタ送信に partTimers', /partTimers:\s*state\.partTimers/.test(payload)]);
   checks.push(['⑤ 取り込みで partTimers を統合', /res\.masters\.partTimers\)\s*state\.partTimers\s*=\s*mergeMasterUnique/.test(grab(src,'_applyCloudMasters'))]);
+  checks.push(['⑤ 送る前の取り直しでも partTimers・staff を統合（空の一覧で上書きしない・v25.6）', /res\.masters\.partTimers\)\s*state\.partTimers\s*=\s*mergeMasterUnique/.test(grab(src,'_pullReportsThenPush')) && /res\.masters\.staff\)\s*state\.staff\s*=\s*mergeMasterUnique/.test(grab(src,'_pullReportsThenPush'))]);
   // ④ admin だけ
   if(/function attRenderPtTable\(/.test(src)){
     eval(grab(src,'attPtWage')+'\n'+grab(src,'attRenderPtTable')+'\n'+grab(src,'staffBase')+'\n'+grab(src,'partTimeHours'));

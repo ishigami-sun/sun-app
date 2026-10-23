@@ -4728,6 +4728,10 @@ function _pullReportsThenPush(next){
         if(res && res.ok && res.masters){
           if(res.masters.deletedMasters && typeof mergeDeletedMasters==='function') mergeDeletedMasters(res.masters.deletedMasters);
           if(res.masters.reports) state.reports = mergeMasterById(state.reports||[], res.masters.reports, delSetOf('reports'));
+          // 【v25.6】名前の一覧（スタッフ・アルバイト）も送る前にクラウドと統合する（削除履歴あり＝和集合で安全）。
+          // 管理版で足したアルバイトを、まだ受け取っていない端末が自分の空の一覧で上書きして消していた（10/23）
+          if(res.masters.staff) state.staff = mergeMasterUnique(state.staff||[], res.masters.staff, delSetOf('staff'));
+          if(res.masters.partTimers) state.partTimers = mergeMasterUnique(state.partTimers||[], res.masters.partTimers, delSetOf('partTimers'));
           if(typeof ADMIN_ONLY_MASTERS!=='undefined'){
             // 【v24.4】スタッフ版：管理者専用マスタ（経費・給与など）の控えも最新にしてから返す
             try{ var _keep2=state._adminMasters||{}; for(var _aj=0;_aj<ADMIN_ONLY_MASTERS.length;_aj++){ var _ak2=ADMIN_ONLY_MASTERS[_aj]; if(res.masters[_ak2]!=null) _keep2[_ak2]=res.masters[_ak2]; } state._adminMasters=_keep2; }catch(e){}
@@ -10850,7 +10854,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "25.5";
+var APP_VERSION = "25.6";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
