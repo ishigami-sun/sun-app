@@ -223,6 +223,8 @@ What's New もスタッフ用は「使い方」だけにする（管理者向け
   `attPtSet` が `pt:1` 付きの記録を作る。打刻の無い日は作らない・数えない。取り消しは `void:1`（削除は同期で戻る）。
   一覧・集計は `attPtDays` / `attPtMonth`。時給は admin の給与設定（`kind:'parttime'`・同じ名前）だけで、staff 版には出さない。
   admin の出勤簿「🧢 アルバイト」が名前・時給・時間・見込み（`attRenderPtTable`、`attPtWage`）。給与計算の `partTimeHours` も同じ記録を読む。
+  時給・通勤費は管理タブの「🧢 アルバイト」で名前と一緒に入れる（v25.9・`_ptSetWage`）。給与設定の `_setup.rows` に
+  `kind:'parttime'` の行として書く（同じ姓の行があれば更新）。給与設定が届いていない端末では作らない（savePayrollSetup と同じ10分ガード）。
   **名前の一覧（staff・partTimers）は `_pullReportsThenPush` でも統合してから送る**（v25.6）。
   > 過去の事故: 管理版で足した名前を、まだ受け取っていない端末が空の一覧で saveMasters して消した（10/23）。
   回帰テスト: `node tools/test_parttime_att.js`

@@ -510,9 +510,10 @@
 
   <div class="section-title">🧢 アルバイト（出勤簿だけに出ます）</div>
   <div class="card">
-    <div style="font-size:12px;color:#64748B;margin-bottom:8px;line-height:1.7">日報の担当者ボタンには出ません。本人が自分の携帯の出勤簿で、出た日に打刻します。<br>時給は「⚙️ 給与設定」で同じ名前の人を「アルバイト」にして入れてください（本人の画面には出ません）。</div>
-    <div class="add-form-row"><div class="form-group"><label class="form-label">名前</label><input class="form-input" id="newPartTimer" placeholder="例：佐藤"></div><button class="add-btn" onclick="addPartTimer()">追加</button></div>
+    <div style="font-size:12px;color:#64748B;margin-bottom:8px;line-height:1.7">日報の担当者ボタンには出ません。本人が自分の携帯の出勤簿で、出た日に打刻します。時給は本人の画面には出ません。</div>
+    <div class="add-form-row" style="flex-wrap:wrap"><div class="form-group" style="flex:2;min-width:120px"><label class="form-label">名前</label><input class="form-input" id="newPartTimer" placeholder="例：佐藤"></div><div class="form-group" style="flex:1;min-width:90px"><label class="form-label">時給（円）</label><input class="form-input" id="newPartTimerWage" type="number" inputmode="numeric" placeholder="1200"></div><div class="form-group" style="flex:1;min-width:90px"><label class="form-label">通勤費／月</label><input class="form-input" id="newPartTimerCommute" type="number" inputmode="numeric" placeholder="0"></div><button class="add-btn" onclick="addPartTimer()">追加</button></div>
     <div class="item-list" id="partTimerList"></div>
+    <div style="font-size:11px;color:#94a3b8;margin-top:6px">時給・通勤費はあとから一覧の欄で直せます。給与設定にも同じ人が「アルバイト」として入ります。</div>
   </div>
   <div class="section-title">スタッフPIN・ログイン管理</div>
   <div class="card">
@@ -7275,7 +7276,29 @@ function renderDashboard(){
 function addStaff(){ var v=document.getElementById('newStaff').value.trim(); if(!v) return; unmarkMasterDeleted('staff',v); state.staff.push(v); document.getElementById('newStaff').value=''; save(); renderAll(); showToast('✅ '+v+'を追加しました'); }
 function removeStaff(i){ var nm=state.staff[i]; state.staff.splice(i,1); markMasterDeleted('staff',nm); save(); renderAll(); }
 // アルバイト（v25.5）: 出勤簿だけに出る名前。日報の担当者には出ない
-function addPartTimer(){ var el=document.getElementById('newPartTimer'); var v=el?el.value.trim():''; if(!v) return; if(!Array.isArray(state.partTimers)) state.partTimers=[]; if(state.partTimers.indexOf(v)>=0||(state.staff||[]).indexOf(v)>=0){ showToast('⚠️ すでに登録されています'); return; } unmarkMasterDeleted('partTimers',v); state.partTimers.push(v); el.value=''; save(); renderAll(); showToast('✅ '+v+'をアルバイトに追加しました'); }
+function addPartTimer(){ var el=document.getElementById('newPartTimer'); var v=el?el.value.trim():''; if(!v) return; if(/['"\\<>&]/.test(v)){ showToast('⚠️ 名前に記号（\' " < > & \\）は使えません'); return; } if(!Array.isArray(state.partTimers)) state.partTimers=[]; if(state.partTimers.indexOf(v)>=0||(state.staff||[]).indexOf(v)>=0){ showToast('⚠️ すでに登録されています'); return; }
+  var we=document.getElementById('newPartTimerWage'), ce=document.getElementById('newPartTimerCommute'); var w=we?parseInt(we.value,10):NaN, c=ce?parseInt(ce.value,10):NaN;
+  if(we&&we.value!==''&&!(w>0)){ showToast('⚠️ 時給は1円以上で入れてください'); return; }
+  if(w>0){ var okw=_ptSetWage(v, w, (c>=0?c:0), true); if(!okw) return; }
+  unmarkMasterDeleted('partTimers',v); state.partTimers.push(v); el.value=''; if(we) we.value=''; if(ce) ce.value=''; save(); renderAll(); showToast('✅ '+v+'をアルバイトに追加しました'+(w>0?'（時給¥'+num(w)+'）':'')); }
+// アルバイトの時給・通勤費を給与設定（state.payroll._setup.rows・働き方＝アルバイト）に書く（v25.9）
+// 給与設定がまだこの端末に届いていない時は、同期が通ってからでないと作らない（クラウドの本物を新しい日時で上書きしないため）
+function _ptSetWage(name, wage, commute, quiet){
+  if(state._ownerKeyNeeded){ showToast('⚠️ オーナー用の合言葉になっていないので時給は保存できません'); return false; }
+  var setup=payrollSetup();
+  if(!setup && !(state.lastFullSync && (Date.now()-state.lastFullSync) < 10*60*1000)){ showToast('⚠️ 先に上の緑の帯をタップして同期してください（給与設定を上書きしないため）'); return false; }
+  if(!state.payroll||typeof state.payroll!=='object') state.payroll={};
+  if(!setup){ setup={rows:[], fixedOnly:[]}; }
+  var base=staffBase(name), R=null;
+  for(var i=0;i<setup.rows.length;i++){ if(staffBase(setup.rows[i].app)===base){ R=setup.rows[i]; break; } }
+  if(!R){ R={app:base, xls:name, row:0, base:0, ot:0, post:0, postName:'', commute:0}; setup.rows.push(R); }
+  R.kind='parttime'; delete R.tMode; delete R.tTiers;
+  if(wage!=null && wage!=='' ){ var w=parseInt(wage,10); if(!(w>0)){ showToast('⚠️ 時給は1円以上で入れてください'); return false; } R.wage=w; }
+  if(commute!=null && commute!==''){ var c=parseInt(commute,10); R.commute=(c>=0)?c:0; }
+  state.payroll._setup={rows:setup.rows, fixedOnly:setup.fixedOnly||[], updatedAt:new Date().toISOString()};
+  if(!quiet){ save(); renderAll(); try{ renderLaborCost(); }catch(e){} showToast('💾 '+name+'：時給¥'+num(R.wage||0)+(R.commute?'・通勤費¥'+num(R.commute):'')); }
+  return true;
+}
 function removePartTimer(i){ var nm=(state.partTimers||[])[i]; if(nm==null) return; state.partTimers.splice(i,1); markMasterDeleted('partTimers',nm); save(); renderAll(); }
 function addMedia(){ var v=document.getElementById('newMedia').value.trim(); if(!v) return; unmarkMasterDeleted('mediaList',v); state.mediaList.push(v); document.getElementById('newMedia').value=''; save(); renderAll(); showToast('✅ '+v+'を追加しました'); }
 function removeMedia(i){ var nm=state.mediaList[i]; state.mediaList.splice(i,1); markMasterDeleted('mediaList',nm); save(); renderAll(); }
@@ -8165,7 +8188,7 @@ function attRenderPtTable(){
       +'<td style="padding:7px 5px;text-align:right;font-weight:700;color:#2C7A6E">'+(w?'¥'+num(pay)+(w.commute?'<br><span style="font-size:10px;color:#94a3b8;font-weight:400">通勤費¥'+num(w.commute)+'込</span>':''):'—')+'</td></tr>';
   });
   s+='<tr><td colspan="4" style="padding:7px 5px;font-weight:800;color:#1A4F47">アルバイト 合計</td><td style="padding:7px 5px;text-align:right;font-weight:800;color:#2C7A6E">¥'+num(total)+'</td></tr></tbody></table></div>';
-  if(missing.length) s+='<div style="font-size:12px;color:#E05555;background:#FFF5F5;border-radius:8px;padding:8px 10px;margin-top:8px">時給が未設定: '+missing.map(h).join('・')+'。管理タブ「⚙️ 給与設定」で同じ名前の人を追加し、働き方を「アルバイト」にして時給を入れてください。</div>';
+  if(missing.length) s+='<div style="font-size:12px;color:#E05555;background:#FFF5F5;border-radius:8px;padding:8px 10px;margin-top:8px">時給が未設定: '+missing.map(h).join('・')+'。管理タブの「🧢 アルバイト」の一覧で時給を入れてください。</div>';
   s+='<div style="font-size:12px;color:#64748B;background:#F0F7F6;border-radius:8px;padding:8px 10px;margin-top:8px">名前をタップすると打刻の一覧。見込み額は人件費の見通し・P&L・給与集計表にも同じ数字で入ります。</div>';
   return s;
 }
@@ -10432,7 +10455,11 @@ function renderAdminLists(){
   // スタッフ・媒体（タップ編集なしの元のまま）
   var sl=''; for(var i=0;i<state.staff.length;i++) sl+='<div class="item-row"><div class="item-row-name">'+h(state.staff[i])+'</div><button class="item-row-del" onclick="removeStaff('+i+')">✕</button></div>';
   var sle = document.getElementById('staffList'); if(sle) sle.innerHTML=sl;
-  var ptl=''; var _ptsL=ptList(); for(var i=0;i<_ptsL.length;i++) ptl+='<div class="item-row"><div class="item-row-name">'+h(_ptsL[i])+'</div><button class="item-row-del" onclick="removePartTimer('+i+')">✕</button></div>';
+  var ptl=''; var _ptsL=ptList(); for(var i=0;i<_ptsL.length;i++){ var _pw=(typeof attPtWage==='function')?attPtWage(_ptsL[i]):null; var _pn=h(_ptsL[i]).replace(/'/g,"\\'");
+    ptl+='<div class="item-row" style="flex-wrap:wrap;gap:6px"><div class="item-row-name" style="flex:1 1 100px">'+h(_ptsL[i])+'</div>'
+      +'<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:#64748B">時給 ¥<input type="number" inputmode="numeric" value="'+(_pw?h(String(_pw.wage)):'')+'" placeholder="未設定" onchange="_ptSetWage(\''+_pn+'\',this.value,null)" style="width:70px;padding:5px 6px;border:1.5px solid '+(_pw?'#C8E0DC':'#E05555')+';border-radius:7px;font-size:13px;font-weight:700;text-align:right;color:#1A4F47;background:#fff"></label>'
+      +'<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:#64748B">通勤費 ¥<input type="number" inputmode="numeric" value="'+(_pw&&_pw.commute?h(String(_pw.commute)):'')+'" placeholder="0" onchange="_ptSetWage(\''+_pn+'\',null,this.value)" style="width:70px;padding:5px 6px;border:1.5px solid #C8E0DC;border-radius:7px;font-size:13px;text-align:right;color:#1A4F47;background:#fff"></label>'
+      +'<button class="item-row-del" onclick="removePartTimer('+i+')">✕</button></div>'; }
   var ptle = document.getElementById('partTimerList'); if(ptle) ptle.innerHTML=ptl||'<div style="font-size:12px;color:#94a3b8;padding:6px">まだ登録がありません</div>';
   var ml=''; for(var i=0;i<state.mediaList.length;i++) ml+='<div class="item-row"><div class="item-row-name">'+h(state.mediaList[i])+'</div><button class="item-row-del" onclick="removeMedia('+i+')">✕</button></div>';
   var mle = document.getElementById('mediaAdminList'); if(mle) mle.innerHTML=ml;
@@ -10887,7 +10914,7 @@ if(typeof window !== 'undefined'){
 
 
 // === 自動更新チェック ===
-var APP_VERSION = "25.8";
+var APP_VERSION = "25.9";
 try{ showWhatsNew(); }catch(e){}
 
 function checkForUpdate(){
